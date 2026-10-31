@@ -52,15 +52,16 @@ struct gpu_engine_row {
 struct gpu_device_view {
   bool present = false;
   std::string name;
-  bool has_util = false, has_power = false, has_temp = false, has_clock = false;
+  bool has_util = false, has_power = false, has_temp = false, has_clock = false, has_mem = false;
   double util_pct = 0, power_w = 0, power_limit_w = 0, temp_c = 0, sm_mhz = 0;
   uint64_t mem_used = 0, mem_total = 0;
 };
 
-// \GPU Process Memory(pid_*) counters. WDDM accounting, not exact physical residency.
+// \GPU Process Memory(pid_*) counters. WDDM accounting, not exact physical residency, and
+// dedicated is not VRAM in use: see docs/measurable.md. local is the closest per-process figure.
 struct gpu_memory_row {
   uint32_t pid = 0;
-  uint64_t dedicated = 0, shared = 0;
+  uint64_t dedicated = 0, shared = 0, local = 0;
 };
 
 // Derived by src/analysis, never by a collector. Percentages are of GPU engine use and are not
@@ -68,7 +69,7 @@ struct gpu_memory_row {
 struct gpu_split_view {
   bool valid = false;  // false without a known vmwp PID or without engine data
   double vm_pct = 0, windows_pct = 0;
-  uint64_t vm_dedicated = 0, windows_dedicated = 0;
+  uint64_t vm_local = 0, windows_local = 0;
 };
 
 struct collect_cost {

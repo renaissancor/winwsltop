@@ -86,7 +86,7 @@ class gpu_memory_collector {
   bool sample(std::vector<gpu_memory_row>& out);
  private:
   PDH_HQUERY query_ = nullptr;
-  PDH_HCOUNTER dedicated_ = nullptr, shared_ = nullptr;
+  PDH_HCOUNTER dedicated_ = nullptr, shared_ = nullptr, local_ = nullptr;
 };
 
 }  // namespace wwt

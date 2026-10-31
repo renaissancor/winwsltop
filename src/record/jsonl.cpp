@@ -84,7 +84,8 @@ std::string to_json_line(const snapshot& s) {
 
   const gpu_device_view& g = s.gpu_device;
   o += "\"gpu_device\":{";
-  key(o, "present", g.present); key(o, "name", g.name); key(o, "mem_used", g.mem_used); key(o, "mem_total", g.mem_total);
+  key(o, "present", g.present); key(o, "name", g.name);
+  if (g.has_mem) { key(o, "mem_used", g.mem_used); key(o, "mem_total", g.mem_total); }
   if (g.has_util) key(o, "util_pct", g.util_pct);
   if (g.has_power) { key(o, "power_w", g.power_w); key(o, "power_limit_w", g.power_limit_w); }
   if (g.has_temp) key(o, "temp_c", g.temp_c);
@@ -92,12 +93,12 @@ std::string to_json_line(const snapshot& s) {
   close(o, '}'); o += ',';
 
   list(o, "gpu_memory", s.gpu_memory, [&](const gpu_memory_row& r) {
-    key(o, "pid", r.pid); key(o, "dedicated", r.dedicated); key(o, "shared", r.shared);
+    key(o, "pid", r.pid); key(o, "dedicated", r.dedicated); key(o, "shared", r.shared); key(o, "local", r.local);
   });
 
   o += "\"gpu_split\":{";
   key(o, "valid", s.gpu_split.valid); key(o, "vm_pct", s.gpu_split.vm_pct); key(o, "windows_pct", s.gpu_split.windows_pct);
-  key(o, "vm_dedicated", s.gpu_split.vm_dedicated); key(o, "windows_dedicated", s.gpu_split.windows_dedicated);
+  key(o, "vm_local", s.gpu_split.vm_local); key(o, "windows_local", s.gpu_split.windows_local);
   key(o, "source", std::string("derived"));
   close(o, '}'); o += ',';
 

@@ -22,9 +22,9 @@ as a request to the orchestrator. Agents with different rows can run at the same
 |---|---|---|---|---|
 | contract | `src/core/`, `src/main.cpp`, `wsl-collector/PROTOCOL.md`, this file | nothing | built | Anthropic (orchestrator) |
 | host | `src/host/` | contract | built, needs tests | OpenAI (Codex) |
-| gpu | `src/gpu/` | contract | engines built; NVML and GPU memory next | Anthropic |
+| gpu | `src/gpu/` | contract | built; memory under load unverified | Anthropic |
 | wsl | `src/wsl/`, `wsl-collector/` | contract | built; clock alignment, embedding, distros next | OpenAI (Codex) |
-| analysis | `src/analysis/` | contract, gpu, wsl | not started; VM-level split | Anthropic |
+| analysis | `src/analysis/` | contract, gpu, wsl | VM-level split built | Anthropic |
 | ui | `src/ui/`, later the GUI | contract only, or recorded JSONL | not started | Anthropic |
 | verify | `tests/`, `.github/`, `scripts/` | recorded fixtures | not started | OpenAI (Codex) |
 | evidence | `experiments/`, `docs/` | anything | in progress | Anthropic |

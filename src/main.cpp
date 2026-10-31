@@ -1,5 +1,6 @@
 // winwsltop: for now a recorder. --once prints one JSON line; --record N prints N, one a second.
 #include "core/collectors.h"
+#include "analysis/attribution.h"
 #include "record/jsonl.h"
 #include "wsl/bridge.h"
 #include <cstdio>
@@ -45,6 +46,8 @@ int main(int argc, char** argv) {
   wwt::disk_collector disks;
   wwt::net_collector nets;
   wwt::gpu_engine_collector gpu;
+  wwt::gpu_device_collector gpu_device;  // nvmlInit takes about 650 ms
+  wwt::gpu_memory_collector gpu_memory;
 
   wwt::wsl_bridge wsl(collector_path());
   wsl.wait_first_line(6.0);
@@ -63,6 +66,9 @@ int main(int argc, char** argv) {
     s.cost.disk_ms = timed([&] { disks.sample(s.disks); });
     s.cost.net_ms = timed([&] { nets.sample(s.nets); });
     s.cost.gpu_ms = timed([&] { gpu.sample(s.gpu_engines); });
+    s.cost.gpu_device_ms = timed([&] { gpu_device.sample(s.gpu_device); });
+    s.cost.gpu_memory_ms = timed([&] { gpu_memory.sample(s.gpu_memory); });
+    s.gpu_split = wwt::split_gpu(s);
     s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
     if (i) {
       const std::string line = wwt::to_json_line(s);

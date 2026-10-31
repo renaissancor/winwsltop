@@ -131,9 +131,11 @@ bool gpu_device_collector::sample(gpu_device_view& out) {
   mem2.version = nvml_memory_v2_version;
   nvml_memory_v1 mem1{};
   if (n.memory_v2 && n.memory_v2(n.device, &mem2) == nvml_success) {
+    out.has_mem = true;
     out.mem_used = mem2.used;
     out.mem_total = mem2.total;
   } else if (n.memory_v1 && n.memory_v1(n.device, &mem1) == nvml_success) {
+    out.has_mem = true;
     out.mem_used = mem1.used;
     out.mem_total = mem1.total;
   }
