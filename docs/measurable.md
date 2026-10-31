@@ -45,7 +45,7 @@ feared, and `NtQuerySystemInformation` took 6.42 ms.
 | Guest memory vs host | Guest limit 31.22 GiB of 63.75 GiB host. Guest used 2 GiB and cache 7 GiB against about 10 GiB `vmmemWSL`, read minutes apart |
 
 The -612 ms between WSL and Windows timestamps in one sample is mostly sample age, not clock offset.
-Clock alignment is not implemented.
+Clock alignment was added afterwards; see the WSL clock rate section below and `wsl-collector/PROTOCOL.md`.
 
 ## Experiment 01 result (2026-10-31)
 
@@ -66,8 +66,9 @@ Each case ran once on an RTX 4070 with both loads at full rate. Raw files are in
 | Contention slows Windows | Observed: about 59% less work per second. Dispatch time alone hides this, because `d3d_load` calibrated smaller under contention (421 vs 659 groups, same 30 ms) |
 | Which Linux process used how much | Not measurable from this: all WSL work is one PID on the Windows side |
 
-Anomaly: the last WSL second printed 645 matmuls, double the rate. The loop uses `time.time()`, so a
-backward wall-clock step of about 1 s would explain it; that is unconfirmed. Use `CLOCK_MONOTONIC`.
+Anomaly: the last WSL second printed 645 matmuls, double the rate. `wsl_load.py` has used
+`time.monotonic()` since its first commit, so a wall-clock step does not explain it. The WSL
+`CLOCK_MONOTONIC` rate (below) is a candidate; the cause is unconfirmed.
 
 ## GPU device and memory collectors checked (2026-10-31)
 
@@ -98,7 +99,7 @@ Five rounds, `nvidia-smi` read 100-200 ms after the collector:
 | `GPU Process Memory` is readable on first collection, non-elevated | Observed: one-round probes returned 26 pids | same |
 | `Dedicated Usage` measures VRAM in use | **False here.** Summed over processes 4476-4569 MiB while NVML used about 1480 MiB and `GPU Adapter Memory` dedicated about 1400 MiB. One process, `dwm`, alone showed about 3.5 GiB dedicated with 266 MiB `Local Usage`. Cause not established | same |
 | Any of the memory figures sum to one another | **No.** In one round, process `Local Usage` summed to 939 MiB, adapter local 769 MiB, adapter dedicated 1398 MiB, NVML used about 1480 MiB | same |
-| WSL GPU memory shows under `vmwp.exe` | Only seen at idle, 15.8 MiB dedicated, equal to its `Local Usage`. Not checked with a WSL allocation | first `Get-Counter` read, 2026-10-31 |
+| WSL GPU memory shows under `vmwp.exe` | Only seen at idle, 15.1 MiB (15810560 bytes) dedicated, equal to its `Local Usage`. Not checked with a WSL allocation | `compare-idle-2026-10-31.txt`, first `Get-Counter` read |
 | One GPU has one LUID | **No.** Two appear. The second had 9 process instances, all zero, and `Win32_VideoController` lists only the RTX 4070; what it is remains unknown. `gpu_memory_row` sums across LUIDs, which changes nothing while the second stays zero | same |
 
 ## WSL clock rate (2026-10-31)

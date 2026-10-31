@@ -7,7 +7,7 @@ Hypothesis, to be tested and not assumed: WSL GPU work appears in `\GPU Engine(*
 `counter_probe.exe [seconds]` prints every engine instance with non-zero use, once a second, and
 marks rows whose PID is `vmmemWSL` or its parent.
 
-Runs, recorded under `results/`:
+Runs, recorded under `results/` (run 1 has no file: its 3 s probe is noted only in `docs/measurable.md`):
 
 1. idle baseline
 2. WSL CUDA load only

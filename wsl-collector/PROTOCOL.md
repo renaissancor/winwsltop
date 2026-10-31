@@ -11,7 +11,7 @@ embedded in `src/wsl/collector_embed.cpp`; regenerate that with `python3 wsl-col
 ## Clock alignment
 
 Windows QPC and Linux `CLOCK_MONOTONIC` share no base, and the two wall clocks run at different rates
-(observed: WSL fast by about 3.7 percent, 35 ms per second, for minutes) and can step (observed: about 1 s).
+(observed: WSL fast by about 3.7 percent, for minutes; `docs/measurable.md`, WSL clock rate) and can step (observed: about 1 s).
 So the bridge sends `P <seq>` lines on stdin: five 0.2 s apart, then one a second. For each the collector
 replies at once with a pong, a line that is not a sample:
 
@@ -32,6 +32,7 @@ starting with `{"pong":` are consumed by the bridge and never reach the snapshot
 |---|---|
 | `schema` | 1; a change of meaning raises it |
 | `distro` | `WSL_DISTRO_NAME`. One collector sees one distro's processes |
+| `kernel` | `uname -r` of the guest, informational |
 | `unix_s`, `mono_s` | wall clock and `CLOCK_MONOTONIC`, seconds, kept for clock alignment |
 | `busy_pct`, `core_pct` | CPU from `/proc/stat`; idle includes iowait. This is the guest's view |
 | `steal_pct` | from `/proc/stat`; zero does not prove the host took nothing |

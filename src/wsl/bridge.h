@@ -22,7 +22,7 @@ class wsl_bridge {
   std::string latest(double& age_s, int& restarts) const;
   // Windows unix time minus WSL unix time, seconds, now. Taken from the lowest-round-trip ping in
   // the last 30 samples and carried forward to the present at the drift rate fitted over the window,
-  // because the two clocks can run at different rates (seen: 3.7 percent, 34 ms per second).
+  // because the two clocks can run at different rates (docs/measurable.md, WSL clock rate).
   // False until a sample exists. rtt_s, when given, is the chosen sample's round trip with the
   // collector's hold time removed. A step of the WSL wall clock empties the window.
   bool clock_offset(double& offset_s, double* rtt_s = nullptr) const;

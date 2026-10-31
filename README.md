@@ -3,8 +3,8 @@
 A native Windows monitor for a desktop that runs Windows and WSL2 together, focused on the GPU they
 share: which side is using it, and what that does to the other side's work.
 
-Status: experiment 01 (can Windows tell WSL's GPU work apart from its own?) is half done, and the
-VM-level split, both collectors, the recorder and a terminal screen exist.
+Status: experiment 01 (can Windows tell WSL's GPU work apart from its own?) passed at VM level with
+one trial per case, and the VM-level split, both collectors, the recorder and a terminal screen exist.
 What each side can really measure is recorded in [`docs/measurable.md`](docs/measurable.md).
 
 ## Build
