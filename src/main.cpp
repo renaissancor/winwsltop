@@ -24,8 +24,11 @@ int64_t unix_ms() {
 std::wstring collector_path() {
   wchar_t path[MAX_PATH];
   const DWORD n = GetModuleFileNameW(nullptr, path, MAX_PATH);
+  if (n == 0 || n >= MAX_PATH) return {};  // Unreadable: the bridge falls back to the embedded copy
   std::wstring p(path, n);
-  p.resize(p.find_last_of(L'\\'));
+  const size_t slash = p.find_last_of(L'\\');
+  if (slash == std::wstring::npos) return {};
+  p.resize(slash);
   return p + L"\\..\\wsl-collector\\collector.py";
 }
 
@@ -73,8 +76,11 @@ int main(int argc, char** argv) {
   wwt::console* screen = run == mode::live ? new wwt::console : nullptr;  // restores the terminal when deleted
   for (int i = 0; run == mode::live || i <= lines; ++i) {  // The first pass only primes the deltas.
     if (i) {
-      // A fixed deadline: adding up short sleeps drifts, because Windows timers overshoot.
+      // A fixed deadline: adding up short sleeps drifts, because Windows timers overshoot. After a
+      // stall longer than a second (suspend, a stopped debugger) the deadline moves to now instead
+      // of being caught up with back-to-back samples (docs/TODO.md item 2).
       next += 1.0;
+      if (const double t = wwt::seconds_now(); next < t) next = t;
       for (double left = next - wwt::seconds_now(); left > 0 && !wwt::console::stop_requested(); left = next - wwt::seconds_now()) {
         Sleep(left < 0.05 ? static_cast<DWORD>(left * 1000) + 1 : 50);
       }
@@ -89,7 +95,7 @@ int main(int argc, char** argv) {
     s.cost.processes_ms = timed([&] { procs.sample(s.processes, s.vm); });
     s.cost.disk_ms = timed([&] { disks.sample(s.disks); });
     s.cost.net_ms = timed([&] { nets.sample(s.nets); });
-    s.cost.gpu_ms = timed([&] { gpu.sample(s.gpu_engines); });
+    s.cost.gpu_ms = timed([&] { s.gpu_engines_known = gpu.sample(s.gpu_engines); });
     s.cost.gpu_device_ms = timed([&] { gpu_device.sample(s.gpu_device); });
     s.cost.gpu_memory_ms = timed([&] { gpu_memory.sample(s.gpu_memory); });
     s.gpu_split = wwt::split_gpu(s);

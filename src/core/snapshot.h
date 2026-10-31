@@ -86,6 +86,7 @@ struct snapshot {
   std::vector<disk_row> disks;
   std::vector<net_row> nets;
   std::vector<gpu_engine_row> gpu_engines;
+  bool gpu_engines_known = false;  // false when the engine counters could not be read this sample
   gpu_device_view gpu_device;
   std::vector<gpu_memory_row> gpu_memory;
   gpu_split_view gpu_split;

@@ -1,4 +1,5 @@
 #include "record/jsonl.h"
+#include <cmath>
 #include <cstdio>
 
 namespace wwt {
@@ -16,6 +17,7 @@ void str(std::string& o, const std::string& v) {
 }
 
 void num(std::string& o, double v) {
+  if (!std::isfinite(v)) { o += "null"; return; }  // "nan" and "inf" are not JSON
   char b[40];
   snprintf(b, sizeof b, "%.3f", v);
   o += b;

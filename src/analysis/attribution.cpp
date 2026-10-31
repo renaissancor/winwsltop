@@ -13,7 +13,7 @@ bool counts(const std::string& engine) {
 
 gpu_split_view split_gpu(const snapshot& s) {
   gpu_split_view out;
-  if (s.vm.vmwp_pid == 0) return out;
+  if (s.vm.vmwp_pid == 0 || !s.gpu_engines_known) return out;
   out.valid = true;
   const auto is_vm = [&](uint32_t pid) { return pid == s.vm.vmwp_pid || pid == s.vm.vmmem_pid; };
   for (const gpu_engine_row& r : s.gpu_engines) {
