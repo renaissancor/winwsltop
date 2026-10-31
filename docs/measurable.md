@@ -68,3 +68,35 @@ Each case ran once on an RTX 4070 with both loads at full rate. Raw files are in
 
 Anomaly: the last WSL second printed 645 matmuls, double the rate. The loop uses `time.time()`, so a
 backward wall-clock step of about 1 s would explain it; that is unconfirmed. Use `CLOCK_MONOTONIC`.
+
+## GPU device and memory collectors checked (2026-10-31)
+
+RTX 4070, driver 610.88, idle desktop, no GPU load started. Raw output is in
+`experiments/02-gpu-device/results/`. `nvidia-smi` is an NVML client, so the first table proves the
+bindings and units, not the hardware.
+
+Five rounds, `nvidia-smi` read 100-200 ms after the collector:
+
+| value | collector | `nvidia-smi` | result |
+|---|---|---|---|
+| power | 11.30-27.69 W | same | equal in 5 of 5 |
+| power limit | 200.00 W | 200.00 W | equal in 5 of 5 |
+| temperature | 41-42 C | same | equal in 5 of 5 |
+| SM clock | 210, one 2520 MHz | same | equal in 5 of 5, including the jump |
+| utilization | 4-22% | same | equal in 5 of 5 |
+| memory total | 12282 MiB | 12282 MiB | equal in 5 of 5 |
+| memory used | 1469-1513 MiB | 1470-1511 MiB | within 2 MiB in 4 of 5; 22 MiB apart in one, on a changing value |
+
+| claim | status | evidence |
+|---|---|---|
+| NVML loads without an SDK, without elevation, from `System32` | Observed | `gpu_probe.exe`. `nvmlInit_v2` makes construction take 626-685 ms; a sample takes about 1 ms |
+| A missing or wrong `nvml.dll` leaves `present` false without a crash | Observed, with the load redirected | `nvml_absent.exe missing` and `wrong` |
+| The `NVSMI` fallback path works | **Not checked.** That directory does not exist here | |
+| A failing `nvmlInit_v2` or device handle is handled | **Not checked.** Those branches have not run | |
+| NVML v1 `used` includes driver-reserved memory | Observed: 1744 vs 1472 MiB, difference 272 MiB, `memory.reserved` 272 MiB. v2 is what `nvidia-smi` reports, so the collector uses v2 | `probe-idle-2026-10-31.txt` |
+| The memory collector reads what `Get-Counter` reads | Observed: 77 of 78 pid readings fell between two probe reads, over 3 rounds with 26 pids. The other was Chrome, moving non-monotonically (318, 326, 302 MiB) | `compare-idle-2026-10-31.txt` |
+| `GPU Process Memory` is readable on first collection, non-elevated | Observed: one-round probes returned 26 pids | same |
+| `Dedicated Usage` measures VRAM in use | **False here.** Summed over processes 4476-4569 MiB while NVML used about 1480 MiB and `GPU Adapter Memory` dedicated about 1400 MiB. One process, `dwm`, alone showed about 3.5 GiB dedicated with 266 MiB `Local Usage`. Cause not established | same |
+| Any of the memory figures sum to one another | **No.** In one round, process `Local Usage` summed to 939 MiB, adapter local 769 MiB, adapter dedicated 1398 MiB, NVML used about 1480 MiB | same |
+| WSL GPU memory shows under `vmwp.exe` | Only seen at idle, 15.8 MiB dedicated, equal to its `Local Usage`. Not checked with a WSL allocation | first `Get-Counter` read, 2026-10-31 |
+| One GPU has one LUID | **No.** Two appear. The second had 9 process instances, all zero, and `Win32_VideoController` lists only the RTX 4070; what it is remains unknown. `gpu_memory_row` sums across LUIDs, which changes nothing while the second stays zero | same |

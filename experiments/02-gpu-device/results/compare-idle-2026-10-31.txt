@@ -1,0 +1,287 @@
+19:14:41.550 device ok=1 0.79ms present=1 name="NVIDIA GeForce RTX 4070"
+  util has=1 9% | power has=1 11.80 W limit 200.00 W | temp has=1 41 C | sm has=1 210 MHz
+  mem used 1479 MiB total 12282 MiB
+2026/10/31 19:14:41.679, 1480 MiB, 12282 MiB, 11.80 W, 200.00 W, 41, 210 MHz, 9 %
+19:14:43.348 device ok=1 0.90ms present=1 name="NVIDIA GeForce RTX 4070"
+  util has=1 6% | power has=1 11.30 W limit 200.00 W | temp has=1 41 C | sm has=1 210 MHz
+  mem used 1480 MiB total 12282 MiB
+2026/10/31 19:14:43.431, 1502 MiB, 12282 MiB, 11.30 W, 200.00 W, 41, 210 MHz, 6 %
+19:14:45.106 device ok=1 0.86ms present=1 name="NVIDIA GeForce RTX 4070"
+  util has=1 5% | power has=1 11.30 W limit 200.00 W | temp has=1 41 C | sm has=1 210 MHz
+  mem used 1469 MiB total 12282 MiB
+2026/10/31 19:14:45.187, 1470 MiB, 12282 MiB, 11.30 W, 200.00 W, 41, 210 MHz, 5 %
+19:14:46.997 device ok=1 1.20ms present=1 name="NVIDIA GeForce RTX 4070"
+  util has=1 22% | power has=1 12.19 W limit 200.00 W | temp has=1 41 C | sm has=1 210 MHz
+  mem used 1481 MiB total 12282 MiB
+2026/10/31 19:14:47.094, 1482 MiB, 12282 MiB, 12.19 W, 200.00 W, 41, 210 MHz, 22 %
+19:14:48.921 device ok=1 0.97ms present=1 name="NVIDIA GeForce RTX 4070"
+  util has=1 4% | power has=1 27.69 W limit 200.00 W | temp has=1 42 C | sm has=1 2520 MHz
+  mem used 1513 MiB total 12282 MiB
+2026/10/31 19:14:49.017, 1511 MiB, 12282 MiB, 27.69 W, 200.00 W, 42, 2520 MHz, 4 %
+== bracket 1
+before  pid 34628 dedicated 3493490688 shared 15458304
+before  pid 48412 dedicated 318201856 shared 41541632
+before  pid 30984 dedicated 215138304 shared 892928
+before  pid 20792 dedicated 208183296 shared 238460928
+before  pid 44228 dedicated 162648064 shared 1798144
+before  pid 37540 dedicated 67493888 shared 29515776
+before  pid 15064 dedicated 39145472 shared 212992
+before  pid 46500 dedicated 26148864 shared 364544
+before  pid 8328 dedicated 22695936 shared 643072
+before  pid 26372 dedicated 22044672 shared 364544
+before  pid 11736 dedicated 15810560 shared 24756224
+before  pid 20588 dedicated 14512128 shared 319488
+before  pid 22968 dedicated 14385152 shared 0
+before  pid 56296 dedicated 13987840 shared 258048
+before  pid 12316 dedicated 13594624 shared 0
+before  pid 19512 dedicated 13590528 shared 319488
+before  pid 13216 dedicated 13586432 shared 212992
+before  pid 34396 dedicated 11354112 shared 364544
+before  pid 41148 dedicated 8474624 shared 1097728
+before  pid 54912 dedicated 8474624 shared 1097728
+before  pid 14764 dedicated 8470528 shared 1097728
+before  pid 25408 dedicated 8339456 shared 319488
+before  pid 13328 dedicated 8110080 shared 319488
+before  pid 26416 dedicated 8097792 shared 319488
+before  pid 27880 dedicated 8097792 shared 319488
+before  pid 4 dedicated 4235264 shared 270336
+instances 36
+luids 0x00000000_0x0000e0e9 0x00000000_0x0000f2c9
+row 54912 8474624 1097728 8474624 1097728 ShellHost
+row 48412 301748224 43298816 280989696 43298816 chrome
+row 44228 162648064 1798144 68718592 1798144 explorer
+row 27880 8097792 319488 8097792 319488 ms-teams
+row 14764 8470528 1097728 8470528 1097728 CrossDeviceResume
+row 11736 15810560 24756224 15810560 24756224 vmwp
+row 26416 8097792 319488 8097792 319488 chrome
+row 37540 67493888 29515776 19456000 29515776 csrss
+row 13328 8110080 319488 8110080 319488 msedge
+row 34396 11354112 364544 9453568 364544 promecefpluginhost
+row 20792 208183296 238460928 208183296 238460928 warp
+row 8328 22695936 643072 16461824 643072 copilotapphost
+row 56296 13987840 258048 13717504 258048 codex-computer-use-swift
+row 13216 13586432 212992 12464128 212992 TextInputHost
+row 25408 8339456 319488 8142848 319488 msedgewebview2
+row 46500 26148864 364544 9617408 364544 ChatGPT
+row 12316 13594624 0 65536 0 ShellExperienceHost
+row 10080 0 0 0 0 msedgewebview2
+row 41148 8474624 1097728 8474624 1097728 PhoneExperienceHost
+row 20588 14512128 319488 8212480 319488 StartMenuExperienceHost
+row 26372 22044672 364544 9527296 364544 copilotapp
+row 15064 39145472 212992 11390976 212992 msedgewebview2
+row 19512 13590528 319488 8208384 319488 SearchHost
+row 25560 0 0 0 0 ArtHost
+row 30984 215138304 892928 10997760 892928 steamwebhelper
+row 34628 3493482496 15458304 255291392 15458304 dwm
+row 22968 14385152 0 69632 0 LockApp
+row 4 4235264 270336 4243456 262144 System
+adapter luid_0x00000000_0x0000e0e9_phys_0 1,483.2 MiB dedicated usage
+adapter luid_0x00000000_0x0000f2c9_phys_0 0.0 MiB dedicated usage
+adapter luid_0x00000000_0x0000e0e9_phys_0 368.2 MiB shared usage
+adapter luid_0x00000000_0x0000f2c9_phys_0 0.0 MiB shared usage
+adapter luid_0x00000000_0x0000e0e9_phys_0 854.7 MiB local usage
+adapter luid_0x00000000_0x0000f2c9_phys_0_part_0 0.0 MiB local usage
+after  pid 34628 dedicated 3493482496 shared 15458304
+after  pid 48412 dedicated 325906432 shared 67207168
+after  pid 30984 dedicated 215138304 shared 892928
+after  pid 20792 dedicated 208183296 shared 238460928
+after  pid 44228 dedicated 162648064 shared 1798144
+after  pid 37540 dedicated 67493888 shared 29515776
+after  pid 15064 dedicated 39145472 shared 212992
+after  pid 46500 dedicated 26148864 shared 364544
+after  pid 8328 dedicated 22695936 shared 643072
+after  pid 26372 dedicated 22044672 shared 364544
+after  pid 11736 dedicated 15810560 shared 24756224
+after  pid 20588 dedicated 14512128 shared 319488
+after  pid 22968 dedicated 14385152 shared 0
+after  pid 56296 dedicated 13987840 shared 258048
+after  pid 12316 dedicated 13594624 shared 0
+after  pid 19512 dedicated 13590528 shared 319488
+after  pid 13216 dedicated 13586432 shared 212992
+after  pid 34396 dedicated 11354112 shared 364544
+after  pid 41148 dedicated 8474624 shared 1097728
+after  pid 54912 dedicated 8474624 shared 1097728
+after  pid 14764 dedicated 8470528 shared 1097728
+after  pid 25408 dedicated 8339456 shared 319488
+after  pid 13328 dedicated 8110080 shared 319488
+after  pid 26416 dedicated 8097792 shared 319488
+after  pid 27880 dedicated 8097792 shared 319488
+after  pid 4 dedicated 4235264 shared 270336
+== bracket 2
+before  pid 34628 dedicated 3522326528 shared 15458304
+before  pid 48412 dedicated 332398592 shared 66650112
+before  pid 30984 dedicated 215138304 shared 892928
+before  pid 20792 dedicated 208183296 shared 238460928
+before  pid 44228 dedicated 162648064 shared 1798144
+before  pid 37540 dedicated 67493888 shared 29515776
+before  pid 15064 dedicated 39145472 shared 212992
+before  pid 46500 dedicated 26148864 shared 364544
+before  pid 8328 dedicated 22695936 shared 643072
+before  pid 26372 dedicated 22044672 shared 364544
+before  pid 11736 dedicated 15810560 shared 24756224
+before  pid 20588 dedicated 14512128 shared 319488
+before  pid 22968 dedicated 14385152 shared 0
+before  pid 56296 dedicated 13987840 shared 258048
+before  pid 12316 dedicated 13594624 shared 0
+before  pid 19512 dedicated 13590528 shared 319488
+before  pid 13216 dedicated 13586432 shared 212992
+before  pid 34396 dedicated 11354112 shared 364544
+before  pid 41148 dedicated 8474624 shared 1097728
+before  pid 54912 dedicated 8474624 shared 1097728
+before  pid 14764 dedicated 8470528 shared 1097728
+before  pid 25408 dedicated 8339456 shared 319488
+before  pid 13328 dedicated 8110080 shared 319488
+before  pid 26416 dedicated 8097792 shared 319488
+before  pid 27880 dedicated 8097792 shared 319488
+before  pid 4 dedicated 4235264 shared 270336
+instances 36
+luids 0x00000000_0x0000e0e9 0x00000000_0x0000f2c9
+row 54912 8474624 1097728 8474624 1097728 ShellHost
+row 48412 327090176 66531328 306331648 66531328 chrome
+row 44228 162648064 1798144 68718592 1798144 explorer
+row 27880 8097792 319488 8097792 319488 ms-teams
+row 14764 8470528 1097728 8470528 1097728 CrossDeviceResume
+row 11736 15810560 24756224 15810560 24756224 vmwp
+row 26416 8097792 319488 8097792 319488 chrome
+row 37540 67493888 29515776 19456000 29515776 csrss
+row 13328 8110080 319488 8110080 319488 msedge
+row 34396 11354112 364544 9453568 364544 promecefpluginhost
+row 20792 208183296 238460928 208183296 238460928 warp
+row 8328 22695936 643072 16461824 643072 copilotapphost
+row 56296 13987840 258048 13717504 258048 codex-computer-use-swift
+row 13216 13586432 212992 12464128 212992 TextInputHost
+row 25408 8339456 319488 8142848 319488 msedgewebview2
+row 46500 26148864 364544 9617408 364544 ChatGPT
+row 12316 13594624 0 65536 0 ShellExperienceHost
+row 10080 0 0 0 0 msedgewebview2
+row 41148 8474624 1097728 8474624 1097728 PhoneExperienceHost
+row 20588 14512128 319488 8212480 319488 StartMenuExperienceHost
+row 26372 22044672 364544 9527296 364544 copilotapp
+row 15064 39145472 212992 11390976 212992 msedgewebview2
+row 19512 13590528 319488 8208384 319488 SearchHost
+row 25560 0 0 0 0 ArtHost
+row 30984 215138304 892928 10997760 892928 steamwebhelper
+row 34628 3522326528 15458304 284135424 15458304 dwm
+row 22968 14385152 0 69632 0 LockApp
+row 4 4235264 270336 4243456 262144 System
+adapter luid_0x00000000_0x0000e0e9_phys_0 1,407.9 MiB dedicated usage
+adapter luid_0x00000000_0x0000f2c9_phys_0 0.0 MiB dedicated usage
+adapter luid_0x00000000_0x0000e0e9_phys_0 364.8 MiB shared usage
+adapter luid_0x00000000_0x0000f2c9_phys_0 0.0 MiB shared usage
+adapter luid_0x00000000_0x0000e0e9_phys_0 779.4 MiB local usage
+adapter luid_0x00000000_0x0000f2c9_phys_0_part_0 0.0 MiB local usage
+after  pid 34628 dedicated 3519705088 shared 15458304
+after  pid 48412 dedicated 241401856 shared 63774720
+after  pid 30984 dedicated 215138304 shared 892928
+after  pid 20792 dedicated 208183296 shared 238460928
+after  pid 44228 dedicated 162648064 shared 1798144
+after  pid 37540 dedicated 64868352 shared 29515776
+after  pid 15064 dedicated 39145472 shared 212992
+after  pid 46500 dedicated 26148864 shared 364544
+after  pid 8328 dedicated 22695936 shared 643072
+after  pid 26372 dedicated 22044672 shared 364544
+after  pid 11736 dedicated 15810560 shared 24756224
+after  pid 20588 dedicated 14512128 shared 319488
+after  pid 22968 dedicated 14385152 shared 0
+after  pid 56296 dedicated 13987840 shared 258048
+after  pid 12316 dedicated 13594624 shared 0
+after  pid 19512 dedicated 13590528 shared 319488
+after  pid 13216 dedicated 13586432 shared 212992
+after  pid 34396 dedicated 11354112 shared 364544
+after  pid 41148 dedicated 8474624 shared 1097728
+after  pid 54912 dedicated 8474624 shared 1097728
+after  pid 14764 dedicated 8470528 shared 1097728
+after  pid 25408 dedicated 8339456 shared 319488
+after  pid 13328 dedicated 8110080 shared 319488
+after  pid 26416 dedicated 8097792 shared 319488
+after  pid 27880 dedicated 8097792 shared 319488
+after  pid 4 dedicated 4235264 shared 270336
+== bracket 3
+before  pid 34628 dedicated 3519705088 shared 15458304
+before  pid 48412 dedicated 239431680 shared 63774720
+before  pid 30984 dedicated 215138304 shared 892928
+before  pid 20792 dedicated 208183296 shared 238460928
+before  pid 44228 dedicated 162648064 shared 1798144
+before  pid 37540 dedicated 64868352 shared 29515776
+before  pid 15064 dedicated 39145472 shared 212992
+before  pid 46500 dedicated 26148864 shared 364544
+before  pid 8328 dedicated 22695936 shared 643072
+before  pid 26372 dedicated 22044672 shared 364544
+before  pid 11736 dedicated 15810560 shared 24756224
+before  pid 20588 dedicated 14512128 shared 319488
+before  pid 22968 dedicated 14385152 shared 0
+before  pid 56296 dedicated 13987840 shared 258048
+before  pid 12316 dedicated 13594624 shared 0
+before  pid 19512 dedicated 13590528 shared 319488
+before  pid 13216 dedicated 13586432 shared 212992
+before  pid 34396 dedicated 11354112 shared 364544
+before  pid 41148 dedicated 8474624 shared 1097728
+before  pid 54912 dedicated 8474624 shared 1097728
+before  pid 14764 dedicated 8470528 shared 1097728
+before  pid 25408 dedicated 8339456 shared 319488
+before  pid 13328 dedicated 8110080 shared 319488
+before  pid 26416 dedicated 8097792 shared 319488
+before  pid 27880 dedicated 8097792 shared 319488
+before  pid 4 dedicated 4235264 shared 270336
+instances 36
+luids 0x00000000_0x0000e0e9 0x00000000_0x0000f2c9
+row 54912 8474624 1097728 8474624 1097728 ShellHost
+row 48412 239431680 63774720 218673152 63774720 chrome
+row 44228 162648064 2039808 68718592 2039808 explorer
+row 27880 8097792 319488 8097792 319488 ms-teams
+row 14764 8470528 1097728 8470528 1097728 CrossDeviceResume
+row 11736 15810560 24756224 15810560 24756224 vmwp
+row 26416 8097792 319488 8097792 319488 chrome
+row 37540 64868352 29515776 16830464 29515776 csrss
+row 13328 8110080 319488 8110080 319488 msedge
+row 34396 11354112 364544 9453568 364544 promecefpluginhost
+row 20792 208183296 238460928 208183296 238460928 warp
+row 8328 22695936 643072 16461824 643072 copilotapphost
+row 56296 13987840 258048 13717504 258048 codex-computer-use-swift
+row 13216 13586432 212992 12464128 212992 TextInputHost
+row 25408 8339456 319488 8142848 319488 msedgewebview2
+row 46500 26148864 364544 9617408 364544 ChatGPT
+row 12316 13594624 0 65536 0 ShellExperienceHost
+row 10080 0 0 0 0 msedgewebview2
+row 41148 8474624 1097728 8474624 1097728 PhoneExperienceHost
+row 20588 14512128 319488 8212480 319488 StartMenuExperienceHost
+row 26372 22044672 364544 9527296 364544 copilotapp
+row 15064 39145472 212992 11390976 212992 msedgewebview2
+row 19512 13590528 319488 8208384 319488 SearchHost
+row 25560 0 0 0 0 ArtHost
+row 30984 215138304 892928 10997760 892928 steamwebhelper
+row 34628 3519705088 15458304 284135424 15458304 dwm
+row 22968 14385152 0 69632 0 LockApp
+row 4 4235264 270336 4243456 262144 System
+adapter luid_0x00000000_0x0000e0e9_phys_0 1,397.7 MiB dedicated usage
+adapter luid_0x00000000_0x0000f2c9_phys_0 0.0 MiB dedicated usage
+adapter luid_0x00000000_0x0000e0e9_phys_0 365.1 MiB shared usage
+adapter luid_0x00000000_0x0000f2c9_phys_0 0.0 MiB shared usage
+adapter luid_0x00000000_0x0000e0e9_phys_0 769.2 MiB local usage
+adapter luid_0x00000000_0x0000f2c9_phys_0_part_0 0.0 MiB local usage
+after  pid 34628 dedicated 3519705088 shared 15458304
+after  pid 48412 dedicated 239431680 shared 63774720
+after  pid 30984 dedicated 215138304 shared 892928
+after  pid 20792 dedicated 208183296 shared 238460928
+after  pid 44228 dedicated 162648064 shared 2039808
+after  pid 37540 dedicated 64868352 shared 29515776
+after  pid 15064 dedicated 39145472 shared 212992
+after  pid 46500 dedicated 26148864 shared 364544
+after  pid 8328 dedicated 22695936 shared 643072
+after  pid 26372 dedicated 22044672 shared 364544
+after  pid 11736 dedicated 15810560 shared 24756224
+after  pid 20588 dedicated 14512128 shared 319488
+after  pid 22968 dedicated 14385152 shared 0
+after  pid 56296 dedicated 13987840 shared 258048
+after  pid 12316 dedicated 13594624 shared 0
+after  pid 19512 dedicated 13590528 shared 319488
+after  pid 13216 dedicated 13586432 shared 212992
+after  pid 34396 dedicated 11354112 shared 364544
+after  pid 41148 dedicated 8474624 shared 1097728
+after  pid 54912 dedicated 8474624 shared 1097728
+after  pid 14764 dedicated 8470528 shared 1097728
+after  pid 25408 dedicated 8339456 shared 319488
+after  pid 13328 dedicated 8110080 shared 319488
+after  pid 26416 dedicated 8097792 shared 319488
+after  pid 27880 dedicated 8097792 shared 319488
+after  pid 4 dedicated 4235264 shared 270336

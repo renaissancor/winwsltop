@@ -1,0 +1,6 @@
+nvml v1 ret=0 used 1744 free 10537 MiB | v2 ret=0 used 1472 free 10537 reserved 272 MiB
+construct_ms 626.35
+19:14:40.842 device ok=1 1.00ms present=1 name="NVIDIA GeForce RTX 4070"
+  util has=1 0% | power has=1 11.25 W limit 200.00 W | temp has=1 41 C | sm has=1 210 MHz
+  mem used 1472 MiB total 12282 MiB
+  memory ok=1 0.10ms pids=26 dedicated_sum 4538.6 MiB shared_sum 322.7 MiB
