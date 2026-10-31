@@ -20,6 +20,7 @@ missing from this list or a link below does not resolve.
 | [`../wsl-collector/PROTOCOL.md`](../wsl-collector/PROTOCOL.md) | The collector's line, field by field, and the clock-alignment pings | collect, ui, core | before changing the collector or the parser |
 | [`../experiments/01-gpu-attribution/README.md`](../experiments/01-gpu-attribution/README.md) | Can Windows tell WSL's GPU work from its own? Procedure and verdict; numbers are in the ledger | evidence | repeating or extending experiment 01 |
 | [`../experiments/02-gpu-device/README.md`](../experiments/02-gpu-device/README.md) | Do the GPU device and memory collectors read true? Procedure and verdict | evidence | repeating or extending experiment 02 |
+| [`../experiments/03-host-counters/README.md`](../experiments/03-host-counters/README.md) | Do the disk and network collectors read true? Procedure, how independent each comparison is, and verdict | evidence | repeating or extending experiment 03 |
 | [`../.claude/agents/core.md`](../.claude/agents/core.md) | The core role: what it may read and write, its return format | a fresh core agent | when spawned |
 | [`../.claude/agents/collect.md`](../.claude/agents/collect.md) | The collect role | a fresh collect agent | when spawned |
 | [`../.claude/agents/ui.md`](../.claude/agents/ui.md) | The ui role | a fresh ui agent | when spawned |

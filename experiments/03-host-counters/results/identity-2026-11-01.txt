@@ -1,0 +1,96 @@
+kernel	6.6.114.1-microsoft-standard-WSL2
+windows	26200
+elevated	False
+disk	0	Samsung SSD 980 PRO 2TB	NVMe	2000398934016	True	True
+disk	1	SanDisk Portable SSD	USB	1000204886016	False	False
+physicaldisk	0	Samsung SSD 980 PRO 2TB	SSD	NVMe
+physicaldisk	1	SanDisk Portable SSD	SSD	USB
+partition	0	C
+partition	1	D
+adapter	50	vSwitch (WSL (Hyper-V firewall))	Hyper-V Virtual Switch Extension Adapter	Up	10000000000	10000000000	10000000000	False	True	True
+adapter	18	로컬 영역 연결* 3	WAN Miniport (IKEv2)	Disconnected				False	True	True
+adapter	17	이더넷(커널 디버거)	Microsoft Kernel Debug Network Adapter	Not Present	0	0	0	False	True	True
+adapter	16	로컬 영역 연결* 9	WAN Miniport (Network Monitor)	Up				False	True	True
+adapter	15	Wi-Fi	Intel(R) Wi-Fi 6E AX211 160MHz	Disconnected	287000000	287000000	287000000	True	False	False
+adapter	14	로컬 영역 연결* 8	WAN Miniport (IPv6)	Up				False	True	True
+adapter	13	로컬 영역 연결* 6	WAN Miniport (PPPOE)	Disconnected				False	True	True
+adapter	12	Teredo Tunneling Pseudo-Interface		Not Present	0	0	0	False	True	True
+adapter	11	로컬 영역 연결* 1	Microsoft Wi-Fi Direct Virtual Adapter	Disconnected				False	True	True
+adapter	53	vEthernet (WSL (Hyper-V firewall))	Hyper-V Virtual Ethernet Adapter	Up	10000000000	10000000000	10000000000	False	True	False
+adapter	10	로컬 영역 연결* 7	WAN Miniport (IP)	Up				False	True	True
+adapter	9	이더넷	Intel(R) Ethernet Controller (3) I225-V	Up	100000000	100000000	100000000	True	False	False
+adapter	8	로컬 영역 연결* 5	WAN Miniport (PPTP)	Disconnected				False	True	True
+adapter	7	로컬 영역 연결* 2	WAN Miniport (SSTP)	Disconnected				False	True	True
+adapter	6	로컬 영역 연결* 4	WAN Miniport (L2TP)	Disconnected				False	True	True
+adapter	5	Bluetooth 네트워크 연결	Bluetooth Device (Personal Area Network)	Disconnected	3000000	3000000	3000000	False	True	False
+adapter	4	로컬 영역 연결* 10	Microsoft Wi-Fi Direct Virtual Adapter #2	Disconnected				False	True	True
+adapter	3	Microsoft IP-HTTPS Platform Interface		Not Present	0	0	0	False	True	True
+adapter	2	6to4 Adapter		Not Present	0	0	0	False	True	True
+if-table	entries	64
+if-head	index	luid	alias	description	type	oper	admin	media	hardware	filter	in	out	tx_bits	rx_bits	keep	reason
+if	19	1688849860263936	이더넷-WFP Native MAC Layer LightWeight Filter-0000	Intel(R) Ethernet Controller (3) I225-V-WFP Native MAC Layer LightWeight Filter-0000	6	1	1	1	0	1	193232604099	8066226927	100000000	100000000	0	filter
+if	20	1688849877041152	이더넷-Nprotect Firewall Core Driver-0000	Intel(R) Ethernet Controller (3) I225-V-Nprotect Firewall Core Driver-0000	6	1	1	1	0	1	193232604099	8066226927	100000000	100000000	0	filter
+if	21	1688849893818368	이더넷-Npcap Packet Driver (NPCAP)-0000	Intel(R) Ethernet Controller (3) I225-V-Npcap Packet Driver (NPCAP)-0000	6	1	1	1	0	1	193232604099	8066226927	100000000	100000000	0	filter
+if	22	1688849910595584	이더넷-QoS Packet Scheduler-0000	Intel(R) Ethernet Controller (3) I225-V-QoS Packet Scheduler-0000	6	1	1	1	0	1	193232605613	8066226927	100000000	100000000	0	filter
+if	23	1688849927372800	이더넷-WFP 802.3 MAC Layer LightWeight Filter-0000	Intel(R) Ethernet Controller (3) I225-V-WFP 802.3 MAC Layer LightWeight Filter-0000	6	1	1	1	0	1	193232605613	8066226927	100000000	100000000	0	filter
+if	31	1688849944150016	Bluetooth 네트워크 연결-Npcap Packet Driver (NPCAP)-0000	Bluetooth Device (Personal Area Network)-Npcap Packet Driver (NPCAP)-0000	6	2	1	2	0	1	0	0	3000000	3000000	0	not-up
+if	38	1688849960927232	로컬 영역 연결* 7-WFP Native MAC Layer LightWeight Filter-0000	WAN Miniport (IP)-WFP Native MAC Layer LightWeight Filter-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	39	1688849977704448	로컬 영역 연결* 7-Nprotect Firewall Core Driver-0000	WAN Miniport (IP)-Nprotect Firewall Core Driver-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	40	1688849994481664	로컬 영역 연결* 7-Npcap Packet Driver (NPCAP)-0000	WAN Miniport (IP)-Npcap Packet Driver (NPCAP)-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	41	1688850011258880	로컬 영역 연결* 7-QoS Packet Scheduler-0000	WAN Miniport (IP)-QoS Packet Scheduler-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	42	1688850028036096	로컬 영역 연결* 8-WFP Native MAC Layer LightWeight Filter-0000	WAN Miniport (IPv6)-WFP Native MAC Layer LightWeight Filter-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	43	1688850044813312	로컬 영역 연결* 8-Nprotect Firewall Core Driver-0000	WAN Miniport (IPv6)-Nprotect Firewall Core Driver-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	44	1688850061590528	로컬 영역 연결* 8-Npcap Packet Driver (NPCAP)-0000	WAN Miniport (IPv6)-Npcap Packet Driver (NPCAP)-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	45	1688850078367744	로컬 영역 연결* 8-QoS Packet Scheduler-0000	WAN Miniport (IPv6)-QoS Packet Scheduler-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	46	1688850095144960	로컬 영역 연결* 9-WFP Native MAC Layer LightWeight Filter-0000	WAN Miniport (Network Monitor)-WFP Native MAC Layer LightWeight Filter-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	47	1688850111922176	로컬 영역 연결* 9-Nprotect Firewall Core Driver-0000	WAN Miniport (Network Monitor)-Nprotect Firewall Core Driver-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	48	1688850128699392	로컬 영역 연결* 9-Npcap Packet Driver (NPCAP)-0000	WAN Miniport (Network Monitor)-Npcap Packet Driver (NPCAP)-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	49	1688850145476608	로컬 영역 연결* 9-QoS Packet Scheduler-0000	WAN Miniport (Network Monitor)-QoS Packet Scheduler-0000	6	1	1	1	0	1	0	0	0	0	0	filter
+if	51	1688850162253824	vSwitch (WSL (Hyper-V firewall))-Hyper-V Virtual Switch Extension Filter-0000	Hyper-V Virtual Switch Extension Adapter-Hyper-V Virtual Switch Extension Filter-0000	6	1	1	1	0	1	0	0	10000000000	10000000000	0	filter
+if	52	1688850179031040	vSwitch (WSL (Hyper-V firewall))-Virtual Filtering Platform VMSwitch Extension-0000	Hyper-V Virtual Switch Extension Adapter-Virtual Filtering Platform VMSwitch Extension-0000	6	1	1	1	0	1	0	0	10000000000	10000000000	0	filter
+if	54	1688850195808256	vEthernet (WSL (Hyper-V firewall))-WFP Native MAC Layer LightWeight Filter-0000	Hyper-V Virtual Ethernet Adapter-WFP Native MAC Layer LightWeight Filter-0000	6	1	1	1	0	1	2047992023	4963275785	10000000000	10000000000	0	filter
+if	55	1688850212585472	vEthernet (WSL (Hyper-V firewall))-Nprotect Firewall Core Driver-0000	Hyper-V Virtual Ethernet Adapter-Nprotect Firewall Core Driver-0000	6	1	1	1	0	1	2047992023	4963275785	10000000000	10000000000	0	filter
+if	56	1688850229362688	vEthernet (WSL (Hyper-V firewall))-Npcap Packet Driver (NPCAP)-0000	Hyper-V Virtual Ethernet Adapter-Npcap Packet Driver (NPCAP)-0000	6	1	1	1	0	1	2047992023	4963275785	10000000000	10000000000	0	filter
+if	57	1688850246139904	vEthernet (WSL (Hyper-V firewall))-QoS Packet Scheduler-0000	Hyper-V Virtual Ethernet Adapter-QoS Packet Scheduler-0000	6	1	1	1	0	1	2047992023	4963275785	10000000000	10000000000	0	filter
+if	58	1688850262917120	vEthernet (WSL (Hyper-V firewall))-WFP 802.3 MAC Layer LightWeight Filter-0000	Hyper-V Virtual Ethernet Adapter-WFP 802.3 MAC Layer LightWeight Filter-0000	6	1	1	1	0	1	2047992023	4963275785	10000000000	10000000000	0	filter
+if	17	1689399616077824	이더넷(커널 디버거)	Microsoft Kernel Debug Network Adapter	6	6	2	0	0	0	0	0	0	0	0	not-up
+if	9	1689399632855040	이더넷	Intel(R) Ethernet Controller (3) I225-V	6	1	1	1	1	0	193232608641	8066226981	100000000	100000000	1	-
+if	5	1689399649632256	Bluetooth 네트워크 연결	Bluetooth Device (Personal Area Network)	6	2	1	2	0	0	0	0	3000000	3000000	0	not-up
+if	10	1689399666409472	로컬 영역 연결* 7	WAN Miniport (IP)	6	1	1	1	0	0	0	0	0	0	1	-
+if	14	1689399683186688	로컬 영역 연결* 8	WAN Miniport (IPv6)	6	1	1	1	0	0	0	0	0	0	1	-
+if	16	1689399699963904	로컬 영역 연결* 9	WAN Miniport (Network Monitor)	6	1	1	1	0	0	0	0	0	0	1	-
+if	50	1689399716741120	vSwitch (WSL (Hyper-V firewall))	Hyper-V Virtual Switch Extension Adapter	6	1	1	1	0	0	0	0	10000000000	10000000000	1	-
+if	53	1689399733518336	vEthernet (WSL (Hyper-V firewall))	Hyper-V Virtual Ethernet Adapter	6	1	1	1	0	0	2047992023	4963275785	10000000000	10000000000	1	-
+if	13	6474474220158976	로컬 영역 연결* 6	WAN Miniport (PPPOE)	23	2	1	0	0	0	0	0	0	0	0	not-up
+if	1	6755399441055744	Loopback Pseudo-Interface 1	Software Loopback Interface 1	24	1	1	1	0	0	0	0	1073741824	1073741824	0	loopback
+if	24	19984723346456576	Wi-Fi-WFP Native MAC Layer LightWeight Filter-0000	Intel(R) Wi-Fi 6E AX211 160MHz-WFP Native MAC Layer LightWeight Filter-0000	71	2	1	2	0	1	0	0	287000000	287000000	0	not-up
+if	25	19984723363233792	Wi-Fi-Virtual WiFi Filter Driver-0000	Intel(R) Wi-Fi 6E AX211 160MHz-Virtual WiFi Filter Driver-0000	71	2	1	2	0	1	0	0	287000000	287000000	0	not-up
+if	26	19984723380011008	Wi-Fi-Native WiFi Filter Driver-0000	Intel(R) Wi-Fi 6E AX211 160MHz-Native WiFi Filter Driver-0000	71	2	1	2	0	1	0	0	287000000	287000000	0	not-up
+if	27	19984723396788224	Wi-Fi-Nprotect Firewall Core Driver-0000	Intel(R) Wi-Fi 6E AX211 160MHz-Nprotect Firewall Core Driver-0000	71	2	1	2	0	1	0	0	287000000	287000000	0	not-up
+if	28	19984723413565440	Wi-Fi-Npcap Packet Driver (NPCAP)-0000	Intel(R) Wi-Fi 6E AX211 160MHz-Npcap Packet Driver (NPCAP)-0000	71	2	1	2	0	1	0	0	287000000	287000000	0	not-up
+if	29	19984723430342656	Wi-Fi-QoS Packet Scheduler-0000	Intel(R) Wi-Fi 6E AX211 160MHz-QoS Packet Scheduler-0000	71	2	1	2	0	1	0	0	287000000	287000000	0	not-up
+if	30	19984723447119872	Wi-Fi-WFP 802.3 MAC Layer LightWeight Filter-0000	Intel(R) Wi-Fi 6E AX211 160MHz-WFP 802.3 MAC Layer LightWeight Filter-0000	71	2	1	2	0	1	0	0	287000000	287000000	0	not-up
+if	32	19984723463897088	로컬 영역 연결* 1-WFP Native MAC Layer LightWeight Filter-0000	Microsoft Wi-Fi Direct Virtual Adapter-WFP Native MAC Layer LightWeight Filter-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	33	19984723480674304	로컬 영역 연결* 1-Native WiFi Filter Driver-0000	Microsoft Wi-Fi Direct Virtual Adapter-Native WiFi Filter Driver-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	34	19984723497451520	로컬 영역 연결* 1-Nprotect Firewall Core Driver-0000	Microsoft Wi-Fi Direct Virtual Adapter-Nprotect Firewall Core Driver-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	35	19984723514228736	로컬 영역 연결* 1-Npcap Packet Driver (NPCAP)-0000	Microsoft Wi-Fi Direct Virtual Adapter-Npcap Packet Driver (NPCAP)-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	36	19984723531005952	로컬 영역 연결* 1-QoS Packet Scheduler-0000	Microsoft Wi-Fi Direct Virtual Adapter-QoS Packet Scheduler-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	37	19984723547783168	로컬 영역 연결* 1-WFP 802.3 MAC Layer LightWeight Filter-0000	Microsoft Wi-Fi Direct Virtual Adapter-WFP 802.3 MAC Layer LightWeight Filter-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	59	19984723564560384	로컬 영역 연결* 10-WFP Native MAC Layer LightWeight Filter-0000	Microsoft Wi-Fi Direct Virtual Adapter #2-WFP Native MAC Layer LightWeight Filter-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	60	19984723581337600	로컬 영역 연결* 10-Native WiFi Filter Driver-0000	Microsoft Wi-Fi Direct Virtual Adapter #2-Native WiFi Filter Driver-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	61	19984723598114816	로컬 영역 연결* 10-Nprotect Firewall Core Driver-0000	Microsoft Wi-Fi Direct Virtual Adapter #2-Nprotect Firewall Core Driver-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	62	19984723614892032	로컬 영역 연결* 10-Npcap Packet Driver (NPCAP)-0000	Microsoft Wi-Fi Direct Virtual Adapter #2-Npcap Packet Driver (NPCAP)-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	63	19984723631669248	로컬 영역 연결* 10-QoS Packet Scheduler-0000	Microsoft Wi-Fi Direct Virtual Adapter #2-QoS Packet Scheduler-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	64	19984723648446464	로컬 영역 연결* 10-WFP 802.3 MAC Layer LightWeight Filter-0000	Microsoft Wi-Fi Direct Virtual Adapter #2-WFP 802.3 MAC Layer LightWeight Filter-0000	71	2	1	2	0	1	0	0	0	0	0	not-up
+if	15	19985273102270464	Wi-Fi	Intel(R) Wi-Fi 6E AX211 160MHz	71	2	1	2	1	0	0	0	287000000	287000000	0	not-up
+if	11	19985273119047680	로컬 영역 연결* 1	Microsoft Wi-Fi Direct Virtual Adapter	71	2	1	2	0	0	0	0	0	0	0	not-up
+if	4	19985273135824896	로컬 영역 연결* 10	Microsoft Wi-Fi Direct Virtual Adapter #2	71	2	1	2	0	0	0	0	0	0	0	not-up
+if	12	36873767409942528	Teredo Tunneling Pseudo-Interface	Microsoft Teredo Tunneling Adapter	131	6	2	0	0	0	0	0	0	0	0	not-up
+if	3	36873767426719744	Microsoft IP-HTTPS Platform Interface	Microsoft IP-HTTPS Platform Adapter	131	6	2	0	0	0	0	0	0	0	0	not-up
+if	2	36873767443496960	6to4 Adapter	Microsoft 6to4 Adapter	131	6	2	0	0	0	0	0	0	0	0	not-up
+if	7	36873771704909824	로컬 영역 연결* 2	WAN Miniport (SSTP)	131	2	1	0	0	0	0	0	0	0	0	not-up
+if	18	36873771721687040	로컬 영역 연결* 3	WAN Miniport (IKEv2)	131	2	1	0	0	0	0	0	0	0	0	not-up
+if	6	36873771738464256	로컬 영역 연결* 4	WAN Miniport (L2TP)	131	2	1	0	0	0	0	0	0	0	0	not-up
+if	8	36873771755241472	로컬 영역 연결* 5	WAN Miniport (PPTP)	131	2	1	0	0	0	0	0	0	0	0	not-up
+nvme	0	134379630921496375	data_units_read	63709238	data_units_written	58870689
+nvme	1	query failed 1

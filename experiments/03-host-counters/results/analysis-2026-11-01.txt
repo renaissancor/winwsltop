@@ -1,0 +1,203 @@
+# identity
+  kernel 6.6.114.1-microsoft-standard-WSL2
+  windows 26200
+  elevated False
+  disk 0 Samsung SSD 980 PRO 2TB NVMe 2000398934016 True True
+  disk 1 SanDisk Portable SSD USB 1000204886016 False False
+  partition 0 C
+  partition 1 D
+  nvme 0 134379630921496375 data_units_read 63709238 data_units_written 58870689
+  nvme 1 query failed 1
+if-table rows 64, Get-NetAdapter rows 19
+filter: kept 6 dropped {'filter': 24, 'not-up': 33, 'loopback': 1}
+rows with FilterInterface set, any state: 44 ; of those with non-zero octets: 10
+rows where TransmitLinkSpeed differs from ReceiveLinkSpeed: 0
+# rows the filter keeps, with Get-NetAdapter beside them
+  index alias | tx rx hw filter in out | Speed rx tx HardwareInterface Virtual Hidden Status
+  9 이더넷 | 100000000 100000000 1 0 193232608641 8066226981 | 100000000 100000000 100000000 True False False Up
+  10 로컬 영역 연결* 7 | 0 0 0 0 0 0 | (empty) (empty) (empty) False True True Up
+  14 로컬 영역 연결* 8 | 0 0 0 0 0 0 | (empty) (empty) (empty) False True True Up
+  16 로컬 영역 연결* 9 | 0 0 0 0 0 0 | (empty) (empty) (empty) False True True Up
+  50 vSwitch (WSL (Hyper-V firewall)) | 10000000000 10000000000 0 0 0 0 | 10000000000 10000000000 10000000000 False True True Up
+  53 vEthernet (WSL (Hyper-V firewall)) | 10000000000 10000000000 0 0 2047992023 4963275785 | 10000000000 10000000000 10000000000 False True False Up
+kept rows that disagree with Get-NetAdapter on link speed or the hardware flag: 0
+# every Get-NetAdapter row against its if-table row, all states
+  rows joined 19, hardware flag differs 0, tx speed differs 0
+  HardwareInterface true in Get-NetAdapter: ['Wi-Fi', '이더넷']
+  Virtual true and Hidden false: ['vEthernet (WSL (Hyper-V firewall))', 'Bluetooth 네트워크 연결']
+# dropped filter rows of the kept adapters, octets beside the adapter's own
+  19 이더넷-WFP Native MAC Layer LightWeight Filter-0000 in 193232604099 out 8066226927
+  20 이더넷-Nprotect Firewall Core Driver-0000 in 193232604099 out 8066226927
+  21 이더넷-Npcap Packet Driver (NPCAP)-0000 in 193232604099 out 8066226927
+  22 이더넷-QoS Packet Scheduler-0000 in 193232605613 out 8066226927
+  23 이더넷-WFP 802.3 MAC Layer LightWeight Filter-0000 in 193232605613 out 8066226927
+  54 vEthernet (WSL (Hyper-V firewall))-WFP Native MAC Layer LightWeight Filter-0000 in 2047992023 out 4963275785
+  55 vEthernet (WSL (Hyper-V firewall))-Nprotect Firewall Core Driver-0000 in 2047992023 out 4963275785
+  56 vEthernet (WSL (Hyper-V firewall))-Npcap Packet Driver (NPCAP)-0000 in 2047992023 out 4963275785
+  57 vEthernet (WSL (Hyper-V firewall))-QoS Packet Scheduler-0000 in 2047992023 out 4963275785
+  58 vEthernet (WSL (Hyper-V firewall))-WFP 802.3 MAC Layer LightWeight Filter-0000 in 2047992023 out 4963275785
+  kept 9 이더넷 in 193232608641 out 8066226981
+  kept 53 vEthernet (WSL (Hyper-V firewall)) in 2047992023 out 4963275785
+# loopback and not-up rows with non-zero octets
+  []
+
+# Get-NetAdapterStatistics between two raw GetIfTable2 reads
+rounds 10
+  vEthernet (WSL (Hyper-V firewall)) received: inside 10 of 10, raw moved in 10 rounds, furthest outside 0 bytes
+  vEthernet (WSL (Hyper-V firewall)) sent: inside 10 of 10, raw moved in 10 rounds, furthest outside 0 bytes
+  이더넷 received: inside 10 of 10, raw moved in 10 rounds, furthest outside 0 bytes
+  이더넷 sent: inside 10 of 10, raw moved in 10 rounds, furthest outside 0 bytes
+  adapters in Get-NetAdapterStatistics without a kept row: ['Wi-Fi', '로컬 영역 연결* 1', '로컬 영역 연결* 10']
+  kept rows without Get-NetAdapterStatistics: ['vSwitch (WSL (Hyper-V firewall))', '로컬 영역 연결* 7', '로컬 영역 연결* 8', '로컬 영역 연결* 9']
+
+# window 1
+collector rounds 60, 60.691 s; Get-Counter samples 75, 76.008 s; WMI reads 75, 75.815 s
+overlap of all three 60.691 s, collector inside both: yes
+disk sample ms mean 0.292 max 1.952
+net sample ms mean 1.324 max 12.006
+disk priming sample ok=0, rows 0; net priming sample ok=0, rows 0
+_Total in collector rows: NO; _Total in raw array: yes
+instances ['0 C:', '1 D:']; rounds where _Total differs from their sum: 0 of 122 readings
+disk 0 C:: collector read 257086449 B (245.18 MiB), its raw delta 257113600, write 1507989777 B (1438.13 MiB), its raw delta 1507995136
+  moved: read yes, write yes
+  read: Get-Counter inner 256982528 outer 258488832, inside yes; WMI inner 256982528 outer 258488832, inside yes; rate times time against the raw delta -105.6 ppm
+  write: Get-Counter inner 1502723584 outer 1567744000, inside yes; WMI inner 1502694912 outer 1567735808, inside yes; rate times time against the raw delta -3.6 ppm
+  Get-Counter raw read equals the nearest WMI BytesRead in 71 of 75 samples
+  busy mean %: collector 4.166, its raw idle delta 4.166, Get-Counter idle delta 4.179, WMI idle delta 4.179
+  busy per round %: min 0.648 max 24.954
+  % Idle Time: rounds above 100 0 of 60, exactly 100 0, max 99.351811, min 75.045872; busy differs from the clamp formula in 0 rounds
+  clamp rounds with traffic: 0
+  Get-Counter cooked idle above 100 in 0 of 75 samples, max 99.374325
+  NVMe log across the window, 60.695 s: read units 502 = 257024000 B (245.12 MiB), write units 2945 = 1507840000 B (1437.99 MiB)
+  collector / NVMe: read 1.0002, write 1.0001
+  difference in data units: read 0.12, write 0.29
+disk 1 D:: collector read 0 B (0.00 MiB), its raw delta 0, write 0 B (0.00 MiB), its raw delta 0
+  moved: read NO, write NO
+  read: Get-Counter inner 0 outer 0, inside yes; WMI inner 0 outer 0, inside yes; rate times time against the raw delta 0.0 ppm
+  write: Get-Counter inner 0 outer 0, inside yes; WMI inner 0 outer 0, inside yes; rate times time against the raw delta 0.0 ppm
+  Get-Counter raw read equals the nearest WMI BytesRead in 75 of 75 samples
+  busy mean %: collector 0.003, its raw idle delta -0.001, Get-Counter idle delta -0.001, WMI idle delta -0.001
+  busy per round %: min 0.000 max 0.057
+  % Idle Time: rounds above 100 34 of 60, exactly 100 0, max 100.032552, min 99.943302; busy differs from the clamp formula in 0 rounds
+  clamp rounds with traffic: 0
+  Get-Counter cooked idle above 100 in 40 of 75 samples, max 100.040469
+net: octets the collector read outside its raw bracket 0 of 720; rate differs from octet delta / elapsed 0 of 720; rounds whose rows differ from the kept set 0 of 60
+net rows returned: ['vEthernet (WSL (Hyper-V firewall))', 'vSwitch (WSL (Hyper-V firewall))', '로컬 영역 연결* 7', '로컬 영역 연결* 8', '로컬 영역 연결* 9', '이더넷']
+  이더넷: raw in 738822001 to 738867421, out 15204662 to 15205418; collector in 738844721 out 15205040, inside yes, over 60.692 s, max rate in 12357863 out 973509 B/s
+  로컬 영역 연결* 7: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.692 s, max rate in 0 out 0 B/s
+  로컬 영역 연결* 8: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.692 s, max rate in 0 out 0 B/s
+  로컬 영역 연결* 9: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.692 s, max rate in 0 out 0 B/s
+  vSwitch (WSL (Hyper-V firewall)): raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.692 s, max rate in 0 out 0 B/s
+  vEthernet (WSL (Hyper-V firewall)): raw in 442870 to 442870, out 307163 to 307163; collector in 442870 out 307163, inside yes, over 60.692 s, max rate in 60043 out 112964 B/s
+NIC peak in 98.86% of its 100000000 bit/s link
+seconds where vEthernet in exceeds NIC out 0 of 60; vEthernet out exceeds NIC in 0 of 60
+correlation per second: vEthernet in with NIC out 0.068; vEthernet out with NIC in 0.013
+guest eth0 across the window: rx 309144 tx 444124
+  이더넷: in 748540200 to 749571340, out 15387904 to 15406384
+  vEthernet (WSL (Hyper-V firewall)): in 444058 to 444124, out 309038 to 309144
+  guest tx inside vEthernet in: yes; guest rx inside vEthernet out: yes
+
+# window 2
+collector rounds 60, 60.764 s; Get-Counter samples 75, 76.095 s; WMI reads 75, 75.919 s
+overlap of all three 60.764 s, collector inside both: yes
+disk sample ms mean 0.226 max 0.518
+net sample ms mean 1.374 max 7.811
+disk priming sample ok=0, rows 0; net priming sample ok=0, rows 0
+_Total in collector rows: NO; _Total in raw array: yes
+instances ['0 C:', '1 D:']; rounds where _Total differs from their sum: 0 of 122 readings
+disk 0 C:: collector read 31351086 B (29.90 MiB), its raw delta 31351296, write 1465559389 B (1397.67 MiB), its raw delta 1465581568
+  moved: read yes, write yes
+  read: Get-Counter inner 30412288 outer 45720064, inside yes; WMI inner 30412288 outer 46166528, inside yes; rate times time against the raw delta -6.7 ppm
+  write: Get-Counter inner 1413550080 outer 1471643648, inside yes; WMI inner 1413607424 outer 1471524864, inside yes; rate times time against the raw delta -15.1 ppm
+  Get-Counter raw read equals the nearest WMI BytesRead in 66 of 75 samples
+  busy mean %: collector 3.263, its raw idle delta 3.263, Get-Counter idle delta 3.161, WMI idle delta 3.160
+  busy per round %: min 0.810 max 10.867
+  % Idle Time: rounds above 100 0 of 60, exactly 100 0, max 99.189762, min 89.133055; busy differs from the clamp formula in 0 rounds
+  clamp rounds with traffic: 0
+  Get-Counter cooked idle above 100 in 0 of 75 samples, max 99.046070
+  NVMe log across the window, 60.768 s: read units 61 = 31232000 B (29.79 MiB), write units 2863 = 1465856000 B (1397.95 MiB)
+  collector / NVMe: read 1.0038, write 0.9998
+  difference in data units: read 0.23, write 0.58
+disk 1 D:: collector read 0 B (0.00 MiB), its raw delta 0, write 0 B (0.00 MiB), its raw delta 0
+  moved: read NO, write NO
+  read: Get-Counter inner 0 outer 0, inside yes; WMI inner 0 outer 0, inside yes; rate times time against the raw delta 0.0 ppm
+  write: Get-Counter inner 0 outer 0, inside yes; WMI inner 0 outer 0, inside yes; rate times time against the raw delta 0.0 ppm
+  Get-Counter raw read equals the nearest WMI BytesRead in 75 of 75 samples
+  busy mean %: collector 0.004, its raw idle delta -0.001, Get-Counter idle delta -0.001, WMI idle delta -0.001
+  busy per round %: min 0.000 max 0.073
+  % Idle Time: rounds above 100 33 of 60, exactly 100 0, max 100.080000, min 99.926549; busy differs from the clamp formula in 0 rounds
+  clamp rounds with traffic: 0
+  Get-Counter cooked idle above 100 in 39 of 75 samples, max 100.072545
+net: octets the collector read outside its raw bracket 0 of 720; rate differs from octet delta / elapsed 0 of 720; rounds whose rows differ from the kept set 0 of 60
+net rows returned: ['vEthernet (WSL (Hyper-V firewall))', 'vSwitch (WSL (Hyper-V firewall))', '로컬 영역 연결* 7', '로컬 영역 연결* 8', '로컬 영역 연결* 9', '이더넷']
+  이더넷: raw in 738958144 to 739032330, out 15062317 to 15063667; collector in 738995985 out 15063019, inside yes, over 60.763 s, max rate in 12365217 out 414514 B/s
+  로컬 영역 연결* 7: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.763 s, max rate in 0 out 0 B/s
+  로컬 영역 연결* 8: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.763 s, max rate in 0 out 0 B/s
+  로컬 영역 연결* 9: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.763 s, max rate in 0 out 0 B/s
+  vSwitch (WSL (Hyper-V firewall)): raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.763 s, max rate in 0 out 0 B/s
+  vEthernet (WSL (Hyper-V firewall)): raw in 746371 to 746371, out 367532 to 367532; collector in 746371 out 367532, inside yes, over 60.763 s, max rate in 181081 out 25404 B/s
+NIC peak in 98.92% of its 100000000 bit/s link
+seconds where vEthernet in exceeds NIC out 0 of 60; vEthernet out exceeds NIC in 0 of 60
+correlation per second: vEthernet in with NIC out 0.738; vEthernet out with NIC in -0.049
+guest eth0 across the window: rx 373453 tx 749935
+  이더넷: in 755205840 to 756472470, out 15384892 to 15408533
+  vEthernet (WSL (Hyper-V firewall)): in 749737 to 750067, out 373093 to 373756
+  guest tx inside vEthernet in: yes; guest rx inside vEthernet out: yes
+
+# window 3
+collector rounds 60, 60.562 s; Get-Counter samples 75, 76.094 s; WMI reads 78, 75.909 s
+overlap of all three 60.562 s, collector inside both: yes
+disk sample ms mean 0.235 max 0.380
+net sample ms mean 1.020 max 1.995
+disk priming sample ok=0, rows 0; net priming sample ok=0, rows 0
+_Total in collector rows: NO; _Total in raw array: yes
+instances ['0 C:', '1 D:']; rounds where _Total differs from their sum: 0 of 122 readings
+disk 0 C:: collector read 29643458 B (28.27 MiB), its raw delta 29644288, write 1282560853 B (1223.15 MiB), its raw delta 1282579968
+  moved: read yes, write yes
+  read: Get-Counter inner 29377536 outer 29906432, inside yes; WMI inner 29377536 outer 29906432, inside yes; rate times time against the raw delta -28.0 ppm
+  write: Get-Counter inner 1269357568 outer 1303432704, inside yes; WMI inner 1269357568 outer 1303428608, inside yes; rate times time against the raw delta -14.9 ppm
+  Get-Counter raw read equals the nearest WMI BytesRead in 62 of 75 samples
+  busy mean %: collector 2.580, its raw idle delta 2.580, Get-Counter idle delta 2.575, WMI idle delta 2.575
+  busy per round %: min 0.913 max 9.032
+  % Idle Time: rounds above 100 0 of 60, exactly 100 0, max 99.086825, min 90.968317; busy differs from the clamp formula in 0 rounds
+  clamp rounds with traffic: 0
+  Get-Counter cooked idle above 100 in 0 of 75 samples, max 99.062192
+  NVMe log across the window, 60.566 s: read units 58 = 29696000 B (28.32 MiB), write units 2510 = 1285120000 B (1225.59 MiB)
+  collector / NVMe: read 0.9982, write 0.9980
+  difference in data units: read 0.10, write 5.00
+disk 1 D:: collector read 0 B (0.00 MiB), its raw delta 0, write 0 B (0.00 MiB), its raw delta 0
+  moved: read NO, write NO
+  read: Get-Counter inner 0 outer 0, inside yes; WMI inner 0 outer 0, inside yes; rate times time against the raw delta 0.0 ppm
+  write: Get-Counter inner 0 outer 0, inside yes; WMI inner 0 outer 0, inside yes; rate times time against the raw delta 0.0 ppm
+  Get-Counter raw read equals the nearest WMI BytesRead in 75 of 75 samples
+  busy mean %: collector 0.002, its raw idle delta -0.002, Get-Counter idle delta -0.001, WMI idle delta -0.000
+  busy per round %: min 0.000 max 0.010
+  % Idle Time: rounds above 100 36 of 60, exactly 100 0, max 100.028337, min 99.989763; busy differs from the clamp formula in 0 rounds
+  clamp rounds with traffic: 0
+  Get-Counter cooked idle above 100 in 41 of 75 samples, max 100.027888
+net: octets the collector read outside its raw bracket 0 of 720; rate differs from octet delta / elapsed 0 of 720; rounds whose rows differ from the kept set 0 of 60
+net rows returned: ['vEthernet (WSL (Hyper-V firewall))', 'vSwitch (WSL (Hyper-V firewall))', '로컬 영역 연결* 7', '로컬 영역 연결* 8', '로컬 영역 연결* 9', '이더넷']
+  이더넷: raw in 740027832 to 740076280, out 17894057 to 17894867; collector in 740052050 out 17894543, inside yes, over 60.562 s, max rate in 12309784 out 684472 B/s
+  로컬 영역 연결* 7: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.562 s, max rate in 0 out 0 B/s
+  로컬 영역 연결* 8: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.562 s, max rate in 0 out 0 B/s
+  로컬 영역 연결* 9: raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.562 s, max rate in 0 out 0 B/s
+  vSwitch (WSL (Hyper-V firewall)): raw in 0 to 0, out 0 to 0; collector in 0 out 0, inside yes, over 60.562 s, max rate in 0 out 0 B/s
+  vEthernet (WSL (Hyper-V firewall)): raw in 259814 to 259814, out 178239 to 178239; collector in 259814 out 178239, inside yes, over 60.562 s, max rate in 47810 out 7929 B/s
+NIC peak in 98.48% of its 100000000 bit/s link
+seconds where vEthernet in exceeds NIC out 0 of 60; vEthernet out exceeds NIC in 0 of 60
+correlation per second: vEthernet in with NIC out 0.355; vEthernet out with NIC in 0.053
+guest eth0 across the window: rx 182726 tx 262454
+  이더넷: in 749656984 to 750645927, out 18076049 to 18093917
+  vEthernet (WSL (Hyper-V firewall)): in 262256 to 262520, out 182548 to 182849
+  guest tx inside vEthernet in: yes; guest rx inside vEthernet out: yes
+
+# all windows
+0 C:: rounds 180, % Idle Time above 100 in 0, largest 99.351811; Get-Counter above 100 in 0 of 225; busy largest 24.954; mean busy gap to Get-Counter or WMI largest 0.102
+1 D:: rounds 180, % Idle Time above 100 in 103, largest 100.080000; Get-Counter above 100 in 120 of 225; busy largest 0.073; mean busy gap to Get-Counter or WMI largest 0.005
+disk 0 total: collector read 303.35 MiB, NVMe 303.22 MiB; collector write 4058.94 MiB, NVMe 4061.52 MiB
+disk 0 collector / NVMe: read 1.0004, write 0.9994
+disk 0 largest difference from NVMe in any window, either direction: 5.00 data units of 512000 bytes
+raw delta inside the Get-Counter and WMI brackets: 24 of 24, including zero readings on disk 1
+of those, where the counter moved: 12 of 12
+seconds where vEthernet in exceeds NIC out 0 of 180; vEthernet out exceeds NIC in 0 of 180
+guest counters inside the vEthernet bracket: 6 of 6
