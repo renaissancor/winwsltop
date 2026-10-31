@@ -154,6 +154,8 @@ bool wsl_bridge::run_once(const std::string& script) {
   SetHandleInformation(in_w, HANDLE_FLAG_INHERIT, 0);
   SetHandleInformation(out_r, HANDLE_FLAG_INHERIT, 0);
   HANDLE nul = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, nullptr);
+  // Without NUL the child gets no stderr handle at all, never INVALID_HANDLE_VALUE (docs/TODO.md item 18).
+  if (nul == INVALID_HANDLE_VALUE) nul = nullptr;
 
   STARTUPINFOW si{};
   si.cb = sizeof si;
@@ -164,7 +166,7 @@ bool wsl_bridge::run_once(const std::string& script) {
   PROCESS_INFORMATION pi{};
   std::wstring cmdline = L"wsl.exe ";
   if (!distro_.empty()) {
-    if (distro_.find_first_of(L" \t\"\r\n") != std::wstring::npos) { CloseHandle(in_r); CloseHandle(in_w); CloseHandle(out_r); CloseHandle(out_w); CloseHandle(nul); return false; }
+    if (distro_.find_first_of(L" \t\"\r\n") != std::wstring::npos) { CloseHandle(in_r); CloseHandle(in_w); CloseHandle(out_r); CloseHandle(out_w); if (nul) CloseHandle(nul); return false; }
     cmdline += L"-d " + distro_ + L" ";  // Distro names have no spaces; a quoted name was rejected by wsl.exe.
   }
   cmdline += L"-e python3 -u -c \"" + std::wstring(kBootstrap) + L"\"";
@@ -174,7 +176,7 @@ bool wsl_bridge::run_once(const std::string& script) {
                                  nullptr, nullptr, &si, &pi);
   CloseHandle(in_r);
   CloseHandle(out_w);
-  CloseHandle(nul);
+  if (nul) CloseHandle(nul);
   if (!ok) { CloseHandle(in_w); CloseHandle(out_r); return false; }
   AssignProcessToJobObject(job_, pi.hProcess);
   ResumeThread(pi.hThread);
