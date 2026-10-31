@@ -73,6 +73,9 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
   visible on the screen (`TODO.md` item 8). Needs a snapshot field: request to core.
 - Machines with more than 64 logical CPUs: the CPU collector covers one processor group and says
   nothing about it (`TODO.md` item 11).
+- A reset network counter (`TODO.md` item 6) leaves that rate at 0 for the sample, not absent, because
+  `net_row` has no `has_rate`. Rule 2 says absent; a flag would need a snapshot field: request to core
+  if the distinction matters on the screen. Added 2026-11-01.
 
 ## Decision log
 
@@ -86,3 +89,14 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
   forward at the fitted drift; a wall-clock step of over 50 ms empties the window (`PROTOCOL.md`).
 - 2026-11-01. `src/host`, `src/gpu` and `src/wsl` became one area, because one agent can hold all
   three and the GPU can only be exercised by one agent at a time anyway. Approved by the user.
+- 2026-11-01. Every `sample()` resets its output before any early return (`TODO.md` item 1). The
+  priming call of cpu, processes and network returns false with empty output: rows with counts but
+  no rates are not reported, so a reader never sees a zero rate that was really unmeasured.
+- 2026-11-01. A process with no image name is `Idle` only when its PID is 0; any other is `?`, not an
+  empty string, so the row is visibly unnamed (`TODO.md` item 13).
+- 2026-11-01. The bridge keeps the child's process handle and terminates it in the destructor as a
+  fallback to the job object (`TODO.md` item 3); the clock window is emptied when the child ends, so
+  `clock_known` is false during the backoff (item 7); unterminated child output past 1 MiB is dropped
+  (item 17); a failed `CreateFileW("NUL")` leaves the child without a stderr handle (item 18).
+- 2026-11-01. `collector_embed.cpp` holds `const unsigned char[]`, so a non-ASCII byte in
+  `collector.py` compiles (`TODO.md` item 10).
