@@ -27,6 +27,13 @@ std::wstring collector_path() {
   return p + L"\\..\\wsl-collector\\collector.py";
 }
 
+std::wstring wide(const char* s) {
+  const int n = MultiByteToWideChar(CP_ACP, 0, s, -1, nullptr, 0);
+  std::wstring w(n > 0 ? static_cast<size_t>(n) - 1 : 0, L'\0');
+  if (n > 1) MultiByteToWideChar(CP_ACP, 0, s, -1, w.data(), n);
+  return w;
+}
+
 template <class F> double timed(F f) {
   const double t = wwt::seconds_now();
   f();
@@ -37,9 +44,13 @@ template <class F> double timed(F f) {
 
 int main(int argc, char** argv) {
   int lines = 1;
-  if (argc == 3 && strcmp(argv[1], "--record") == 0) lines = atoi(argv[2]);
-  else if (argc == 2 && strcmp(argv[1], "--once") == 0) lines = 1;
-  else if (argc != 1) { fprintf(stderr, "usage: winwsltop [--once | --record N]\n"); return 2; }
+  std::wstring distro;
+  for (int i = 1; i < argc; ++i) {
+    if (strcmp(argv[i], "--once") == 0) lines = 1;
+    else if (strcmp(argv[i], "--record") == 0 && i + 1 < argc) lines = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--distro") == 0 && i + 1 < argc) distro = wide(argv[++i]);
+    else { fprintf(stderr, "usage: winwsltop [--once | --record N] [--distro NAME]\n"); return 2; }
+  }
 
   wwt::cpu_collector cpu;
   wwt::process_collector procs;
@@ -49,7 +60,7 @@ int main(int argc, char** argv) {
   wwt::gpu_device_collector gpu_device;  // nvmlInit takes about 650 ms
   wwt::gpu_memory_collector gpu_memory;
 
-  wwt::wsl_bridge wsl(collector_path());
+  wwt::wsl_bridge wsl(collector_path(), distro);
   wsl.wait_first_line(6.0);
 
   wwt::snapshot s;
@@ -70,6 +81,7 @@ int main(int argc, char** argv) {
     s.cost.gpu_memory_ms = timed([&] { gpu_memory.sample(s.gpu_memory); });
     s.gpu_split = wwt::split_gpu(s);
     s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
+    s.wsl_clock_known = wsl.clock_offset(s.wsl_clock_offset_s);
     if (i) {
       const std::string line = wwt::to_json_line(s);
       fwrite(line.data(), 1, line.size(), stdout);

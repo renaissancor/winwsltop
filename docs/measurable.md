@@ -100,3 +100,14 @@ Five rounds, `nvidia-smi` read 100-200 ms after the collector:
 | Any of the memory figures sum to one another | **No.** In one round, process `Local Usage` summed to 939 MiB, adapter local 769 MiB, adapter dedicated 1398 MiB, NVML used about 1480 MiB | same |
 | WSL GPU memory shows under `vmwp.exe` | Only seen at idle, 15.8 MiB dedicated, equal to its `Local Usage`. Not checked with a WSL allocation | first `Get-Counter` read, 2026-10-31 |
 | One GPU has one LUID | **No.** Two appear. The second had 9 process instances, all zero, and `Win32_VideoController` lists only the RTX 4070; what it is remains unknown. `gpu_memory_row` sums across LUIDs, which changes nothing while the second stays zero | same |
+
+## WSL clock rate (2026-10-31)
+
+| check | result |
+|---|---|
+| WSL `CLOCK_MONOTONIC` against Windows wall clock | **3.68% fast** over a 40 s `sleep`: 40.24 s in WSL, 38.81 s on Windows. `wt-wsl`'s ping fit agrees at about 3.7% |
+| WSL wall clock against Windows wall clock | -2.21% over the same window, because it is stepped back: a +1.1 s offset jump was seen once |
+| Cause | Unknown. Which clock is right was not checked against an outside reference; this is one machine, one load state |
+
+Consequences: WSL durations are not interchangeable with Windows durations, WSL wall time can jump,
+and the rate may explain the 645-matmul second in experiment 01. Align through `clock_offset` only.
