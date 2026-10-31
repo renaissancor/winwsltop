@@ -1,0 +1,125 @@
+vmmem_pid 4568 vmwp_pid 11736
+t=1 pid=20792 - 3D 6.99
+t=1 pid=34628 - 3D 0.13
+t=1 pid=34628 - Copy 0.00
+t=1 pid=37540 - 3D 0.01
+t=1 pid=4 - Copy 0.62
+t=1 instances=485 nonzero=5
+t=2 pid=20792 - 3D 5.13
+t=2 pid=34628 - 3D 0.89
+t=2 pid=34628 - Copy 0.09
+t=2 pid=37540 - 3D 0.01
+t=2 pid=44228 - 3D 0.01
+t=2 pid=4 - Copy 0.77
+t=2 instances=485 nonzero=6
+t=3 pid=20792 - 3D 3.49
+t=3 pid=34628 - 3D 0.09
+t=3 pid=34628 - Copy 0.00
+t=3 pid=4 - Copy 0.33
+t=3 instances=485 nonzero=4
+t=4 pid=20792 - 3D 4.59
+t=4 pid=34628 - 3D 0.11
+t=4 pid=34628 - Copy 0.05
+t=4 pid=37540 - 3D 0.01
+t=4 pid=4 - Copy 1.08
+t=4 instances=498 nonzero=5
+t=5 pid=20792 - 3D 0.55
+t=5 pid=34628 - 3D 0.03
+t=5 pid=41924 - 3D 96.93
+t=5 pid=41924 - Copy 0.01
+t=5 instances=498 nonzero=4
+t=6 pid=20792 - 3D 0.49
+t=6 pid=34628 - 3D 0.03
+t=6 pid=34628 - Copy 0.00
+t=6 pid=41924 - 3D 78.70
+t=6 instances=498 nonzero=4
+t=7 pid=20792 - 3D 0.65
+t=7 pid=34628 - 3D 0.04
+t=7 pid=34628 - Copy 0.00
+t=7 pid=41924 - 3D 77.97
+t=7 pid=4 - Copy 0.04
+t=7 instances=498 nonzero=5
+t=8 pid=20792 - 3D 0.69
+t=8 pid=34628 - 3D 0.04
+t=8 pid=34628 - Copy 0.00
+t=8 pid=41924 - 3D 84.43
+t=8 pid=4 - Copy 0.06
+t=8 instances=498 nonzero=5
+t=9 pid=20792 - 3D 0.66
+t=9 pid=34628 - 3D 0.04
+t=9 pid=34628 - Copy 0.00
+t=9 pid=41924 - 3D 71.39
+t=9 pid=4 - Copy 0.01
+t=9 instances=498 nonzero=5
+t=10 pid=20792 - 3D 0.67
+t=10 pid=34628 - 3D 0.05
+t=10 pid=34628 - Copy 0.00
+t=10 pid=41924 - 3D 84.59
+t=10 pid=4 - Copy 0.01
+t=10 instances=498 nonzero=5
+t=11 pid=20792 - 3D 0.65
+t=11 pid=34628 - 3D 0.04
+t=11 pid=34628 - Copy 0.00
+t=11 pid=41924 - 3D 80.42
+t=11 pid=4 - Copy 0.04
+t=11 instances=498 nonzero=5
+t=12 pid=20792 - 3D 0.63
+t=12 pid=34628 - 3D 0.04
+t=12 pid=34628 - Copy 0.00
+t=12 pid=41924 - 3D 85.32
+t=12 instances=498 nonzero=4
+t=13 pid=20792 - 3D 0.54
+t=13 pid=34628 - 3D 0.06
+t=13 pid=34628 - Copy 0.00
+t=13 pid=41924 - 3D 78.63
+t=13 pid=44228 - 3D 0.00
+t=13 pid=4 - Copy 0.03
+t=13 instances=498 nonzero=6
+t=14 pid=20792 - 3D 0.63
+t=14 pid=34628 - 3D 0.04
+t=14 pid=34628 - Copy 0.00
+t=14 pid=41924 - 3D 81.62
+t=14 pid=4 - Copy 0.02
+t=14 instances=498 nonzero=5
+t=15 pid=20792 - 3D 0.45
+t=15 pid=34628 - 3D 0.03
+t=15 pid=34628 - Copy 0.00
+t=15 pid=41924 - 3D 79.70
+t=15 instances=498 nonzero=4
+t=16 pid=20792 - 3D 0.46
+t=16 pid=34628 - 3D 0.03
+t=16 pid=34628 - Copy 0.00
+t=16 pid=4 - Copy 0.11
+t=16 instances=485 nonzero=4
+t=17 pid=20792 - 3D 0.36
+t=17 pid=34628 - 3D 0.07
+t=17 pid=34628 - Copy 0.00
+t=17 pid=44228 - 3D 0.00
+t=17 pid=4 - Copy 0.02
+t=17 instances=485 nonzero=5
+t=18 pid=20792 - 3D 1.48
+t=18 pid=34628 - 3D 0.16
+t=18 pid=34628 - Copy 0.00
+t=18 pid=44228 - 3D 0.00
+t=18 instances=485 nonzero=4
+t=19 pid=20792 - 3D 3.34
+t=19 pid=34628 - 3D 0.31
+t=19 pid=34628 - Copy 0.00
+t=19 pid=44228 - 3D 0.00
+t=19 instances=485 nonzero=4
+t=20 pid=20792 - 3D 4.01
+t=20 pid=34628 - 3D 0.47
+t=20 pid=34628 - Copy 0.04
+t=20 pid=44228 - 3D 0.00
+t=20 pid=44228 - Copy 0.00
+t=20 instances=485 nonzero=5
+t=21 pid=20792 - 3D 4.75
+t=21 pid=34628 - 3D 0.49
+t=21 pid=34628 - Copy 0.00
+t=21 pid=44228 - 3D 0.00
+t=21 instances=485 nonzero=4
+t=22 pid=20792 - 3D 4.69
+t=22 pid=34628 - 3D 0.49
+t=22 pid=34628 - Copy 0.00
+t=22 pid=44228 - 3D 0.00
+t=22 instances=485 nonzero=4

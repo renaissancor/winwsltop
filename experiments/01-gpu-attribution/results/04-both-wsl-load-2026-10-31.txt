@@ -1,0 +1,27 @@
+start
+sec=1 matmuls=290 worst_ms=61.5
+sec=2 matmuls=306 worst_ms=4.2
+sec=3 matmuls=306 worst_ms=4.6
+sec=4 matmuls=305 worst_ms=4.8
+sec=5 matmuls=309 worst_ms=4.9
+sec=6 matmuls=307 worst_ms=4.6
+sec=7 matmuls=306 worst_ms=4.3
+sec=8 matmuls=307 worst_ms=4.6
+sec=9 matmuls=306 worst_ms=4.6
+sec=10 matmuls=259 worst_ms=11.9
+sec=11 matmuls=169 worst_ms=8.8
+sec=12 matmuls=164 worst_ms=9.0
+sec=13 matmuls=169 worst_ms=8.6
+sec=14 matmuls=167 worst_ms=8.9
+sec=15 matmuls=154 worst_ms=18.8
+sec=16 matmuls=165 worst_ms=9.0
+sec=17 matmuls=164 worst_ms=9.1
+sec=18 matmuls=162 worst_ms=9.1
+sec=19 matmuls=159 worst_ms=9.3
+sec=20 matmuls=163 worst_ms=9.0
+sec=21 matmuls=164 worst_ms=9.1
+sec=22 matmuls=166 worst_ms=8.9
+sec=23 matmuls=266 worst_ms=9.2
+sec=24 matmuls=304 worst_ms=4.4
+sec=25 matmuls=307 worst_ms=4.7
+sec=26 matmuls=645 worst_ms=9.1

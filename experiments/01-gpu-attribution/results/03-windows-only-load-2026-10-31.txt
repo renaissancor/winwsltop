@@ -1,0 +1,14 @@
+adapter NVIDIA GeForce RTX 4070
+calibrated groups=659 dispatch_ms=27.9
+sec=1 dispatches=33 mean_ms=30.5 worst_ms=31.6
+sec=2 dispatches=33 mean_ms=30.7 worst_ms=31.9
+sec=3 dispatches=32 mean_ms=30.6 worst_ms=31.6
+sec=4 dispatches=33 mean_ms=30.7 worst_ms=31.7
+sec=5 dispatches=33 mean_ms=30.7 worst_ms=32.3
+sec=6 dispatches=32 mean_ms=30.6 worst_ms=31.7
+sec=7 dispatches=33 mean_ms=30.5 worst_ms=31.5
+sec=8 dispatches=33 mean_ms=30.6 worst_ms=31.5
+sec=9 dispatches=32 mean_ms=30.8 worst_ms=31.9
+sec=10 dispatches=33 mean_ms=30.7 worst_ms=32.0
+sec=11 dispatches=32 mean_ms=30.6 worst_ms=31.7
+sec=12 dispatches=33 mean_ms=30.6 worst_ms=31.7

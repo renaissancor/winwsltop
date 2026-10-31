@@ -1,0 +1,75 @@
+// winwsltop: for now a recorder. --once prints one JSON line; --record N prints N, one a second.
+#include "core/collectors.h"
+#include "record/jsonl.h"
+#include "wsl/bridge.h"
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+namespace {
+
+int64_t unix_ms() {
+  FILETIME ft;
+  GetSystemTimePreciseAsFileTime(&ft);
+  ULARGE_INTEGER u;
+  u.LowPart = ft.dwLowDateTime;
+  u.HighPart = ft.dwHighDateTime;
+  return static_cast<int64_t>(u.QuadPart / 10000) - 11644473600000LL;
+}
+
+// The tree is mirrored as <root>\build\winwsltop.exe and <root>\wsl-collector\collector.py.
+std::wstring collector_path() {
+  wchar_t path[MAX_PATH];
+  const DWORD n = GetModuleFileNameW(nullptr, path, MAX_PATH);
+  std::wstring p(path, n);
+  p.resize(p.find_last_of(L'\\'));
+  return p + L"\\..\\wsl-collector\\collector.py";
+}
+
+template <class F> double timed(F f) {
+  const double t = wwt::seconds_now();
+  f();
+  return (wwt::seconds_now() - t) * 1000.0;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  int lines = 1;
+  if (argc == 3 && strcmp(argv[1], "--record") == 0) lines = atoi(argv[2]);
+  else if (argc == 2 && strcmp(argv[1], "--once") == 0) lines = 1;
+  else if (argc != 1) { fprintf(stderr, "usage: winwsltop [--once | --record N]\n"); return 2; }
+
+  wwt::cpu_collector cpu;
+  wwt::process_collector procs;
+  wwt::disk_collector disks;
+  wwt::net_collector nets;
+  wwt::gpu_engine_collector gpu;
+
+  wwt::wsl_bridge wsl(collector_path());
+  wsl.wait_first_line(6.0);
+
+  wwt::snapshot s;
+  double last = wwt::seconds_now();
+  for (int i = 0; i <= lines; ++i) {  // The first pass only primes the deltas.
+    if (i) Sleep(1000);
+    const double now = wwt::seconds_now();
+    s.interval_s = now - last;
+    last = now;
+    s.unix_ms = unix_ms();
+    s.cost.cpu_ms = timed([&] { cpu.sample(s.cpu); });
+    s.cost.memory_ms = timed([&] { wwt::sample_memory(s.memory); });
+    s.cost.processes_ms = timed([&] { procs.sample(s.processes, s.vm); });
+    s.cost.disk_ms = timed([&] { disks.sample(s.disks); });
+    s.cost.net_ms = timed([&] { nets.sample(s.nets); });
+    s.cost.gpu_ms = timed([&] { gpu.sample(s.gpu_engines); });
+    s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
+    if (i) {
+      const std::string line = wwt::to_json_line(s);
+      fwrite(line.data(), 1, line.size(), stdout);
+      fputc('\n', stdout);
+      fflush(stdout);
+    }
+  }
+  return 0;
+}
