@@ -36,6 +36,9 @@ const wchar_t kBootstrap[] =
 
 constexpr size_t kWindow = 30;
 constexpr double kStepS = 0.05;
+// A collector line is a few kilobytes. Unterminated output beyond this is dropped, so a child that
+// never writes a newline cannot grow the buffer without bound (docs/TODO.md item 17).
+constexpr size_t kMaxPending = 1 << 20;
 
 }  // namespace
 
@@ -222,6 +225,7 @@ bool wsl_bridge::run_once(const std::string& script) {
       line_ = std::move(line);
       line_t_ = seconds_now();
     }
+    if (pending.size() > kMaxPending) pending.clear();  // No newline in 1 MiB: not a protocol line, drop it.
   }
   done = true;
   pinger.join();

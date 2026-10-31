@@ -23,7 +23,7 @@ re-reads the code.
 | 14 | nit | core | `src/main.cpp` | If `GetModuleFileNameW` fails, `find_last_of` returns `npos` and `resize` throws | open |
 | 15 | nit | core | `src/main.cpp` | `--record 0` prints nothing and exits 0; `--text --record N` depends on argument order | open, question in `contracts/core.md` |
 | 16 | nit | ui | `src/ui/console.cpp` | Keystrokes echo into the alternate screen until the next redraw | open |
-| 17 | nit | collect | `src/wsl/bridge.cpp` | `pending` grows without bound if the child never writes a newline | open |
+| 17 | nit | collect | `src/wsl/bridge.cpp` | `pending` grows without bound if the child never writes a newline | fixed, collect: dropped past 1 MiB without a newline |
 | 18 | nit | collect | `src/wsl/bridge.cpp` | A failed `CreateFileW("NUL")` hands `INVALID_HANDLE_VALUE` to the child as stderr | fixed, collect: the child gets no stderr handle in that case |
 | 19 | nit | core | `src/record/jsonl.cpp` | `%.3f` prints `nan` or `inf` as bare words; no producer makes one today, so the record is valid by construction only | open |
 
