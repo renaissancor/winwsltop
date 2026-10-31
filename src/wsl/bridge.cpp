@@ -164,8 +164,8 @@ bool wsl_bridge::run_once(const std::string& script) {
   PROCESS_INFORMATION pi{};
   std::wstring cmdline = L"wsl.exe ";
   if (!distro_.empty()) {
-    if (distro_.find_first_of(L"\"\r\n") != std::wstring::npos) { CloseHandle(in_w); CloseHandle(out_r); return false; }
-    cmdline += L"-d \"" + distro_ + L"\" ";
+    if (distro_.find_first_of(L" \t\"\r\n") != std::wstring::npos) { CloseHandle(in_r); CloseHandle(in_w); CloseHandle(out_r); CloseHandle(out_w); CloseHandle(nul); return false; }
+    cmdline += L"-d " + distro_ + L" ";  // Distro names have no spaces; a quoted name was rejected by wsl.exe.
   }
   cmdline += L"-e python3 -u -c \"" + std::wstring(kBootstrap) + L"\"";
   std::vector<wchar_t> cmd(cmdline.begin(), cmdline.end());
