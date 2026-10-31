@@ -61,7 +61,6 @@ reads schema 1 of the collector's line.
   the target asks for.
 - Does the screen need the clock offset? `wsl_clock_known` and `wsl_clock_offset_s` are in the
   snapshot and the record but not drawn.
-- The `"unavailable: no GPU engine data"` branch cannot be reached today (`TODO.md` item 5).
 
 ## Decision log
 
@@ -70,5 +69,7 @@ reads schema 1 of the collector's line.
 - 2026-10-31. The parser is hand-written and strict (depth 16, `from_chars`, surrogate handling)
   rather than a library, to keep the build at one `cl` call with no dependencies.
 - 2026-10-31. `Local Usage` is the per-process GPU memory column, labelled `LOCAL` (core decision log).
+- 2026-11-01. The `no GPU engine data` branch is reachable: core sets `gpu_engines_known` and the
+  split is invalid without it (`TODO.md` item 5). No screen change was needed.
 - 2026-10-31. The refresh is held at 1 s with a fixed deadline; the console survives a rebuild
   because `build.sh` renames the running exe.

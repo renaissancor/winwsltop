@@ -2,7 +2,8 @@
 
 `btop` shows one machine. winwsltop's reason to exist is what `btop` cannot show: two systems sharing
 one GPU, what each costs the other, and a record of it. Host panels only need to be good enough.
-In order. Read `AGENTS.md` and `docs/measurable.md` first.
+In order. Everything here is PROPOSED until a contract's decision log records it. Read `CLAUDE.md`
+and `docs/measurable.md` first; two items below are also open questions in `docs/contracts/`.
 
 ## 1. Now
 - Windows GPU holders first, or one holders block under GPU. Today `warp.exe`, the biggest user, is row 6.

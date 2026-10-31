@@ -50,7 +50,7 @@ the one inferred value, and keep the build, the checks and the ownership documen
 
 | item | value |
 |---|---|
-| source under core | `src/core` 242 lines, `src/main.cpp` 116, `src/record` 127, `src/analysis` 33 |
+| source under core | `src/core` 243 lines, `src/main.cpp` 122, `src/record` 129, `src/analysis` 33 |
 | JSON schema | 1 |
 | collection cost per sample | about 9 ms on this machine, ledger "Windows collector checked" |
 | checks that exist | the two `check.sh` modes above |
@@ -58,12 +58,16 @@ the one inferred value, and keep the build, the checks and the ownership documen
 
 ## Open questions
 
-- PROPOSED: a `gpu_engines_known` flag, or a per-collector status block, so a failed read is shown
-  as unknown instead of as the previous second's values (`TODO.md` item 1). This is a seam change.
+- PROPOSED: a per-collector status block in the snapshot and the record, so the screen can say which
+  reader failed. Today a failed read leaves an empty vector (collect, `TODO.md` item 1) and only the
+  engine counters carry a flag, `gpu_engines_known`, which the record does not emit: `gpu_split.valid`
+  carries it.
 - PROPOSED: record the adapter LUID in `gpu_engine_row` and `gpu_memory_row` so a second adapter
   can be told apart (`TODO.md` item 4). Needs a ledger row first: two LUIDs are seen, the second unexplained.
 - Should `--record 0` be an error? Today it prints nothing and exits 0.
 - Who owns the GUI if one is built as a separate process over the JSON stream (`ROADMAP.md`)? Not decided.
+- Must a review cross companies (Anthropic and Codex), as the old `AGENTS.md` required, or is a fresh
+  auditor of either kind enough? The renovation used fresh Claude auditors only.
 
 ## Decision log
 
@@ -75,3 +79,8 @@ the one inferred value, and keep the build, the checks and the ownership documen
 - 2026-11-01. Eight workspace rows became four areas; `src/record/` and `src/analysis/` joined core;
   the `verify` row was dropped and each area owns its own checks. Approved by the user.
 - 2026-11-01. `CLAUDE.md` carries the rules; `AGENTS.md` is a pointer, kept because Codex reads it.
+- 2026-11-01. `snapshot.gpu_engines_known` added; the split is invalid without it. Not written to the
+  record, since `gpu_split.valid` already says so. The deadline clamps to now after a stall.
+- 2026-11-01. The old rule "work from one company is reviewed by the other" became "authors never
+  audit their own work; a fresh auditor reads each stage". Whether reviews must still cross companies
+  is for the user to confirm (open question).

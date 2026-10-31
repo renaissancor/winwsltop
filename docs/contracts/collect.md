@@ -28,7 +28,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 1. A counter is read only after `docs/measurable.md` records it as observed on this machine. The
    source comment names the ledger section.
 2. A value that cannot be read is absent, not zero and not the previous value. `gpu_device_view.has_*`
-   is the pattern. (Several collectors fall short of this today: `TODO.md` item 1.)
+   is the pattern, and every `sample()` resets its output before any early return.
 3. Windows and WSL numbers are never combined in a collector.
 4. PID is not identity. Windows rows are keyed by PID and create time, Linux rows by PID and start
    time, because PIDs are reused.
@@ -55,7 +55,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 
 | item | value |
 |---|---|
-| source | `src/host` 249 lines, `src/gpu` 250, `src/wsl` 533 (233 of them generated), `collector.py` 144 |
+| source | `src/host` 265 lines, `src/gpu` 253, `src/wsl` 558 (233 of them generated), `collector.py` 144 |
 | collector cost | 3.46 ms per sample; line 0.08 to 0.17 s old on arrival (ledger, "WSL collector checked") |
 | `GPU Engine` read | 0.53 ms over 485 instances (ledger, "Windows collector checked") |
 | NVML init | 626 to 685 ms at construction, about 1 ms per sample (ledger, experiment 02) |
