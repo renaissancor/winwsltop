@@ -69,10 +69,15 @@ int main(int argc, char** argv) {
 
   wwt::snapshot s;
   double last = wwt::seconds_now();
+  double next = last;
   wwt::console* screen = run == mode::live ? new wwt::console : nullptr;  // restores the terminal when deleted
   for (int i = 0; run == mode::live || i <= lines; ++i) {  // The first pass only primes the deltas.
     if (i) {
-      for (int waited = 0; waited < 1000 && !wwt::console::stop_requested(); waited += 50) Sleep(50);
+      // A fixed deadline: adding up short sleeps drifts, because Windows timers overshoot.
+      next += 1.0;
+      for (double left = next - wwt::seconds_now(); left > 0 && !wwt::console::stop_requested(); left = next - wwt::seconds_now()) {
+        Sleep(left < 0.05 ? static_cast<DWORD>(left * 1000) + 1 : 50);
+      }
       if (wwt::console::stop_requested()) break;
     }
     const double now = wwt::seconds_now();

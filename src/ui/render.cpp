@@ -559,7 +559,7 @@ std::vector<line> windows_list(const snapshot& s, int col, int rows) {
   cols.add(pad_left("cores", 6), tone::dim).add(" ");
   if (pids) cols.add(pad_left("pid", 7), tone::dim).add(" ");
   cols.add(pad("name", name_w), tone::dim).add(pad_left("WS GiB", 7), tone::dim);
-  cols.add(pad_left("GPU%", 5), tone::dim).add(pad_left("LOCAL", 5), tone::dim);
+  cols.add(pad_left("GPU%", 5), tone::dim).add(pad_left("LOCAL", 6), tone::dim);
   out.push_back(cols);
 
   for (size_t i = 0; i < shown; ++i) {
@@ -571,7 +571,7 @@ std::vector<line> windows_list(const snapshot& s, int col, int rows) {
     r.add(pad_left(fmt("%.2f", p.cores), 6)).add(" ");
     if (pids) r.add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
     r.add(pad(p.name, name_w), is_vm ? tone::title : tone::text).add(pad_left(fmt("%.1f", gib(p.working_set)), 7));
-    r.add(pad_left(g < 0 ? "-" : fmt("%.0f", g), 5)).add(pad_left(v == vram.end() ? "-" : fmt("%.1f", gib(v->second)), 5));
+    r.add(pad_left(g < 0 ? "-" : fmt("%.0f", g), 5)).add(pad_left(v == vram.end() ? "-" : fmt("%.1f", gib(v->second)), 6));
     if (is_vm) r.add(" WSL VM", tone::dim);
     out.push_back(r);
   }
