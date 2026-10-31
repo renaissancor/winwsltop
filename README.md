@@ -4,7 +4,7 @@ A native Windows monitor for a desktop that runs Windows and WSL2 together, focu
 share: which side is using it, and what that does to the other side's work.
 
 Status: experiment 01 (can Windows tell WSL's GPU work apart from its own?) is half done, and the
-Windows and WSL collectors and the JSONL recorder exist. There is no screen yet.
+VM-level split, both collectors, the recorder and a terminal screen exist.
 What each side can really measure is recorded in [`docs/measurable.md`](docs/measurable.md).
 
 ## Build
@@ -16,5 +16,5 @@ scripts/build.sh                                                  # winwsltop.ex
 scripts/build.sh experiments/01-gpu-attribution/counter_probe.cpp # one source
 ```
 
-Prints the Windows path of the `.exe`, which can be run from WSL. `winwsltop --once` prints one JSON
-snapshot; `--record N` prints N of them, one a second.
+Prints the Windows path of the `.exe`, which can be run from WSL. `winwsltop` opens the live screen;
+`--text` prints one frame, `--once` one JSON snapshot, and `--record N` N of them, one a second.

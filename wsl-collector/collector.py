@@ -9,7 +9,8 @@ TOP = 30
 
 
 def read(path):
-    with open(path) as f:
+    # comm is cut at 15 bytes, so a multi-byte name can end mid-character.
+    with open(path, errors="replace") as f:
         return f.read()
 
 

@@ -70,8 +70,8 @@ snapshot busy() {
             {"vEthernet (WSL (Hyper-V firewall))", 42000, 1800, 10000000000, false},
             {"한글이아주아주아주아주아주아주아주아주긴인터페이스이름", 0, 0, 0, false}};
   s.gpu_engines = {{11736, "3D", 52}, {9002, "3D", 36}, {9002, "Copy", 4}, {5120, "3D", 1}};
-  s.gpu_device = {true, "NVIDIA GeForce RTX 4070", true, true, true, true, 91, 187, 200, 71, 2730, 9 * kG, 12 * kG};
-  s.gpu_memory = {{11736, 4509715660, 100000}, {9002, 1503238553, 200000}};
+  s.gpu_device = {true, "NVIDIA GeForce RTX 4070", true, true, true, true, true, 91, 187, 200, 71, 2730, 9 * kG, 12 * kG};
+  s.gpu_memory = {{11736, 4509715660, 100000, 4509715660}, {9002, 1503238553, 200000, 1503238553}};
   s.gpu_split = {true, 52, 36, 4509715660, 1503238553};
   s.wsl_json = busy_json();
   s.wsl_age_s = 0.17;

@@ -328,14 +328,14 @@ std::vector<line> gpu_section(const snapshot& s, const wsl_view& w, int width) {
     const char* why = s.vm.vmwp_pid == 0 ? "unavailable: WSL's VM process (vmwp) is not known" : "unavailable: no GPU engine data";
     out.push_back(message("split", why, tone::watch, kCol - 5));
   } else {
-    const auto side = [&](const char* name, double pct, uint64_t dedicated, const char* note) {
+    const auto side = [&](const char* name, double pct, uint64_t local, const char* note) {
       row r;
       r.add(name, tone::title).to(kCol).bar(bw, pct).add(" ").add(pct_text(pct), tone::text, true);
-      r.add(fmt("   VRAM %.1f GiB", gib(dedicated))).add(note, tone::dim);
+      r.add(fmt("   local %.1f GiB", gib(local))).add(note, tone::dim);
       return line(r);
     };
-    out.push_back(side("WSL VM", split.vm_pct, split.vm_dedicated, "   per-process use not measured"));
-    out.push_back(side("Windows", split.windows_pct, split.windows_dedicated, ""));
+    out.push_back(side("WSL VM", split.vm_pct, split.vm_local, "   per-process use not measured"));
+    out.push_back(side("Windows", split.windows_pct, split.windows_local, ""));
   }
 
   if (!w.ok) {
@@ -540,7 +540,7 @@ std::vector<line> windows_list(const snapshot& s, int col, int rows) {
   std::map<uint32_t, double> gpu_pct;  // The busiest engine: engines are not additive
   for (const gpu_engine_row& e : s.gpu_engines) gpu_pct[e.pid] = std::max(gpu_pct[e.pid], e.pct);
   std::map<uint32_t, uint64_t> vram;
-  for (const gpu_memory_row& m : s.gpu_memory) vram[m.pid] = m.dedicated;
+  for (const gpu_memory_row& m : s.gpu_memory) vram[m.pid] = m.local;
   const auto gpu_of = [&](uint32_t pid) { const auto it = gpu_pct.find(pid); return it == gpu_pct.end() ? -1.0 : it->second; };
 
   std::stable_sort(list.begin(), list.end(), [&](const process_row* a, const process_row* b) {
@@ -559,7 +559,7 @@ std::vector<line> windows_list(const snapshot& s, int col, int rows) {
   cols.add(pad_left("cores", 6), tone::dim).add(" ");
   if (pids) cols.add(pad_left("pid", 7), tone::dim).add(" ");
   cols.add(pad("name", name_w), tone::dim).add(pad_left("WS GiB", 7), tone::dim);
-  cols.add(pad_left("GPU%", 5), tone::dim).add(pad_left("VRAM", 5), tone::dim);
+  cols.add(pad_left("GPU%", 5), tone::dim).add(pad_left("LOCAL", 5), tone::dim);
   out.push_back(cols);
 
   for (size_t i = 0; i < shown; ++i) {

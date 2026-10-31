@@ -1,7 +1,9 @@
-// winwsltop: for now a recorder. --once prints one JSON line; --record N prints N, one a second.
+// winwsltop: a live screen by default. --text prints one frame, --once one JSON line, --record N
+// prints N JSON lines, one a second.
 #include "core/collectors.h"
 #include "analysis/attribution.h"
 #include "record/jsonl.h"
+#include "ui/console.h"
 #include "wsl/bridge.h"
 #include <cstdio>
 #include <cstdlib>
@@ -43,13 +45,15 @@ template <class F> double timed(F f) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  enum class mode { live, json, text } run = mode::live;
   int lines = 1;
   std::wstring distro;
   for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--once") == 0) lines = 1;
-    else if (strcmp(argv[i], "--record") == 0 && i + 1 < argc) lines = atoi(argv[++i]);
+    if (strcmp(argv[i], "--once") == 0) run = mode::json;
+    else if (strcmp(argv[i], "--record") == 0 && i + 1 < argc) { run = mode::json; lines = atoi(argv[++i]); }
+    else if (strcmp(argv[i], "--text") == 0) run = mode::text;
     else if (strcmp(argv[i], "--distro") == 0 && i + 1 < argc) distro = wide(argv[++i]);
-    else { fprintf(stderr, "usage: winwsltop [--once | --record N] [--distro NAME]\n"); return 2; }
+    else { fprintf(stderr, "usage: winwsltop [--text | --once | --record N] [--distro NAME]\n"); return 2; }
   }
 
   wwt::cpu_collector cpu;
@@ -65,8 +69,12 @@ int main(int argc, char** argv) {
 
   wwt::snapshot s;
   double last = wwt::seconds_now();
-  for (int i = 0; i <= lines; ++i) {  // The first pass only primes the deltas.
-    if (i) Sleep(1000);
+  wwt::console* screen = run == mode::live ? new wwt::console : nullptr;  // restores the terminal when deleted
+  for (int i = 0; run == mode::live || i <= lines; ++i) {  // The first pass only primes the deltas.
+    if (i) {
+      for (int waited = 0; waited < 1000 && !wwt::console::stop_requested(); waited += 50) Sleep(50);
+      if (wwt::console::stop_requested()) break;
+    }
     const double now = wwt::seconds_now();
     s.interval_s = now - last;
     last = now;
@@ -82,12 +90,22 @@ int main(int argc, char** argv) {
     s.gpu_split = wwt::split_gpu(s);
     s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
     s.wsl_clock_known = wsl.clock_offset(s.wsl_clock_offset_s);
-    if (i) {
+    if (!i) continue;
+    if (run == mode::json) {
       const std::string line = wwt::to_json_line(s);
       fwrite(line.data(), 1, line.size(), stdout);
       fputc('\n', stdout);
       fflush(stdout);
+    } else if (run == mode::text) {
+      const std::string frame = wwt::as_text(wwt::render(s, 131, 50, unix_ms()));
+      fwrite(frame.data(), 1, frame.size(), stdout);
+      fflush(stdout);
+    } else {
+      int w = 131, h = 40;
+      screen->size(w, h);
+      screen->draw(wwt::render(s, w, h, unix_ms()));
     }
   }
+  delete screen;
   return 0;
 }
