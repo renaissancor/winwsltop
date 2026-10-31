@@ -222,12 +222,14 @@ bool wsl_bridge::run_once(const std::string& script) {
   });
 
   bool got_data = false;
+  bool discarding = false;  // inside an oversized line: skip up to its newline (docs/TODO.md item 17)
   std::string pending;
   std::vector<char> buf(1 << 16);
   DWORD n = 0;
   while (ReadFile(out_r, buf.data(), static_cast<DWORD>(buf.size()), &n, nullptr) && n > 0) {
     pending.append(buf.data(), n);
     for (size_t nl; (nl = pending.find('\n')) != std::string::npos; pending.erase(0, nl + 1)) {
+      if (discarding) { discarding = false; continue; }  // the remainder of a dropped oversized line
       std::string line = pending.substr(0, nl);
       if (!line.empty() && line.back() == '\r') line.pop_back();
       if (line.empty() || line.front() != '{') continue;
@@ -237,7 +239,9 @@ bool wsl_bridge::run_once(const std::string& script) {
       line_ = std::move(line);
       line_t_ = seconds_now();
     }
-    if (pending.size() > kMaxPending) pending.clear();  // No newline in 1 MiB: not a protocol line, drop it.
+    // No newline in 1 MiB: not a protocol line. Drop it, and skip the rest of that line as well, so
+    // its tail is never read as a fresh line (docs/TODO.md item 17).
+    if (pending.size() > kMaxPending) { pending.clear(); discarding = true; }
   }
   done = true;
   pinger.join();
