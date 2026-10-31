@@ -66,8 +66,6 @@ the one inferred value, and keep the build, the checks and the ownership documen
   can be told apart (`TODO.md` item 4). Needs a ledger row first: two LUIDs are seen, the second unexplained.
 - Should `--record 0` be an error? Today it prints nothing and exits 0.
 - Who owns the GUI if one is built as a separate process over the JSON stream (`ROADMAP.md`)? Not decided.
-- Must a review cross companies (Anthropic and Codex), as the old `AGENTS.md` required, or is a fresh
-  auditor of either kind enough? The renovation used fresh Claude auditors only.
 
 ## Decision log
 
@@ -82,5 +80,8 @@ the one inferred value, and keep the build, the checks and the ownership documen
 - 2026-11-01. `snapshot.gpu_engines_known` added; the split is invalid without it. Not written to the
   record, since `gpu_split.valid` already says so. The deadline clamps to now after a stall.
 - 2026-11-01. The old rule "work from one company is reviewed by the other" became "authors never
-  audit their own work; a fresh auditor reads each stage". Whether reviews must still cross companies
-  is for the user to confirm (open question).
+  audit their own work; a fresh auditor reads each stage". The user confirmed on 2026-11-01 that a
+  fresh Claude auditor is enough for now; cross-company review (Codex) is no longer required.
+- 2026-11-01. Rule 1's one exception, ending the collector child on exit, confirmed by the user.
+- 2026-11-01. `TODO.md` item 20 (disk and network counters without a ledger row) is the next
+  session's first step: evidence records the rows, then collect cites them.
