@@ -6,6 +6,8 @@
 
 namespace wwt {
 
+// Ledger: docs/measurable.md, section "Disk and network collectors checked". It says which of these
+// readings were checked, against what, and which were not.
 // out is cleared first, so a failed query or the priming call leaves it empty (docs/TODO.md item 1).
 bool net_collector::sample(std::vector<net_row>& out) {
   out.clear();

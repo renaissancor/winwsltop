@@ -6,6 +6,8 @@
 
 namespace wwt {
 
+// Ledger: docs/measurable.md, section "Disk and network collectors checked". It says which of these
+// readings were checked, against what, and which were not.
 disk_collector::disk_collector() {
   if (PdhOpenQueryW(nullptr, 0, &query_) != ERROR_SUCCESS) { query_ = nullptr; return; }
   PdhAddEnglishCounterW(query_, L"\\PhysicalDisk(*)\\Disk Read Bytes/sec", 0, &read_);
