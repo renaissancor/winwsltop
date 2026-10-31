@@ -229,6 +229,10 @@ bool wsl_bridge::run_once(const std::string& script) {
   }
   done = true;
   pinger.join();
+  // The collector is gone: forget its clock samples now, not when the next one starts, so
+  // clock_offset() is false during the backoff instead of extrapolating from a dead collector
+  // (docs/TODO.md item 7).
+  { const std::lock_guard<std::mutex> lock(mu_); window_.clear(); sent_.clear(); have_wm_ = false; }
   CloseHandle(in_w);
   CloseHandle(out_r);
   CloseHandle(pi.hProcess);

@@ -23,8 +23,9 @@ class wsl_bridge {
   // Windows unix time minus WSL unix time, seconds, now. Taken from the lowest-round-trip ping in
   // the last 30 samples and carried forward to the present at the drift rate fitted over the window,
   // because the two clocks can run at different rates (docs/measurable.md, WSL clock rate).
-  // False until a sample exists. rtt_s, when given, is the chosen sample's round trip with the
-  // collector's hold time removed. A step of the WSL wall clock empties the window.
+  // False until a sample exists and false while no collector is running: the window is emptied when
+  // the collector ends and refilled by the next one. rtt_s, when given, is the chosen sample's round
+  // trip with the collector's hold time removed. A step of the WSL wall clock empties the window.
   bool clock_offset(double& offset_s, double* rtt_s = nullptr) const;
   // Rate of change of that offset, seconds per second, fitted over the window; false with fewer
   // than 5 samples or under 3 s of spread.
