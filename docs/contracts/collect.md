@@ -35,7 +35,8 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 5. After editing `collector.py`, run `python3 wsl-collector/embed.py` in the same commit.
    `scripts/check.sh` fails otherwise.
 6. The bootstrap and the collector read stdin and write stdout only; stderr goes to `NUL`. Nothing
-   outlives `winwsltop.exe`: the job object kills `wsl.exe`, and stdin EOF ends the collector.
+   outlives `winwsltop.exe`: the job object kills `wsl.exe`, the kept process handle is the fallback,
+   and stdin EOF ends the collector. This child is the one process winwsltop ever ends (`CLAUDE.md` rule 1).
 7. Per-Linux-process GPU use is not measured and is never emitted as if it were. `/dev/dxg` holders are
    identity only.
 
@@ -71,6 +72,8 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - Whether WSL GPU memory appears under `vmwp.exe` under load. Only idle has been seen.
 - PROPOSED: a start-failure count or message so an invalid `--distro` or a missing `wsl.exe` is
   visible on the screen (`TODO.md` item 8). Needs a snapshot field: request to core.
+- Disk and network counters have no ledger row, and eight of nine collector files cite no ledger
+  section (`TODO.md` items 20 and 21). Evidence writes the rows first; collect then cites them.
 - Machines with more than 64 logical CPUs: the CPU collector covers one processor group and says
   nothing about it (`TODO.md` item 11).
 - A reset network counter (`TODO.md` item 6) leaves that rate at 0 for the sample, not absent, because
@@ -90,7 +93,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - 2026-11-01. `src/host`, `src/gpu` and `src/wsl` became one area, because one agent can hold all
   three and the GPU can only be exercised by one agent at a time anyway. Approved by the user.
 - 2026-11-01. Every `sample()` resets its output before any early return (`TODO.md` item 1). The
-  priming call of cpu, processes and network returns false with empty output: rows with counts but
+  priming call of cpu, processes, network, disk and the engine counters returns false with empty output: rows with counts but
   no rates are not reported, so a reader never sees a zero rate that was really unmeasured.
 - 2026-11-01. A process with no image name is `Idle` only when its PID is 0; any other is `?`, not an
   empty string, so the row is visibly unnamed (`TODO.md` item 13).

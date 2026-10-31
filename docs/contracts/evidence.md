@@ -52,7 +52,7 @@ about this machine lives.
 | run with no file | experiment 01 run 1, idle baseline (3 s probe, noted in the ledger only) |
 | trials per case | 1 |
 | ledger rows | 50 table rows in 6 groups |
-| numbers checked against raw files on 2026-10-31 | all found; one transcription error fixed (15.1 MiB, not 15.8) |
+| numbers checked against raw files, 2026-11-01 audit | three ranges and four values were off and are corrected; three sections and four rows have no raw file and now say so |
 
 ## Open questions
 
@@ -64,6 +64,9 @@ about this machine lives.
 - The second LUID in `GPU Process Memory`.
 - PROPOSED (`ROADMAP.md`): repeat experiment 01 with a game or a second workload, more than once.
 - PROPOSED: an idle-baseline file for experiment 01, so run 1 has evidence like the others.
+- PROPOSED: rerun the three sections that have no raw file (Windows collector, WSL collector, clock
+  rate) with output saved, so their numbers can be checked.
+- Disk and network counters have no ledger row at all (`TODO.md` item 20).
 
 ## Decision log
 
@@ -73,3 +76,7 @@ about this machine lives.
   `Dedicated Usage` is not VRAM in use; `Local Usage` is the closest per-process figure.
 - 2026-11-01. Three ledger corrections (clock alignment exists; `time.monotonic()`; 15.1 MiB) made
   after an audit against the raw files. Approved by the user.
+- 2026-11-01. A second audit re-read every number: experiment 01 ranges became 91-105, 71-97 and
+  34-35 percent; `dwm` 3.3 GiB and 243-271 MiB; dedicated sum 4476-4564 MiB; Chrome in MB in read
+  order; 685 ms and the second LUID's instance count have no raw file. Rows and sections without a
+  raw file say so instead of citing `same` or `run 2`.

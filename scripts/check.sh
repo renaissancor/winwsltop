@@ -29,7 +29,10 @@ for line in table.splitlines():
     cells = [c.strip() for c in line.strip().strip("|").split("|")]
     if len(cells) < 2 or cells[0] in ("area", "") or cells[0].startswith("---"):
         continue
-    owners[cells[0]] = re.findall(r"`([^`]+)`", cells[1])
+    paths = re.findall(r"`([^`]+)`", cells[1])
+    if len(set(paths)) != len(paths):
+        print("    duplicate path in row", cells[0]); sys.exit(1)
+    owners[cells[0]] = paths
 files = subprocess.check_output(["git", "ls-files"], text=True).split()
 bad = 0
 for f in files:
@@ -44,7 +47,7 @@ PY
 python3 - <<'PY' && pass "every .md file is in docs/README.md" || fail "unindexed documents, see above"
 import os, re, subprocess, sys
 idx = open("docs/README.md").read()
-linked = {os.path.normpath(os.path.join("docs", p)) for p in re.findall(r"\]\(([^)#]+)\)", idx)}
+linked = {os.path.normpath(os.path.join("docs", p.split("#")[0])) for p in re.findall(r"\]\(([^)]+)\)", idx)}
 bad = 0
 for f in subprocess.check_output(["git", "ls-files", "*.md"], text=True).split():
     if f != "docs/README.md" and f not in linked:
@@ -63,7 +66,7 @@ for f in subprocess.check_output(["git", "ls-files", "*.md"], text=True).split()
         if "://" in target or target.startswith("#"):
             continue
         t = os.path.normpath(os.path.join(os.path.dirname(f), target.split("#")[0]))
-        if t not in files and not os.path.isdir(t):
+        if t not in files and not any(x.startswith(t.rstrip("/") + "/") for x in files):
             bad += 1
             print("   ", f, "->", target)
 sys.exit(1 if bad else 0)

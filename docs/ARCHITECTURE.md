@@ -26,8 +26,9 @@ screen). Only core changes a seam.
 
 ## Areas
 
-One owner per file. The owner of a path is the first row whose `owns` column matches it. An edit
-needed in another row is written as a request to the orchestrator, not made.
+One owner per file: exactly one row's `owns` column matches each tracked path, and `scripts/check.sh`
+fails on a gap or an overlap. An edit needed in another row is written as a request to the
+orchestrator, not made.
 
 | area | owns | reads | writes | contract |
 |---|---|---|---|---|

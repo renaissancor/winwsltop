@@ -61,7 +61,7 @@ the one inferred value, and keep the build, the checks and the ownership documen
 - PROPOSED: a per-collector status block in the snapshot and the record, so the screen can say which
   reader failed. Today a failed read leaves an empty vector (collect, `TODO.md` item 1) and only the
   engine counters carry a flag, `gpu_engines_known`, which the record does not emit: `gpu_split.valid`
-  carries it.
+  is false for it, but also when `vmwp` is unknown, so the record cannot tell the two apart.
 - PROPOSED: record the adapter LUID in `gpu_engine_row` and `gpu_memory_row` so a second adapter
   can be told apart (`TODO.md` item 4). Needs a ledger row first: two LUIDs are seen, the second unexplained.
 - Should `--record 0` be an error? Today it prints nothing and exits 0.

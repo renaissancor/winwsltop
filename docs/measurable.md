@@ -11,15 +11,16 @@ Machine: Windows build 26200, WSL2 kernel 6.6.114.1, 12 GiB NVIDIA GPU (200 W li
 | The PDH `GPU Engine` counter is readable without elevation | Observed 2026-10-31 | PDH probe, non-elevated |
 | WSL GPU work appears under the `vmmemWSL` PID in `GPU Engine` | **False here.** `vmmemWSL` stayed at 0 under load | `experiments/01-gpu-attribution/results/02-wsl-cuda-only-2026-10-31.txt` |
 | WSL GPU work appears under `vmwp.exe`, the parent of `vmmemWSL` | Observed once, 2026-10-31: PID 11736, present only t=6-20, the 15 s load, peak 104.52%. Must hold under runs 3 and 4 | same |
-| WSL CUDA compute shows as a Compute engine | **False here.** It appeared as `engtype_3D` | same |
-| Per-process GPU use is listed by `nvidia-smi` inside WSL | Not listed: `--query-compute-apps` and `pmon` both empty under load | run 2, live query |
-| `/dev/dxg` holders identify the Linux process | Observed: the load's PID was the only holder under load. Identity only, no usage | run 2, `/proc/*/fd` scan |
+| WSL CUDA compute shows as a Compute engine | **False here.** It appeared as `3D` | same |
+| Per-process GPU use is listed by `nvidia-smi` inside WSL | Not listed: `--query-compute-apps` and `pmon` both empty under load | run 2, live query, no raw file |
+| `/dev/dxg` holders identify the Linux process | Observed: the load's PID was the only holder under load. Identity only, no usage | run 2, `/proc/*/fd` scan, no raw file |
 | At idle, `vmmemWSL` shows no non-zero GPU engine | Observed 2026-10-31, 3 s, 485 instances, no WSL GPU load | `counter_probe.exe 3` |
-| WSL whole-GPU util agrees with Windows engine counters | Under load close (99% vs about 104%). Not at idle: `nvidia-smi` read 16-21% while Windows engines summed well under that. Different definitions or a bad reading; unresolved | run 2 |
+| WSL whole-GPU util agrees with Windows engine counters | Under load close (99% vs about 104%). Not at idle: `nvidia-smi` read 16-21% while Windows engines summed well under that. Different definitions or a bad reading; unresolved | run 2; the `nvidia-smi` side has no raw file |
 
 ## Windows collector checked against Windows (2026-10-31)
 
-Read a few seconds apart on a live machine, so small differences are expected.
+Read a few seconds apart on a live machine, so small differences are expected. No raw file was
+saved for this section; the numbers were read live.
 
 | value | `winwsltop` | Windows |
 |---|---|---|
@@ -34,6 +35,8 @@ cost about 9 ms of collection; `GPU Engine` took 0.53 ms over its 485 instances,
 feared, and `NtQuerySystemInformation` took 6.42 ms.
 
 ## WSL collector checked (2026-10-31)
+
+No raw file was saved for this section; the numbers were read live.
 
 | check | result |
 |---|---|
@@ -54,9 +57,9 @@ Each case ran once on an RTX 4070 with both loads at full rate. Raw files are in
 
 | case | `vmwp.exe` 3D | load process 3D | other |
 |---|---|---|---|
-| WSL only | 95-105% | - | Windows desktop about 1% |
-| Windows only | absent | 80-97% | |
-| both | 49-54% | 35-37% | |
+| WSL only | 91-105% (t=7-20) | - | Windows desktop about 1% |
+| Windows only | absent | 71-97% | |
+| both | 49-54% | 34-35% | |
 
 | claim | status |
 |---|---|
@@ -90,19 +93,21 @@ Five rounds, `nvidia-smi` read 100-200 ms after the collector:
 
 | claim | status | evidence |
 |---|---|---|
-| NVML loads without an SDK, without elevation, from `System32` | Observed | `gpu_probe.exe`. `nvmlInit_v2` makes construction take 626-685 ms; a sample takes about 1 ms |
+| NVML loads without an SDK, without elevation, from `System32` | Observed | `gpu_probe.exe`. `nvmlInit_v2` makes construction take 626 ms in `probe-idle-2026-10-31.txt`; a 685 ms figure quoted earlier has no raw file. A sample takes about 1 ms |
 | A missing or wrong `nvml.dll` leaves `present` false without a crash | Observed, with the load redirected | `nvml_absent.exe missing` and `wrong` |
 | The `NVSMI` fallback path works | **Not checked.** That directory does not exist here | |
 | A failing `nvmlInit_v2` or device handle is handled | **Not checked.** Those branches have not run | |
 | NVML v1 `used` includes driver-reserved memory | Observed: 1744 vs 1472 MiB, difference 272 MiB, `memory.reserved` 272 MiB. v2 is what `nvidia-smi` reports, so the collector uses v2 | `probe-idle-2026-10-31.txt` |
-| The memory collector reads what `Get-Counter` reads | Observed: 77 of 78 pid readings fell between two probe reads, over 3 rounds with 26 pids. The other was Chrome, moving non-monotonically (318, 326, 302 MiB) | `compare-idle-2026-10-31.txt` |
+| The memory collector reads what `Get-Counter` reads | Observed: 77 of 78 pid readings fell between two probe reads, over 3 rounds with 26 pids. The other was Chrome, moving non-monotonically (318, 302, 326 MB over the three reads) | `compare-idle-2026-10-31.txt` |
 | `GPU Process Memory` is readable on first collection, non-elevated | Observed: one-round probes returned 26 pids | same |
-| `Dedicated Usage` measures VRAM in use | **False here.** Summed over processes 4476-4569 MiB while NVML used about 1480 MiB and `GPU Adapter Memory` dedicated about 1400 MiB. One process, `dwm`, alone showed about 3.5 GiB dedicated with 266 MiB `Local Usage`. Cause not established | same |
+| `Dedicated Usage` measures VRAM in use | **False here.** Summed over processes 4476-4564 MiB while NVML used about 1480 MiB and `GPU Adapter Memory` dedicated about 1400 MiB. One process, `dwm`, alone showed about 3.3 GiB dedicated with 243-271 MiB `Local Usage`. Cause not established | same |
 | Any of the memory figures sum to one another | **No.** In one round, process `Local Usage` summed to 939 MiB, adapter local 769 MiB, adapter dedicated 1398 MiB, NVML used about 1480 MiB | same |
 | WSL GPU memory shows under `vmwp.exe` | Only seen at idle, 15.1 MiB (15810560 bytes) dedicated, equal to its `Local Usage`. Not checked with a WSL allocation | `compare-idle-2026-10-31.txt`, first `Get-Counter` read |
-| One GPU has one LUID | **No.** Two appear. The second had 9 process instances, all zero, and `Win32_VideoController` lists only the RTX 4070; what it is remains unknown. `gpu_memory_row` sums across LUIDs, which changes nothing while the second stays zero | same |
+| One GPU has one LUID | **No.** Two appear. The second's instances read zero; how many it had is not recoverable from the file. `Win32_VideoController` lists only the RTX 4070; what it is remains unknown. `gpu_memory_row` sums across LUIDs, which changes nothing while the second stays zero | same |
 
 ## WSL clock rate (2026-10-31)
+
+No raw file was saved for this section; the numbers were read live.
 
 | check | result |
 |---|---|

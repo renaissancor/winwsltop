@@ -7,6 +7,7 @@ general btop clone, not remote or fleet monitoring, not macOS or standalone Linu
 ## Rules for every agent
 
 1. **Read-only.** It observes. It never stops, signals or reconfigures a process, Windows or Linux.
+   The one exception is its own collector child, which it ends when it exits.
 2. **Evidence first.** No counter is built on until `docs/measurable.md` records it as observed on this
    machine. Cite the row; do not restate the number. The Windows-versus-WSL split is proven at VM level
    only. Per-Linux-process GPU use is not measured and is never shown as if it were.
