@@ -56,7 +56,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 
 | item | value |
 |---|---|
-| source | `src/host` 265 lines, `src/gpu` 253, `src/wsl` 558 (233 of them generated), `collector.py` 144 |
+| source | `src/host` 269 lines, `src/gpu` 253, `src/wsl` 562 (233 of them generated), `collector.py` 144 |
 | collector cost | 3.46 ms per sample; line 0.08 to 0.17 s old on arrival (ledger, "WSL collector checked") |
 | `GPU Engine` read | 0.53 ms over 485 instances (ledger, "Windows collector checked") |
 | NVML init | 626 to 685 ms at construction, about 1 ms per sample (ledger, experiment 02) |
@@ -72,8 +72,13 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - Whether WSL GPU memory appears under `vmwp.exe` under load. Only idle has been seen.
 - PROPOSED: a start-failure count or message so an invalid `--distro` or a missing `wsl.exe` is
   visible on the screen (`TODO.md` item 8). Needs a snapshot field: request to core.
-- Disk and network counters have no ledger row, and eight of nine collector files cite no ledger
-  section (`TODO.md` items 20 and 21). Evidence writes the rows first; collect then cites them.
+- Eight of the ten hand-written collector files still name no ledger section (`TODO.md` item 21).
+  `pdh_memory.cpp` also repeats a ledger ratio in its comment. `scripts/check.sh` does not check
+  comment citations, so a renamed ledger section would break them silently.
+- A disk row reports 0 for a field it could not read, because `disk_row` has no `has_*`
+  (`TODO.md` item 22). Needs a snapshot field: request to core.
+- The filter keeps always-zero rows that `Get-NetAdapter` marks `Hidden`, and two of them reach the
+  screen (`TODO.md` item 23). The ledger says whether they read true is `Not checked`.
 - Machines with more than 64 logical CPUs: the CPU collector covers one processor group and says
   nothing about it (`TODO.md` item 11).
 - A reset network counter (`TODO.md` item 6) leaves that rate at 0 for the sample, not absent, because
@@ -103,3 +108,6 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
   (item 17); a failed `CreateFileW("NUL")` leaves the child without a stderr handle (item 18).
 - 2026-11-01. `collector_embed.cpp` holds `const unsigned char[]`, so a non-ASCII byte in
   `collector.py` compiles (`TODO.md` item 10).
+- 2026-11-01. `disk.cpp` and `network.cpp` name their ledger section and say it records what was and
+  was not checked. They list no per-counter status, so a comment cannot drift from the ledger or read
+  as a claim that a value is verified. Comments only; no collector changed for experiment 03.

@@ -47,11 +47,11 @@ about this machine lives.
 
 | item | value |
 |---|---|
-| experiments | 2, both run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1 |
-| raw result files | 8, 898 lines in total |
+| experiments | 3: 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
+| raw result files | 20, 10512 lines in total |
 | run with no file | experiment 01 run 1, idle baseline (3 s probe, noted in the ledger only) |
-| trials per case | 1 |
-| ledger rows | 50 table rows in 6 groups |
+| trials per case | 1; experiment 03 is one session of 3 windows and 10 network brackets |
+| ledger rows | 72 table rows in 7 groups |
 | numbers checked against raw files, 2026-11-01 audit | three ranges and four values were off and are corrected; three sections and four rows have no raw file and now say so |
 
 ## Open questions
@@ -66,7 +66,18 @@ about this machine lives.
 - PROPOSED: an idle-baseline file for experiment 01, so run 1 has evidence like the others.
 - PROPOSED: rerun the three sections that have no raw file (Windows collector, WSL collector, clock
   rate) with output saved, so their numbers can be checked.
-- Disk and network counters have no ledger row at all (`TODO.md` item 20).
+- Why window 3 write differs from the drive by 5 Data Units when the other five comparisons are under
+  one (ledger, "Disk and network collectors checked"). No NVMe read follows that window, so whether
+  the gap lasted is unknown.
+- Why `% Idle Time` exceeds 100 on disk 1, and whether the clamp fires on a disk with traffic.
+- Whether `vEthernet` traffic is also counted on the NIC, and whether `Get-NetAdapterStatistics` and
+  `GetIfTable2` share a source.
+- No reading outside Windows was found for `% Idle Time` or the physical NIC, and the NIC is the
+  first NET row on the screen. The ledger's status for both is bindings only.
+- PROPOSED: rerun experiment 03 with traffic on disk 1 and Wi-Fi connected, which closes those
+  `Not checked` rows, in a different ambient state. It needs a load, so it needs the user's approval.
+  Take one more NVMe read about a minute after the last window.
+- PROPOSED: `compare.sh` has no `set -e`, so a failed step leaves a short file and the run carries on.
 
 ## Decision log
 
@@ -80,3 +91,18 @@ about this machine lives.
   34-35 percent; `dwm` 3.3 GiB and 243-271 MiB; dedicated sum 4476-4564 MiB; Chrome in MB in read
   order; 685 ms and the second LUID's instance count have no raw file. Rows and sections without a
   raw file say so instead of citing `same` or `run 2`.
+- 2026-11-01. Experiment 03 verdict: disk 0 bytes are checked against the drive's NVMe health log and
+  `vEthernet` octets against guest `eth0`. `Get-Counter` proves bindings only, and WMI
+  `MSDiskDriver_Performance` is a second path to the same count, not a second measurement.
+- 2026-11-01. The probe opens the collector's private members with `#define private public`, so it
+  prints what the collector read rather than a second reading a moment later. `IOCTL_DISK_PERFORMANCE`
+  was not called: Microsoft documents it as enabling performance counters, and the experiment
+  changes nothing.
+- 2026-11-01. An audit found four experiment 03 rows overstated, the worst padding its checks with
+  rows at zero. A comparison on a value that never moved is `Not checked`, and analysis scripts
+  count it apart. A figure printed as a count is a counter delta, not rate times time.
+- 2026-11-01. The ledger section "Disk and network collectors checked" has no date in its heading,
+  because the collectors cite it by name and a rerun must not rename it.
+- 2026-11-01. An earlier full run of experiment 03 was overwritten before the scripts were final. No
+  ledger number comes from it. The index row in `docs/README.md` was added by the orchestrator in the
+  same commit as the experiment (622f874), since `scripts/check.sh` needs them together.

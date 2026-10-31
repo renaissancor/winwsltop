@@ -85,3 +85,6 @@ the one inferred value, and keep the build, the checks and the ownership documen
 - 2026-11-01. Rule 1's one exception, ending the collector child on exit, confirmed by the user.
 - 2026-11-01. `TODO.md` item 20 (disk and network counters without a ledger row) is the next
   session's first step: evidence records the rows, then collect cites them.
+- 2026-11-01. Item 20 closed on 622f874, 74a5c32, 36ed08b and 0cd336d, audited by a fresh auditor against the
+  raw files. It closes as a partial check, not a full one: the task's independent source was met
+  only for disk 0 bytes and `vEthernet` octets, and what remains is in `contracts/evidence.md`.
