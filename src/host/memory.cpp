@@ -4,7 +4,9 @@
 
 namespace wwt {
 
+// out is reset first, so a failed call leaves a default view, not the previous sample (docs/TODO.md item 1).
 bool sample_memory(memory_view& out) {
+  out = {};
   MEMORYSTATUSEX m{};
   m.dwLength = sizeof m;
   if (!GlobalMemoryStatusEx(&m)) return false;

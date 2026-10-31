@@ -47,7 +47,11 @@ constexpr NTSTATUS kLengthMismatch = static_cast<NTSTATUS>(0xC0000004L);
 
 }  // namespace
 
+// out and vm are reset first, so a failed query or the priming call leaves them empty, never the
+// previous sample (docs/TODO.md item 1).
 bool process_collector::sample(std::vector<process_row>& out, vm_view& vm) {
+  out.clear();
+  vm = {};
   if (buf_.empty()) buf_.resize(1 << 20);
   for (;;) {
     ULONG need = 0;
@@ -61,8 +65,6 @@ bool process_collector::sample(std::vector<process_row>& out, vm_view& vm) {
   const double elapsed = now_t - prev_t_;
   const bool have_prev = prev_t_ != 0 && elapsed > 0;
   std::map<key, uint64_t> now;
-  out.clear();
-  vm = {};
 
   for (size_t at = 0;;) {
     const auto* p = reinterpret_cast<const nt_process*>(buf_.data() + at);
@@ -95,6 +97,7 @@ bool process_collector::sample(std::vector<process_row>& out, vm_view& vm) {
   }
   prev_ = std::move(now);
   prev_t_ = now_t;
+  if (!have_prev) { out.clear(); vm = {}; }  // The priming call has no rates: it reports no rows.
   return have_prev;
 }
 

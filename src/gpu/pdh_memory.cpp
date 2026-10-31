@@ -38,7 +38,9 @@ void add_rows(const PDH_FMT_COUNTERVALUE_ITEM_W* items, DWORD count, std::map<ui
 // These are gauges, so unlike GPU Engine the first collection already gives values.
 // Processes with nothing on either counter are left out. Dedicated is not VRAM in use: summed over
 // processes it reached three times NVML's used figure, see docs/measurable.md.
+// out is cleared first, so a failed read leaves it empty, not the previous sample (docs/TODO.md item 1).
 bool gpu_memory_collector::sample(std::vector<gpu_memory_row>& out) {
+  out.clear();
   if (!query_ || !dedicated_ || !shared_ || !local_) return false;
   if (PdhCollectQueryData(query_) != ERROR_SUCCESS) return false;
 
@@ -53,7 +55,6 @@ bool gpu_memory_collector::sample(std::vector<gpu_memory_row>& out) {
   if (!pdh_array(local_, buf, items, count)) return false;
   add_rows(items, count, rows, &gpu_memory_row::local);
 
-  out.clear();
   for (const auto& [pid, row] : rows) out.push_back(row);
   return true;
 }

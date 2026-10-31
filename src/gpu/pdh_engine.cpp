@@ -18,7 +18,10 @@ gpu_engine_collector::~gpu_engine_collector() {
 
 // Instance: pid_1234_luid_0x..._phys_0_eng_0_engtype_3D. Non-zero rows, summed per pid and engine
 // type. Engine type does not separate Windows from WSL: WSL CUDA appears as 3D.
+// out is cleared first, so a failed read or the priming call leaves it empty (docs/TODO.md item 1);
+// true only when rows were read, which main.cpp records as gpu_engines_known.
 bool gpu_engine_collector::sample(std::vector<gpu_engine_row>& out) {
+  out.clear();
   if (!query_ || !util_) return false;
   if (PdhCollectQueryData(query_) != ERROR_SUCCESS) return false;
   if (!primed_) { primed_ = true; return false; }
@@ -36,7 +39,6 @@ bool gpu_engine_collector::sample(std::vector<gpu_engine_row>& out) {
     if (!pid_at || !eng_at) continue;
     sums[{static_cast<uint32_t>(_wtoi(pid_at + 4)), eng_at + 8}] += items[i].FmtValue.doubleValue;
   }
-  out.clear();
   for (const auto& [k, v] : sums) out.push_back({k.first, utf8(k.second), v});
   return true;
 }

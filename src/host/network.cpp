@@ -6,14 +6,15 @@
 
 namespace wwt {
 
+// out is cleared first, so a failed query or the priming call leaves it empty (docs/TODO.md item 1).
 bool net_collector::sample(std::vector<net_row>& out) {
+  out.clear();
   MIB_IF_TABLE2* table = nullptr;
   if (GetIfTable2(&table) != NO_ERROR) return false;
   const double now_t = seconds_now();
   const double elapsed = now_t - prev_t_;
   const bool have_prev = prev_t_ != 0 && elapsed > 0;
   std::map<uint64_t, counters> now;
-  out.clear();
   for (ULONG i = 0; i < table->NumEntries; ++i) {
     const MIB_IF_ROW2& row = table->Table[i];
     if (row.OperStatus != IfOperStatusUp || row.Type == IF_TYPE_SOFTWARE_LOOPBACK) continue;
@@ -35,6 +36,7 @@ bool net_collector::sample(std::vector<net_row>& out) {
   FreeMibTable(table);
   prev_ = std::move(now);
   prev_t_ = now_t;
+  if (!have_prev) out.clear();  // The priming call has no rates: it reports no rows.
   return have_prev;
 }
 

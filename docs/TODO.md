@@ -7,7 +7,7 @@ re-reads the code.
 
 | # | sev | area | file | defect | status |
 |---|---|---|---|---|---|
-| 1 | medium | collect, core | `src/host/*.cpp`, `src/gpu/pdh_*.cpp`, `src/main.cpp` | `sample()` results are ignored and most collectors return before clearing their output, so a failed PDH or `NtQuerySystemInformation` read leaves the previous second's rows in the snapshot, unflagged. Only `nvml.cpp` clears first | open |
+| 1 | medium | collect, core | `src/host/*.cpp`, `src/gpu/pdh_*.cpp`, `src/main.cpp` | `sample()` results are ignored and most collectors return before clearing their output, so a failed PDH or `NtQuerySystemInformation` read leaves the previous second's rows in the snapshot, unflagged. Only `nvml.cpp` clears first | fixed, collect: every `sample()` resets its output before any early return; core half in e68e7b4 |
 | 2 | medium | core | `src/main.cpp` | The deadline is never clamped to now. After a suspend or a stall longer than a second, the loop samples and draws with no sleep until it catches up; `--record` then emits many lines a second | open |
 | 3 | medium | collect | `src/wsl/bridge.cpp` | The read loop ends only when the child's stdout closes, and only the job object forces that. If the job is null or `AssignProcessToJobObject` fails, the destructor's `join()` never returns | open |
 | 4 | medium | collect, core | `src/gpu/pdh_engine.cpp`, `src/gpu/pdh_memory.cpp` | Engine and memory rows are keyed by PID only. On a machine with a second adapter its use is counted on the Windows side next to NVIDIA-only NVML figures. Not an issue on this machine, where the second LUID stays at zero | deferred: needs a LUID field in the snapshot (seam) and a ledger row on what the second LUID is |

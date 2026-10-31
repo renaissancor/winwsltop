@@ -17,7 +17,9 @@ disk_collector::~disk_collector() {
   if (query_) PdhCloseQuery(query_);
 }
 
+// out is cleared first, so a failed collection or the priming call leaves it empty (docs/TODO.md item 1).
 bool disk_collector::sample(std::vector<disk_row>& out) {
+  out.clear();
   if (!query_ || !read_ || !write_ || !idle_) return false;
   if (PdhCollectQueryData(query_) != ERROR_SUCCESS) return false;
   if (!primed_) { primed_ = true; return false; }
@@ -37,7 +39,6 @@ bool disk_collector::sample(std::vector<disk_row>& out) {
   read_into(write_, [](disk_row& r, double v) { r.write_bytes_s = v; });
   read_into(idle_, [](disk_row& r, double v) { r.busy_pct = v > 100.0 ? 0.0 : 100.0 - v; });
 
-  out.clear();
   for (auto& [name, row] : rows) {
     row.name = utf8(name);
     out.push_back(std::move(row));
