@@ -27,7 +27,6 @@ re-reads the code.
 | 17 | nit | collect | `src/wsl/bridge.cpp` | `pending` grows without bound if the child never writes a newline | fixed, collect c49d61a: tail over 1 MiB dropped, and the rest of that oversized line is skipped up to its newline too |
 | 18 | nit | collect | `src/wsl/bridge.cpp` | A failed `CreateFileW("NUL")` hands `INVALID_HANDLE_VALUE` to the child as stderr | fixed, collect: the child gets no stderr handle in that case |
 | 19 | nit | core | `src/record/jsonl.cpp` | `%.3f` prints `nan` or `inf` as bare words; no producer makes one today, so the record is valid by construction only | fixed, core e68e7b4: non-finite prints `null` |
-
 | 20 | medium | collect, evidence | `src/host/disk.cpp`, `src/host/network.cpp` | The disk and network collectors are built on counters with no row in `docs/measurable.md`, against `CLAUDE.md` rule 2. Found by the 2026-11-01 audit | open: evidence records what `PhysicalDisk` and `GetIfTable2` read on this machine, then collect cites it |
 | 21 | low | collect | `src/host/*.cpp`, `src/gpu/nvml.cpp`, `src/gpu/pdh_engine.cpp`, `src/wsl/bridge.cpp`, `collector.py` | Only `pdh_memory.cpp` cites a ledger section in its comment; the other eight collector files cite none (`contracts/collect.md` rule 1) | open |
 
