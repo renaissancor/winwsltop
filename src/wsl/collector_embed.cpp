@@ -3,7 +3,7 @@
 
 namespace wwt {
 namespace {
-const char kCollector[] = {
+const unsigned char kCollector[] = {
     34,34,34,76,105,110,117,120,32,104,97,108,102,32,111,102,32,119,105,110,119,115,108,116,
     111,112,46,32,83,101,110,116,32,111,118,101,114,32,115,116,100,105,110,32,116,111,32,116,
     104,101,32,98,111,111,116,115,116,114,97,112,32,105,110,32,80,82,79,84,79,67,79,76,
@@ -227,7 +227,7 @@ const char kCollector[] = {
 
 const char* embedded_collector(size_t& size) {
   size = sizeof kCollector;
-  return kCollector;
+  return reinterpret_cast<const char*>(kCollector);
 }
 
 }  // namespace wwt
