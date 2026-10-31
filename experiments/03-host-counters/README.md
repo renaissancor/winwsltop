@@ -35,9 +35,13 @@ How independent each comparison is:
 | NVMe Data Units Read and Written | Windows' disk accounting: the drive keeps them | bytes, at 512000-byte resolution, disk 0 only |
 | `Get-NetAdapterStatistics` | an API path only; a shared source is not ruled out | bindings and units |
 | `/proc/net/dev` `eth0` against `vEthernet` | Windows: another kernel counts them | octets on the WSL adapter only |
+| `Get-NetAdapter` link speed and hardware flag | an API path only; a shared source is not ruled out | bindings and units |
 
 Nothing here is independent for `% Idle Time`, or for the physical NIC. A person reading Task Manager
 is not part of this experiment. `IOCTL_DISK_PERFORMANCE` was not tried: Microsoft describes it as
 enabling performance counters, and this experiment changes nothing.
+
+A rerun should take one more NVMe read about a minute after the last window: the 2026-11-01 run has no
+later reading to show whether its gap from the drive was durable.
 
 **Result (2026-11-01):** see `docs/measurable.md`, section "Disk and network collectors checked".

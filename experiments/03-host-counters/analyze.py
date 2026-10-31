@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reads the raw files compare.sh saved and prints every comparison. Usage: analyze.py <results> <date>"""
-import collections, glob, os, re, sys
+import bisect, collections, glob, os, re, sys
 
 UNIT = 512000           # NVMe Data Units are 1000 blocks of 512 bytes
 TICKS = 10_000_000      # FILETIME ticks a second
@@ -42,14 +42,21 @@ for f in rows:
 print("kept rows that disagree with Get-NetAdapter on link speed or the hardware flag:", mismatch)
 print("# every Get-NetAdapter row against its if-table row, all states")
 by_index = {f[1]: f for f in rows}
-hw_bad = speed_bad = 0
+hw_bad = speed_bad = speed_compared = speed_zero = 0
+speed_empty = collections.Counter()
 for i, a in adapters.items():
     f = by_index.get(i)
     if f is None:
         print(f"  {i} {a[2]} no if-table row"); continue
     if (a[8] == "True") != (f[9] == "1"): hw_bad += 1
-    if a[7] and a[7] != f[13]: speed_bad += 1
+    if a[7]:
+        speed_compared += 1
+        speed_zero += a[7] == "0"
+        speed_bad += a[7] != f[13]
+    else:
+        speed_empty[re.sub(r" \(.*\)$| #\d+$", "", a[3])] += 1
 print(f"  rows joined {sum(1 for i in adapters if i in by_index)}, hardware flag differs {hw_bad}, tx speed differs {speed_bad}")
+print(f"  tx speed compared on {speed_compared} rows, {speed_zero} of them at speed 0; Get-NetAdapter gives no speed on {sum(speed_empty.values())}: {dict(speed_empty)}")
 print("  HardwareInterface true in Get-NetAdapter:", [a[2] for a in adapters.values() if a[8] == "True"])
 print("  Virtual true and Hidden false:", [a[2] for a in adapters.values() if a[9] == "True" and a[10] == "False"])
 print("# dropped filter rows of the kept adapters, octets beside the adapter's own")
@@ -98,6 +105,8 @@ def bracket(points, t0, t1):
 total = collections.Counter()
 extremes = {}
 gaps = collections.defaultdict(list)
+widths = collections.defaultdict(list)
+adjacent = collections.defaultdict(lambda: [0, 0])
 windows = sorted(int(re.search(r"window(\d+)-probe", p).group(1)) for p in glob.glob(os.path.join(results, f"window*-probe-{date}.txt")))
 for w in windows:
     print(f"\n# window {w}")
@@ -119,15 +128,17 @@ for w in windows:
     last = max(D)
     gc = collections.defaultdict(lambda: collections.defaultdict(dict))
     wmi = collections.defaultdict(dict)
+    wmi_reads = 0
     for f in counters:
         if f[0] == "gc":
             kind = "read" if "read" in f[3] else "write" if "write" in f[3] else "idle"
             gc[int(f[1])][f[2]][kind] = (int(f[4]), int(f[5]), float(f[6]))
         elif f[0] == "wmi" and f[2].startswith("SCSI"):
             wmi[int(f[1])][f[4]] = (int(f[5]), int(f[6]), int(f[7]))
+            wmi_reads += f[4] == "0"    # one line per disk per read; QueryTime can differ between disks
     gc_t = sorted(gc); wmi_t = sorted(wmi)
     t0 = D[1 - 1][0]; t1 = D[last][0]
-    print(f"collector rounds {last}, {(t1 - t0) / TICKS:.3f} s; Get-Counter samples {len(gc_t)}, {(gc_t[-1] - gc_t[0]) / TICKS:.3f} s; WMI reads {len(wmi_t)}, {(wmi_t[-1] - wmi_t[0]) / TICKS:.3f} s")
+    print(f"collector rounds {last}, {(t1 - t0) / TICKS:.3f} s; Get-Counter samples {len(gc_t)}, {(gc_t[-1] - gc_t[0]) / TICKS:.3f} s; WMI reads {wmi_reads}, {(wmi_t[-1] - wmi_t[0]) / TICKS:.3f} s")
     print(f"overlap of all three {(min(t1, gc_t[-1], wmi_t[-1]) - max(t0, gc_t[0], wmi_t[0])) / TICKS:.3f} s, collector inside both: {verdict(gc_t[0] <= t0 and wmi_t[0] <= t0 and t1 <= gc_t[-1] and t1 <= wmi_t[-1])}")
     ms = [v[2] for k, v in D.items() if k]; print(f"disk sample ms mean {sum(ms) / len(ms):.3f} max {max(ms):.3f}")
     ms = [v[2] for k, v in N.items() if k]; print(f"net sample ms mean {sum(ms) / len(ms):.3f} max {max(ms):.3f}")
@@ -159,6 +170,8 @@ for w in windows:
             total["inside", "yes"] += (gi <= rv <= go) + (wi <= rv <= wo)
             total["inside", "of"] += 2
             if rv:
+                widths["Get-Counter"].append((go - gi) / rv * 100)
+                widths["WMI"].append((wo - wi) / rv * 100)
                 total["moved", "yes"] += (gi <= rv <= go) + (wi <= rv <= wo)
                 total["moved", "of"] += 2
         same = sum(1 for t, v in gpoints for ww, vv in [min(wpoints, key=lambda p: abs(p[0] - t))] if v["read"][0] == vv[0])
@@ -188,28 +201,48 @@ for w in windows:
         extremes[name, "busymax"] = max(extremes.get((name, "busymax"), 0), max(d[k][name][2] for k in dt))
         gaps[name].append(max(abs(busy - g_busy), abs(busy - w_busy)))
         if name.startswith("0"):
+            # Each cumulative value must lie between the collector's two reads either side of its stamp.
+            stamps = [D[k][0] for k in range(last + 1)]
+            for label, points in (("Get-Counter", [(t, (v["read"][0], v["write"][0])) for t, v in gpoints]),
+                                  ("WMI", [(t, (v[0], v[1])) for t, v in wpoints])):
+                good = tested = 0
+                for t, values in points:
+                    i = bisect.bisect(stamps, t)
+                    if i == 0 or i > last: continue
+                    for col in (0, 1):
+                        tested += 1
+                        good += r[i - 1][name][col] <= values[col] <= r[i][name][col]
+                print(f"  {label} cumulative values between the collector's two adjacent reads: {good} of {tested}")
+                adjacent[label][0] += good; adjacent[label][1] += tested
             ur = (nv[1][1] - nv[0][1]); uw = (nv[1][2] - nv[0][2])
             print(f"  NVMe log across the window, {(nv[1][0] - nv[0][0]) / TICKS:.3f} s: read units {ur} = {ur * UNIT} B ({ur * UNIT / MIB:.2f} MiB), write units {uw} = {uw * UNIT} B ({uw * UNIT / MIB:.2f} MiB)")
             print(f"  collector / NVMe: read {rate_r / (ur * UNIT) if ur else float('nan'):.4f}, write {rate_w / (uw * UNIT) if uw else float('nan'):.4f}")
             du = [abs(rate_r - ur * UNIT) / UNIT, abs(rate_w - uw * UNIT) / UNIT]
+            total["nvme", "rerr"] = max(total["nvme", "rerr"], abs(rate_r / (ur * UNIT) - 1) * 100)
+            total["nvme", "werr"] = max(total["nvme", "werr"], abs(rate_w / (uw * UNIT) - 1) * 100)
             print(f"  difference in data units: read {du[0]:.2f}, write {du[1]:.2f}")
             total["nvme", "maxdiff"] = max(total["nvme", "maxdiff"], *du)
             total["nvme", "cr"] += rate_r; total["nvme", "cw"] += rate_w; total["nvme", "ur"] += ur; total["nvme", "uw"] += uw
 
     # network, this window
     alias = {luid: v[0] for k in b for luid, v in b[k].items()}
-    bad_b = bad_rate = bad_set = checked = 0
+    moved_rows = {l for l in alias if c[last][l][1:] != c[0][l][1:]}
+    checks = {True: [0, 0, 0, 0], False: [0, 0, 0, 0]}     # per kind of row: checks, outside bracket, rate differs, octets moved
+    bad_set = 0
     for k in range(1, last + 1):
         if set(n[k]) != {alias[l] for l in b[k]}: bad_set += 1
         for luid, v in c[k].items():
-            checked += 2
-            for col in (1, 2):
-                bad_b += not (b[k][luid][col] <= v[col] <= a[k][luid][col])
+            kind = checks[luid in moved_rows]
             el = v[0] - c[k - 1][luid][0]
             for col, rate in ((1, n[k][alias[luid]][0]), (2, n[k][alias[luid]][1])):
+                kind[0] += 1
+                kind[1] += not (b[k][luid][col] <= v[col] <= a[k][luid][col])
                 want = (v[col] - c[k - 1][luid][col]) / el
-                bad_rate += abs(rate - want) > max(1.0, want * 5e-6)
-    print(f"net: octets the collector read outside its raw bracket {bad_b} of {checked}; rate differs from octet delta / elapsed {bad_rate} of {checked}; rounds whose rows differ from the kept set {bad_set} of {last}")
+                kind[2] += abs(rate - want) > max(1.0, want * 5e-6)
+                kind[3] += v[col] > c[k - 1][luid][col]
+    print(f"net, {len(moved_rows)} rows that moved: octets the collector read outside its raw bracket {checks[True][1]} of {checks[True][0]}; rate differs from octet delta / elapsed {checks[True][2]} of {checks[True][0]}; octets moved in {checks[True][3]} of {checks[True][0]}")
+    print(f"net, {len(alias) - len(moved_rows)} rows always at zero: outside {checks[False][1]} of {checks[False][0]}; rate differs {checks[False][2]} of {checks[False][0]}; octets moved in {checks[False][3]} of {checks[False][0]}")
+    print(f"rounds whose rows differ from the kept set {bad_set} of {last}")
     rows_seen = sorted({x for k in n for x in n[k]})
     print("net rows returned:", rows_seen)
     for luid in alias:
@@ -230,6 +263,7 @@ for w in windows:
         sx = sum((v - mx) ** 2 for v in x) ** .5; sy = sum((v - my) ** 2 for v in y) ** .5
         return sum((p - mx) * (q - my) for p, q in zip(x, y)) / (sx * sy) if sx and sy else float("nan")
     vi, vo, ni, no = deltas(veth, 1), deltas(veth, 2), deltas(nic, 1), deltas(nic, 2)
+    print(f"NIC octet delta from the collector's own reads: in {c[last][nic][1] - c[0][nic][1]} out {c[last][nic][2] - c[0][nic][2]}")
     nic_link = n[1][alias[nic]][2]
     peak = max(n[k][alias[nic]][0] for k in range(1, last + 1))
     print(f"NIC peak in {peak * 8 / nic_link * 100:.2f}% of its {nic_link} bit/s link")
@@ -265,8 +299,12 @@ for name in sorted({k[0] for k in total if k[1] == "rounds"}):
 cr, cw, ur, uw = total["nvme", "cr"], total["nvme", "cw"], total["nvme", "ur"], total["nvme", "uw"]
 print(f"disk 0 total: collector read {cr / MIB:.2f} MiB, NVMe {ur * UNIT / MIB:.2f} MiB; collector write {cw / MIB:.2f} MiB, NVMe {uw * UNIT / MIB:.2f} MiB")
 print(f"disk 0 collector / NVMe: read {cr / (ur * UNIT):.4f}, write {cw / (uw * UNIT):.4f}")
+print(f"disk 0 worst ratio error against NVMe in any window: read {total['nvme', 'rerr']:.2f}%, write {total['nvme', 'werr']:.2f}%")
 print(f"disk 0 largest difference from NVMe in any window, either direction: {total['nvme', 'maxdiff']:.2f} data units of {UNIT} bytes")
 print(f"raw delta inside the Get-Counter and WMI brackets: {total['inside', 'yes']} of {total['inside', 'of']}, including zero readings on disk 1")
 print(f"of those, where the counter moved: {total['moved', 'yes']} of {total['moved', 'of']}")
+for label in ("Get-Counter", "WMI"):
+    print(f"{label} bracket width as a share of the raw delta, disk 0: {min(widths[label]):.2f}% to {max(widths[label]):.2f}%")
+    print(f"{label} cumulative values between adjacent collector reads, disk 0: {adjacent[label][0]} of {adjacent[label][1]}")
 print(f"seconds where vEthernet in exceeds NIC out {total['net', 'vi_over']} of {total['net', 'seconds']}; vEthernet out exceeds NIC in {total['net', 'vo_over']} of {total['net', 'seconds']}")
 print(f"guest counters inside the vEthernet bracket: {total['guest', 'yes']} of {2 * len(windows)}")
