@@ -27,8 +27,10 @@ bool net_collector::sample(std::vector<net_row>& out) {
     r.hardware = row.InterfaceAndOperStatusFlags.HardwareInterface != 0;
     if (have_prev) {
       if (const auto it = prev_.find(id); it != prev_.end()) {
-        r.in_bytes_s = static_cast<double>(row.InOctets - it->second.in) / elapsed;
-        r.out_bytes_s = static_cast<double>(row.OutOctets - it->second.out) / elapsed;
+        // A counter below its previous value has been reset (adapter re-enabled, driver restart):
+        // that rate stays 0 for this sample instead of wrapping (docs/TODO.md item 6).
+        if (row.InOctets >= it->second.in) r.in_bytes_s = static_cast<double>(row.InOctets - it->second.in) / elapsed;
+        if (row.OutOctets >= it->second.out) r.out_bytes_s = static_cast<double>(row.OutOctets - it->second.out) / elapsed;
       }
     }
     out.push_back(std::move(r));
