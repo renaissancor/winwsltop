@@ -1,6 +1,6 @@
-"""Linux half of winwsltop. Sent over stdin to `wsl.exe -e python3 -u -`; never installed.
+"""Linux half of winwsltop. Sent over stdin to the bootstrap in PROTOCOL.md; never installed.
 Reads /proc and prints one JSON line a second. Stdlib only, Python 3.8+. See PROTOCOL.md."""
-import json, os, sys, time
+import json, os, sys, threading, time
 
 sys.dont_write_bytecode = True
 HZ = os.sysconf("SC_CLK_TCK")
@@ -78,7 +78,33 @@ def dxg_holders():
     return pids, denied
 
 
+OUT = threading.Lock()
+
+
+def emit(text):
+    with OUT:
+        sys.stdout.write(text + "\n")
+        sys.stdout.flush()
+
+
+def answer_pings():
+    """Reads `P <seq>` lines from stdin. EOF means Windows is gone, so the collector exits.
+    `d` is the hold time on CLOCK_MONOTONIC; `wm` is wall minus monotonic, which moves when the wall clock steps."""
+    stdin = sys.stdin.buffer
+    while True:
+        line = stdin.readline()
+        if not line:
+            os._exit(0)
+        m2, u2 = time.monotonic(), time.time()
+        parts = line.split()
+        if len(parts) != 2 or parts[0] != b"P" or not parts[1].isdigit():
+            continue
+        wm = u2 - m2
+        emit('{"pong":%s,"u2":%.6f,"d":%.6f,"wm":%.6f}' % (parts[1].decode(), u2, time.monotonic() - m2, wm))
+
+
 def main():
+    threading.Thread(target=answer_pings, daemon=True).start()
     prev_cpu, prev_proc, prev_t = cpu_times(), processes(), time.monotonic()
     distro = os.environ.get("WSL_DISTRO_NAME", "")
     while True:
@@ -101,7 +127,7 @@ def main():
         keep = rows[:TOP] + [r for r in rows[TOP:] if r["pid"] in holders]
         for r in keep:
             r["on_gpu"] = r["pid"] in holders
-        print(json.dumps({"schema": 1, "distro": distro, "unix_s": round(time.time(), 3),
+        emit(json.dumps({"schema": 1, "distro": distro, "unix_s": round(time.time(), 3),
                           "mono_s": round(start, 3), "kernel": os.uname().release, "busy_pct": pct[0],
                           "core_pct": pct[1:], "steal_pct": steal, "memory": memory(), "pressure": pressure(),
                           "process_count": len(rows), "processes": keep, "dxg_pids": holders,
