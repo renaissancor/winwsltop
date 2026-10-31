@@ -75,7 +75,10 @@ bool process_collector::sample(std::vector<process_row>& out, vm_view& vm) {
     r.handles = p->HandleCount;
     r.working_set = p->WorkingSetSize;
     r.private_bytes = p->PrivatePageCount;
-    r.name = p->ImageName.Buffer ? utf8({p->ImageName.Buffer, p->ImageName.Length / sizeof(wchar_t)}) : "Idle";
+    // Only the System Idle Process (PID 0) has no image name by design; any other nameless row is
+    // shown as "?" rather than called Idle (docs/TODO.md item 13).
+    if (p->ImageName.Buffer) r.name = utf8({p->ImageName.Buffer, p->ImageName.Length / sizeof(wchar_t)});
+    else r.name = r.pid == 0 ? "Idle" : "?";
 
     const uint64_t cpu = static_cast<uint64_t>(p->UserTime.QuadPart) + static_cast<uint64_t>(p->KernelTime.QuadPart);
     const key k{r.pid, p->CreateTime.QuadPart};
