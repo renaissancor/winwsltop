@@ -45,17 +45,23 @@ constexpr size_t kMaxPending = 1 << 20;
 wsl_bridge::wsl_bridge(std::wstring script_path, std::wstring distro)
     : script_path_(std::move(script_path)), distro_(std::move(distro)) {
   job_ = CreateJobObjectW(nullptr, nullptr);
-  JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit{};
-  limit.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-  SetInformationJobObject(job_, JobObjectExtendedLimitInformation, &limit, sizeof limit);
+  if (job_) {
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limit{};
+    limit.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    SetInformationJobObject(job_, JobObjectExtendedLimitInformation, &limit, sizeof limit);
+  }
   thread_ = std::thread([this] { run(); });
 }
 
+// The read loop ends only when the child's stdout closes, so the child must die for join() to
+// return. The job object does that when it exists and the child was assigned to it; the process
+// handle kept in child_ covers a null job or a failed assignment (docs/TODO.md item 3).
 wsl_bridge::~wsl_bridge() {
   stop_ = true;
-  TerminateJobObject(job_, 0);
+  if (job_) TerminateJobObject(job_, 0);
+  { const std::lock_guard<std::mutex> lock(mu_); if (child_) TerminateProcess(child_, 0); }
   thread_.join();
-  CloseHandle(job_);
+  if (job_) CloseHandle(job_);
 }
 
 bool wsl_bridge::wait_first_line(double seconds) {
@@ -181,8 +187,14 @@ bool wsl_bridge::run_once(const std::string& script) {
   CloseHandle(out_w);
   if (nul) CloseHandle(nul);
   if (!ok) { CloseHandle(in_w); CloseHandle(out_r); return false; }
-  AssignProcessToJobObject(job_, pi.hProcess);
+  { const std::lock_guard<std::mutex> lock(mu_); child_ = pi.hProcess; }
+  // A failed assignment (or a null job_) is not fatal: the child then lives outside the job and
+  // child_ is what the destructor kills (docs/TODO.md item 3).
+  if (!AssignProcessToJobObject(job_, pi.hProcess)) { /* covered by child_ */ }
   ResumeThread(pi.hThread);
+  // The destructor may have run between CreateProcessW and here, before child_ was set and before
+  // the child was in the job: then neither kill reached it, so finish the stop here.
+  if (stop_) TerminateProcess(pi.hProcess, 0);
   { const std::lock_guard<std::mutex> lock(mu_); ++started_; }
 
   { const std::lock_guard<std::mutex> lock(mu_); sent_.clear(); window_.clear(); have_wm_ = false; }
@@ -235,6 +247,7 @@ bool wsl_bridge::run_once(const std::string& script) {
   { const std::lock_guard<std::mutex> lock(mu_); window_.clear(); sent_.clear(); have_wm_ = false; }
   CloseHandle(in_w);
   CloseHandle(out_r);
+  { const std::lock_guard<std::mutex> lock(mu_); child_ = nullptr; }  // Cleared under mu_ before the close, so the destructor never terminates a closed handle.
   CloseHandle(pi.hProcess);
   CloseHandle(pi.hThread);
   return got_data;

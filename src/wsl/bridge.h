@@ -53,6 +53,7 @@ class wsl_bridge {
   int started_ = 0;
   std::atomic<bool> stop_{false};
   HANDLE job_ = nullptr;
+  HANDLE child_ = nullptr;  // the running wsl.exe, guarded by mu_; null between children
   std::thread thread_;
 };
 
