@@ -2690,6 +2690,7 @@ int measure_frames() {
 }
 
 int main(int argc, char** argv) {
+  if (argc == 2 && strcmp(argv[1], "measure") == 0) return measure_frames();
   const bool quick = argc == 2 && strcmp(argv[1], "quick") == 0;
 #ifdef _WIN32
   { console c; int w = 0, h = 0; check(!c.is_terminal() || c.size(w, h), "console opens"); }
@@ -2728,7 +2729,6 @@ int main(int argc, char** argv) {
     return 0;
   }
 #endif
-  if (argc >= 2 && strcmp(argv[1], "measure") == 0) return measure_frames();
   if (argc >= 6 && strcmp(argv[1], "vt") == 0) {  // render_check vt <fixture> W H FILE [span_s]: one frame's VT bytes
     const render_options o = options_for(argc >= 7 ? atoi(argv[6]) : 60);
     snapshot s;

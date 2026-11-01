@@ -12,7 +12,7 @@ which core owns, reads schema 1 of the collector's line.
 
 - `render.h`, `render.cpp`: layout, colour tones, number formatting, UTF-8 width, sanitising names,
   and `history::push`.
-- `history.h`: the last 60 s of screen values, in memory.
+- `history.h`: the last 15 minutes of screen values, in memory, in one flat ring of 901 samples.
 - `console.h`, `console.cpp`: VT mode, alternate screen, Ctrl+C, key polling from `CONIN$` with echo
   off, plain text when redirected.
 - `render_check.cpp`: the renderer's checks, built on hand-made snapshots.
@@ -52,16 +52,21 @@ which core owns, reads schema 1 of the collector's line.
   panels with live keys.
 - `render_check busy` draws on the live console until Ctrl+C: colours, braille and Korean text need a
   person's eyes in Windows Terminal. Legacy conhost is unchecked.
+- `render_check <contended|idle|stale|noisy> W H [span_s]` prints the large layout of panel 3,
+  `render_check vt <fixture> W H FILE [span_s]` writes one frame's VT bytes to a file, `render_check measure`
+  prints frame bytes and build time, and `render_check quick` skips the size sweeps, for mutating the renderer.
 
-## Current state (2026-11-01)
+## Current state (2026-11-02)
 
 | item | value |
 |---|---|
-| source | `src/ui` 2859 lines, of which `render_check.cpp` 1256 |
-| checks | 102504, 0 failed, run on Windows 2026-11-01. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
-| sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66 |
+| source | `src/ui` 5236 lines, of which `render_check.cpp` 2801 |
+| checks | 120083, 0 failed, run on Windows 2026-11-02. 97 mutants of the ring, buckets, colours and large layout were built and run through `render_check quick`, on Linux with g++; all are caught now, 13 only after a check was added for them. It was not exhaustive. `handle_keys` in `main.cpp` has no automated check |
+| sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, spans 60 s and 15 min; 4, 8, 14, 20, 21, 40 and 64 threads, normal and hostile, at five widths |
+| frame bytes, 131 by 40 | noisy 33392, contended 16176, idle 14107, stale 15232; noisy at 40 threads 44542 and at 64 threads 43388. Budget 48 KiB |
+| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.28 to 0.64 ms, worst noisy at 131 by 40. Budget 5 ms |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
-| console | Windows Terminal checked by eye once; conhost not checked |
+| console | Windows Terminal checked by eye once; conhost not checked. The large layout has not been seen on a terminal: its colours are unchecked, and `t` is not wired in `main.cpp` |
 
 ## Open questions
 
@@ -71,8 +76,30 @@ which core owns, reads schema 1 of the collector's line.
   the target asks for.
 - Does the screen need the clock offset? `wsl_clock_known` and `wsl_clock_offset_s` are in the
   snapshot and the record but not drawn.
+- `docs/design/cpu-panel.md` section 7 has `64 of 128` for a machine past one processor group. Nothing in the
+  snapshot holds a machine-wide count and the ledger has no row for one, so the heads say `of 64` and no more.
+  Needs a snapshot field and a ledger row, or that row of the design changed.
+- The lost state `vcpus_differ` was not committed when the large layout was, so `lost CPU n/a, vCPUs differ`
+  is chosen by comparing the two thread counts. Switch to the state once `snapshot.h` has it on the branch.
+- A collector that restarted while its line still reads is not named in the large layout: `collector_status`
+  has no row there. The overall panel keeps it.
+- `vm_row` on the overall screen prints `vmmem_cores` without reading `vmmem_cores_known`, so a new VM's first
+  sample reads `0.00 cores`. The large layout does not. Not changed here: outside this work, and it changes a checked screen.
+- `read_wsl` still runs twice a sample and allocates each time, in `history::push` and in `render`. The ring
+  itself allocates nothing after the first push.
 
 ## Decision log
+
+- 2026-11-02. The large layout of panel 3 takes its row order from `docs/design/cpu-panel.md`, with one reading:
+  the heat block gets up to 10 rows at step 2, and more only after the lists have 6, so `6 rows guaranteed before
+  the graph grows` holds for 40 and 64 threads too.
+- 2026-11-02. The `lost` lane has three looks: blank, quiet under 1 vCPU, amber from 1 vCPU. The percent of guest
+  threads the design names has no visible effect once 1 vCPU turns it amber, so it is not stored.
+- 2026-11-02. A row's pixels: past the natural rows, threads are shared evenly over the block's lines of pixels
+  and each pixel shows the highest thread's mean, so a row of a 64-thread machine is still two lines.
+- 2026-11-02. `highest of each row` outranks the count in a caption, because it says what a cell is.
+- 2026-11-02. `render()` takes `render_options`: a span and whether the caller acts on `t`. The footer offers `[t]`
+  only when both the option and the layout say so, so no dead key ships before `main.cpp` handles it.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.
