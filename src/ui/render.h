@@ -10,13 +10,15 @@
 
 namespace wwt {
 
-// Grey text, one steel hue for bars, red to act, amber to watch. Colours live in vt_frame().
+// Grey text, one steel hue for bars, red to act, amber to watch. Colours live in vt_frame(), except the
+// heat ramp, which is 256-colour indexes in the two fields below.
 enum class tone : uint8_t { text, title, dim, faint, bar, track, watch, act };
 
 struct span {
   std::string text;  // UTF-8
   tone color = tone::text;
   bool bold = false;
+  int fg256 = -1, bg256 = -1;  // A 256-colour index, or -1: the tone's colour, the terminal's background
 };
 using line = std::vector<span>;
 
@@ -35,7 +37,8 @@ std::vector<line> render(const snapshot& s, int width, int height, int64_t now_m
 
 std::string as_text(const std::vector<line>& lines);
 
-// One frame of VT sequences for a screen `rows` high: every row is rewritten, the rest erased.
+// One frame of VT sequences for a screen `rows` high: every row is rewritten, the rest erased. Within
+// a row equal neighbours are one colour change, and a change says only what changed.
 std::string vt_frame(const std::vector<line>& lines, int rows);
 
 // Terminal columns of a UTF-8 string.

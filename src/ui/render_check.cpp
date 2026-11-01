@@ -659,6 +659,134 @@ void check_history_ring() {
   check(std::isnan(h.samples().back().windows_core[0]) && std::isnan(h.samples().back().windows_core[1]), "what a float cannot hold is not a height");
 }
 
+// ---- Colour and time buckets ---------------------------------------------------------------------
+
+void check_vt_colour() {
+  check(ramp256(kNaN) == -1 && ramp256(kInf) == -1, "nothing measured has no colour");
+  const struct { double pct; int colour; } steps[] = {{0, 236}, {4.99, 236}, {5, 60}, {29.99, 60}, {30, 67}, {59.99, 67}, {60, 110}, {89.99, 110}, {90, 179}, {100, 179}, {1000, 179}};
+  for (const auto& s : steps) check(ramp256(s.pct) == s.colour, "ramp at " + std::to_string(s.pct));
+
+  // clip() keeps the colours, on a whole span and on a cut one.
+  const line painted = {{"▀▀▀▀", tone::text, false, 179, 60}};
+  check(clip(painted, 80)[0].fg256 == 179 && clip(painted, 80)[0].bg256 == 60, "clip keeps a span's colours");
+  check(clip(painted, 2)[0].fg256 == 179 && clip(painted, 2)[0].bg256 == 60, "clip keeps them on a cut span");
+
+  const std::string one = vt_frame({{{"▀", tone::text, false, 179, 60}}}, 1);
+  check(has(one, "\x1b[0;38;5;179;48;5;60m▀"), "both colours are emitted");
+  check(!has(vt_frame({{{"▀", tone::text, false, 179}}}, 1), "48;5"), "no background, none emitted");
+  check(has(vt_frame({{{"x", tone::text, false, -1, 60}}}, 1), "48;5;60m"), "a background alone keeps the tone for its text");
+  check(has(vt_frame({{{"x", tone::watch, true}}}, 1), "\x1b[0;1;38;2;212;184;96m"), "a tone is what it was");
+
+  // Equal neighbours say their colour once. Different ones say only what changed.
+  const auto sgr = [](const std::string& vt) {
+    int n = 0;
+    for (size_t i = vt.find("\x1b["); i != std::string::npos; i = vt.find("\x1b[", i + 1)) {
+      size_t e = i + 2;
+      while (vt[e] == ';' || (vt[e] >= '0' && vt[e] <= '9')) ++e;
+      n += vt[e] == 'm' ? 1 : 0;
+    }
+    return n;
+  };
+  const span a{"▀", tone::text, false, 60, 67}, b{"▀", tone::text, false, 110, 67}, c{"▄", tone::text, false, 60, 67}, plain{" ", tone::text, false};
+  const int base = sgr(vt_frame({{a}}, 1));
+  check(sgr(vt_frame({{a, a, a, a}}, 1)) == base, "equal neighbours are one colour change");
+  check(sgr(vt_frame({{a, c}}, 1)) == base, "a different glyph in the same colours is not a change");
+  check(sgr(vt_frame({{a, b, a}}, 1)) == base + 2, "a different cell is");
+  check(has(vt_frame({{a, b}}, 1), "\x1b[38;5;110m"), "only what changed: the foreground");
+  check(has(vt_frame({{a, {"▀", tone::text, false, 60, 110}}}, 1), "\x1b[48;5;110m"), "only what changed: the background");
+  check(has(vt_frame({{a, plain, a}}, 1), "\x1b[49m "), "a blank cell after a coloured one clears the background: blank is the terminal's");
+  const std::string after_tone = vt_frame({{{"x", tone::watch, true}, a}}, 1);
+  check(has(after_tone, "\x1b[0;38;5;60;48;5;67m"), "leaving bold starts from a reset");
+  check(has(vt_frame({{a, {"x", tone::dim, false}}}, 1), "\x1b[38;2;122;122;122;49m"), "leaving a colour for a tone clears the background");
+  // A blank on the same background needs no foreground.
+  check(sgr(vt_frame({{{"x", tone::dim, false}, plain, {"y", tone::dim, false}}}, 1)) == sgr(vt_frame({{{"x", tone::dim, false}}}, 1)), "spaces do not change the pen");
+  // Rows do not leak: every row starts from a reset, and nothing merges across one.
+  check(sgr(vt_frame({{a}, {a}}, 2)) == base + 2, "a row starts over: its own colour and its own reset");
+  check(vt_clean(vt_frame({{a, b, plain, c}}, 1)), "256-colour sequences are our own");
+}
+
+// Sample at a time on one figure: the guest's busy, so a NaN can be a stale line. times are ms before kNow.
+history bucket_history(const std::vector<std::pair<int64_t, double>>& points) {
+  history h;
+  snapshot s = busy();
+  int seq = 0;
+  for (const auto& [ago, v] : points) {
+    s.unix_ms = kNow - ago;
+    s.cpu.core_pct.assign(20, std::isnan(v) ? 1.0 : v);
+    snapshot t = sample_at(s, s.unix_ms, 40, 1, 1, 1 + seq++ % 7);
+    t.cpu.busy_pct = v;  // sample_at sets its own
+    h.push(t);
+  }
+  return h;
+}
+
+double windows_busy(const history_sample& p) { return p.windows_cpu; }
+
+void check_buckets() {
+  // floor(t / bucket): a sample's bucket never depends on when the frame was drawn.
+  history h = bucket_history({{0, 50}});
+  time_axis a = make_axis(h, kNow, 60000, 60);
+  check(a.bucket_ms == 1000, "60 s over 60 cells is 1 s a cell");
+  const std::vector<double> first = bucket_cells(a, true, windows_busy);
+  check(first[59] == 50 && known_columns(first) == 1, "a sample at the end is the right edge");
+  for (int late = 0; late < 3000; late += 250) {
+    const time_axis moved = make_axis(h, kNow + late, 60000, 60);
+    const int64_t bucket = kNow / 1000, edge = (kNow + late) / 1000;
+    const std::vector<double> cells = bucket_cells(moved, true, windows_busy);
+    check(cells[static_cast<size_t>(59 - (edge - bucket))] == 50, "a sample stays in its bucket, the block moves a whole cell");
+  }
+  a = make_axis(h, kNow, 60000, 43);
+  check(a.bucket_ms == 1396 && a.cells == 43, "a cell of 60 s over 43 is 1.4 s, in whole ms, and the cells cover the span");
+  check(make_axis(h, kNow, 900000, 43).bucket_ms == 20931, "the span is an argument");
+  check(make_axis(history(), 0, 60000, 43).samples.empty(), "no history, no samples");
+  check(make_axis(h, kNow, 60000, 0).cells == 0 && make_axis(h, kNow, 60000, -3).cells == 0, "no cells");
+  check(floor_div(-1, 1000) == -1 && floor_div(-1000, 1000) == -1 && floor_div(999, 1000) == 0, "floor, also below zero");
+
+  // Peak and mean of one bucket: these four share the 4 s bucket starting at bucket_start.
+  const int64_t bucket_start = kNow - kNow % 4000, into = kNow - bucket_start;
+  h = bucket_history({{into, 10}, {into - 1000, 90}, {into - 2000, kNaN}, {into - 3000, 20}});
+  a = make_axis(h, bucket_start + 3000, 60000, 15);
+  check(a.bucket_ms == 4000, "4 s cells");
+  const size_t edge = 14;
+  check(bucket_cells(a, true, windows_busy)[edge] == 90, "a plot's cell is its highest sample, so no spike vanishes");
+  check(bucket_cells(a, false, windows_busy)[edge] == 40, "a heat cell is the mean, and NaN is not in it");
+
+  // Over the scale: clamped in the cell, as bars are.
+  h = bucket_history({{0, 300}});
+  check(bucket_cells(make_axis(h, kNow, 60000, 60), true, windows_busy)[59] == 100, "over 100 clamps in a cell");
+
+  // Cells narrower than a second: what is between two close samples takes the earlier one.
+  h = bucket_history({{1000, 70}, {0, 30}});
+  a = make_axis(h, kNow, 60000, 240);
+  check(a.bucket_ms == 250, "4 cells a second");
+  std::vector<double> cells = bucket_cells(a, true, windows_busy);
+  check(cells[239] == 30 && cells[238] == 70 && cells[236] == 70 && cells[235] == 70 && std::isnan(cells[234]), "a wide terminal does not stripe");
+  h = bucket_history({{1500, 70}, {0, 30}});
+  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy)) == 7, "samples kGapMs apart join");
+  h = bucket_history({{1501, 70}, {0, 30}});
+  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy)) == 2, "samples further apart do not");
+  h = bucket_history({{2000, 70}, {1000, kNaN}, {0, 30}});
+  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy)) == 2, "a sample that measured nothing breaks the join");
+
+  // A gap as wide as a cell shows; a narrower one is inside a cell.
+  h = bucket_history({{40000, 70}, {39000, 70}, {3000, 30}, {2000, 30}});
+  cells = bucket_cells(make_axis(h, kNow, 60000, 60), false, windows_busy);
+  check(std::isnan(cells[40]) && !std::isnan(cells[59 - 3]) && !std::isnan(cells[59 - 40]), "a stall is blank cells, never 0");
+  h = bucket_history({{20000, 70}, {16000, 70}});
+  check(known_columns(bucket_cells(make_axis(h, kNow, 900000, 45), false, windows_busy)) == 1, "a gap inside a 20 s cell is not visible");
+
+  // The left edge: the sample before it joins, and nothing is drawn from it.
+  h = bucket_history({{60500, 70}, {59500, 20}});
+  cells = bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy);
+  check(cells[0] == 70 && cells[1] == 20 && known_columns(cells) == 2, "the left edge starts from the sample before it");
+  h = bucket_history({{61500, 10}, {60500, 70}, {59500, 20}});
+  check(bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy)[0] == 70, "the newest sample before it, not the oldest");
+  h = bucket_history({{120000, 70}, {119000, 70}, {1000, 30}});
+  a = make_axis(h, kNow, 60000, 60);
+  check(a.samples.size() == 2 && a.cell[0] < 0, "one sample before the left edge is kept, no more");
+  check(known_columns(bucket_cells(a, true, windows_busy)) == 1, "and a far one does not reach the axis");
+}
+
 void check_scale() {
   const auto cols = [](double v) { return std::vector<double>(40, v); };
   std::vector<std::string> rows = plot_rows(cols(100), 5);
@@ -1365,6 +1493,8 @@ int main(int argc, char** argv) {
   check_edges();
   check_time_axis();
   check_history_ring();
+  check_vt_colour();
+  check_buckets();
   check_scale();
   check_panels();
   if (!quick) {

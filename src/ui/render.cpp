@@ -19,6 +19,9 @@ constexpr double kMemActPct = 4;
 constexpr double kGpuTempWatch = 83;     // The value sshvllmtop's spec uses
 constexpr double kGpuTempAct = 90;
 constexpr double kPressureWatch = 20;    // PSI some avg10
+constexpr double kQuietPct = 5;          // Heat ramp, below which: above the 1.5625-point tick, so idle does not twinkle
+constexpr double kLowPct = 30;           // kHotPct is its top step
+constexpr double kMidPct = 60;
 
 constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
 constexpr int kLabel = 6;  // Width of "CPU", "MEM", ... at the start of a row
@@ -729,7 +732,7 @@ line clip(const line& in, int width) {
       ++w;
     }
     used += w;
-    if (!text.empty()) out.push_back({std::move(text), p.color, p.bold});
+    if (!text.empty()) out.push_back({std::move(text), p.color, p.bold, p.fg256, p.bg256});
     if (!whole) break;
   }
   return out;
@@ -840,6 +843,89 @@ std::vector<std::string> plot_rows(const std::vector<double>& cols, int rows) {
     }
   }
   return out;
+}
+
+// ---- Time buckets --------------------------------------------------------------------------------
+//
+// docs/design/cpu-panel.md section 5. A cell is a fixed stretch of the clock, floor(t / bucket), so a
+// sample never changes cell and everything moves one cell at a time. Every row of a column uses one
+// axis: cause and effect line up top to bottom.
+
+struct time_axis {
+  int cells = 0;
+  int64_t bucket_ms = 1;
+  std::vector<const history_sample*> samples;  // Those on the axis and the one before, oldest first
+  std::vector<int> cell;                       // The cell of each; below 0 for that one before
+};
+
+[[maybe_unused]] int64_t floor_div(int64_t a, int64_t b) { return a / b - (a % b != 0 && a < 0 ? 1 : 0); }
+
+// The right edge is the bucket end_ms falls in. Whole milliseconds, rounded up, so cells cover the span.
+[[maybe_unused]] time_axis make_axis(const history& h, int64_t end_ms, int64_t span_ms, int cells) {
+  time_axis a;
+  a.cells = std::max(0, cells);
+  if (a.cells == 0) return a;
+  a.bucket_ms = std::max<int64_t>(1, (span_ms + a.cells - 1) / a.cells);
+  const int64_t last = floor_div(end_ms, a.bucket_ms);
+  const sample_range all = h.samples();
+  for (size_t i = 0; i < all.size(); ++i) {
+    const int64_t back = last - floor_div(all[i].unix_ms, a.bucket_ms);  // Cells left of the right edge
+    if (back < 0) break;                                                 // Ahead of the axis, and so is the rest
+    const bool on_axis = back < a.cells;
+    if (!on_axis && !a.samples.empty()) {  // Only the newest sample before the left edge is kept
+      a.samples.back() = &all[i];
+      continue;
+    }
+    a.samples.push_back(&all[i]);
+    a.cell.push_back(on_axis ? a.cells - 1 - static_cast<int>(back) : -1);
+  }
+  return a;
+}
+
+// One figure on an axis, 0-100, NaN where nothing was measured. A bucket holds its highest sample, or the
+// mean of those it has when peak is false, and NaN never counts. A bucket no sample fell in, between two
+// samples close enough to join, takes the earlier one: a cell narrower than a second would stripe.
+template <class Value> std::vector<double> bucket_cells(const time_axis& a, bool peak, Value value) {
+  std::vector<double> out(static_cast<size_t>(a.cells), std::numeric_limits<double>::quiet_NaN());
+  std::vector<int> count(static_cast<size_t>(a.cells), 0);
+  bool joined = false;
+  int from = 0;
+  int64_t before = 0;
+  double held = 0;
+  for (size_t i = 0; i < a.samples.size(); ++i) {
+    const history_sample& p = *a.samples[i];
+    const double raw = value(p);
+    const bool known = std::isfinite(raw);
+    if (known) {
+      const double v = std::clamp(raw, 0.0, 100.0);
+      const int c = a.cell[i];
+      if (joined && p.unix_ms - before <= kGapMs) {
+        for (int k = std::max(0, from + 1); k < c; ++k) out[static_cast<size_t>(k)] = held;
+      }
+      if (c >= 0) {
+        double& cell = out[static_cast<size_t>(c)];
+        int& n = count[static_cast<size_t>(c)];
+        cell = n == 0 ? v : peak ? std::max(cell, v) : cell + v;
+        ++n;
+      }
+      from = c;
+      held = v;
+    }
+    joined = known;
+    before = p.unix_ms;
+  }
+  if (!peak) {
+    for (size_t c = 0; c < out.size(); ++c) {
+      if (count[c] > 1) out[c] /= count[c];
+    }
+  }
+  return out;
+}
+
+// The colour of a heat cell, or -1 for the terminal's own background: nothing measured is no colour at all.
+[[maybe_unused]] int ramp256(double pct) {
+  if (!std::isfinite(pct)) return -1;
+  return pct < kQuietPct ? 236 : pct < kLowPct ? 60 : pct < kMidPct ? 67 : pct < kHotPct ? 110 : 179;
 }
 
 struct panel {
@@ -1373,19 +1459,74 @@ std::string as_text(const std::vector<line>& lines) {
   return out;
 }
 
+namespace {
+
+constexpr const char* kToneColor[] = {
+    "200;200;200", "236;236;236", "122;122;122", "60;60;60",  // text, title, dim, faint
+    "166;196;218", "58;58;58",    "212;184;96",  "224;96;96"};  // bar, track, watch, act
+
+void put_foreground(std::string& out, const span& p) {
+  if (p.fg256 >= 0) {
+    out += "38;5;" + std::to_string(p.fg256);
+  } else {
+    out += "38;2;";
+    out += kToneColor[static_cast<size_t>(p.color)];
+  }
+}
+
+void put_background(std::string& out, int bg256) {
+  out += bg256 >= 0 ? "48;5;" + std::to_string(bg256) : "49";
+}
+
+bool same_foreground(const span& a, const span& b) { return a.fg256 == b.fg256 && (a.fg256 >= 0 || a.color == b.color); }
+
+// Takes the terminal from what pen says it is to what p needs: nothing if they look the same, only the
+// difference if it can, and a reset where bold changes, which has no short way back.
+void put_pen(std::string& out, span& pen, bool started, const span& p) {
+  if (!started || pen.bold != p.bold) {
+    out += p.bold ? "\x1b[0;1;" : "\x1b[0;";
+    put_foreground(out, p);
+    if (p.bg256 >= 0) {
+      out += ';';
+      put_background(out, p.bg256);
+    }
+    out += 'm';
+  } else if (const bool fg = !same_foreground(pen, p), bg = pen.bg256 != p.bg256; fg || bg) {
+    out += "\x1b[";
+    if (fg) put_foreground(out, p);
+    if (fg && bg) out += ';';
+    if (bg) put_background(out, p.bg256);
+    out += 'm';
+  }
+  pen.color = p.color;
+  pen.bold = p.bold;
+  pen.fg256 = p.fg256;
+  pen.bg256 = p.bg256;
+}
+
+}  // namespace
+
 std::string vt_frame(const std::vector<line>& lines, int rows) {
-  static constexpr const char* kColor[] = {
-      "200;200;200", "236;236;236", "122;122;122", "60;60;60",  // text, title, dim, faint
-      "166;196;218", "58;58;58",    "212;184;96",  "224;96;96"};  // bar, track, watch, act
   std::string out = "\x1b[0m";
   int y = 0;
   for (const line& l : lines) {
     if (++y > rows) break;
     out += fmt("\x1b[%d;1H\x1b[2K", y);
+    span pen;  // What the terminal is set to, within this row. Its text is not used
+    bool started = false;
     for (const span& p : l) {
-      out += p.bold ? "\x1b[0;1;38;2;" : "\x1b[0;38;2;";
-      out += kColor[static_cast<size_t>(p.color)];
-      out += 'm';
+      // Spaces show only a background: the foreground stays for whatever comes next.
+      if (started && p.text.find_first_not_of(' ') == std::string::npos) {
+        if (p.bg256 != pen.bg256) {
+          out += "\x1b[";
+          put_background(out, p.bg256);
+          out += 'm';
+          pen.bg256 = p.bg256;
+        }
+      } else {
+        put_pen(out, pen, started, p);
+        started = true;
+      }
       out += p.text;
     }
     out += "\x1b[0m";
