@@ -9,7 +9,6 @@ and `docs/measurable.md` first; two items below are also open questions in `docs
 - Windows GPU holders first, or one holders block under GPU. Today `warp.exe`, the biggest user, is row 6.
 - Show `unattributed` between device totals and the split, with a short source label per figure.
 - About 10 Windows rows, idle virtual NICs hidden, `dxg_denied` dimmed unless GPU use has no visible holder.
-- Merge `agent/verify` when it has work; it had produced nothing at last check.
 - Test the split and `Local Usage` under a real load in the merged build. Check whether WSL memory
   appears under `vmwp.exe`. Only with the user's go-ahead for GPU load.
 
