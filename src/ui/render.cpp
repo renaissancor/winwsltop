@@ -780,7 +780,7 @@ std::vector<line> overall_frame(const snapshot& s, const wsl_view& w, int width,
 
 // ---- Graphs --------------------------------------------------------------------------------------
 //
-// Every graph is one figure on a fixed 0-100 scale, width mapped to the last 60 s. Time places a
+// Every graph is one figure on a fixed 0-100 scale, width mapped to a span of time. Time places a
 // sample, never its index. Graphs are not stacked, summed or overlaid: each names its own source.
 
 constexpr int kGutter = 4;       // "100│"
@@ -795,10 +795,10 @@ constexpr int kSideBySideGpu = 64;  // Those lists are short and stay side by si
 // One value per dot column, oldest on the left, 0-100; NaN where nothing was measured. Columns from the
 // end of the previous sample up to this one take its value, if the previous one is close enough to
 // join and measured this figure. Several samples in one column show the highest.
-std::vector<double> plot_columns(const history& h, double history_sample::*series, int64_t end_ms, int dots) {
+std::vector<double> plot_columns(const history& h, double history_sample::*series, int64_t end_ms, int dots, int64_t span_ms = history::kSpanMs) {
   std::vector<double> cols(static_cast<size_t>(std::max(0, dots)), std::numeric_limits<double>::quiet_NaN());
   if (dots <= 0) return cols;
-  const double end = static_cast<double>(end_ms), span = static_cast<double>(history::kSpanMs);
+  const double end = static_cast<double>(end_ms), span = static_cast<double>(span_ms);
   const auto x_of = [&](double t) { return std::lround((dots - 1) * (1.0 - (end - t) / span)); };
   bool joined = false;
   double before = 0;
@@ -1263,26 +1263,50 @@ line footer(view v, int width, bool hidden) {
 
 }  // namespace
 
+namespace {
+
+float to_float(double v) {  // Not every finite double fits a float, and a value that does not is not a height
+  return std::isfinite(v) && std::fabs(v) < 1e30 ? static_cast<float>(v) : std::numeric_limits<float>::quiet_NaN();
+}
+
+// Fills one side's values: the sample's own, and NaN for every thread it did not read.
+uint16_t put_cores(const std::vector<double>& from, float (&to)[kHistoryThreads]) {
+  const size_t n = std::min<size_t>(from.size(), kHistoryThreads);
+  for (size_t i = 0; i < n; ++i) to[i] = to_float(from[i]);
+  std::fill(to + n, to + kHistoryThreads, std::numeric_limits<float>::quiet_NaN());
+  return static_cast<uint16_t>(n);
+}
+
+}  // namespace
+
 void history::push(const snapshot& s) {
   const int64_t t = s.unix_ms;
   if (t <= 0 || t > kLatestMs) return;  // A sample that cannot be placed in time is a gap
 
   // The wall clock stepped back. interval_s comes from QPC, so the old samples keep their spacing and
   // move with the clock: nothing is lost and nothing lands ahead of "now". After a stall as long as
-  // the span they are off the graph anyway, and must not join the new sample as if continuous.
-  if (!samples_.empty() && t <= samples_.back().unix_ms) {
-    if (s.interval_s >= static_cast<double>(kSpanMs) / 1000.0) {
-      samples_.clear();
+  // what is kept they are off every graph anyway, and must not join the new sample as if continuous.
+  if (count_ > 0 && t <= at(count_ - 1).unix_ms) {
+    if (s.interval_s >= static_cast<double>(kKeepMs) / 1000.0) {
+      count_ = 0;
     } else {
       const double gap_s = s.interval_s > 0 ? s.interval_s : 1.0;
-      const int64_t shift = samples_.back().unix_ms + static_cast<int64_t>(gap_s * 1000.0) - t;
-      for (history_sample& old : samples_) old.unix_ms -= shift;
+      const int64_t shift = at(count_ - 1).unix_ms + static_cast<int64_t>(gap_s * 1000.0) - t;
+      for (size_t i = 0; i < count_; ++i) at(i).unix_ms -= shift;
     }
   }
 
+  if (ring_.empty()) ring_.resize(kCapacity);
+  if (count_ == kCapacity) {
+    first_ = (first_ + 1) % kCapacity;
+    --count_;
+  }
+
+  const float gap = std::numeric_limits<float>::quiet_NaN();
   const double missing = std::numeric_limits<double>::quiet_NaN();
   const gpu_device_view& g = s.gpu_device;
-  history_sample n;
+  ++count_;
+  history_sample& n = at(count_ - 1);  // Written in place: the slot holds an old sample's values until here
   n.unix_ms = t;
   n.gpu_util = g.present && g.has_util ? g.util_pct : missing;
   n.gpu_mem_pct = g.present && g.has_mem && g.mem_total > 0 ? 100.0 * static_cast<double>(g.mem_used) / static_cast<double>(g.mem_total) : missing;
@@ -1294,12 +1318,26 @@ void history::push(const snapshot& s) {
   // until the line turns stale.
   const wsl_view w = read_wsl(s.wsl_json);
   const bool repeated = wsl_line_repeats(s.wsl_json, last_wsl_);
+  repeats_ = repeated ? repeats_ + 1 : 0;
   n.wsl_cpu = w.ok && !repeated && s.wsl_age_s < kStaleS ? w.busy_pct : missing;
-  samples_.push_back(n);
 
-  // One sample older than the span stays, so the left edge is drawn from where that sample ended.
-  while (samples_.size() > kMaxSamples || (samples_.size() > 1 && samples_[1].unix_ms < t - kSpanMs)) {
-    samples_.pop_front();
+  // The large layout of panel 3. Reading a repeated line again is what carries its value.
+  const bool guest = w.ok && s.wsl_age_s < kStaleS && repeats_ <= 1;
+  n.own_kernel = s.vm.vmmem_cores_known ? to_float(s.cpu_derived.own_kernel_pct) : gap;
+  n.vm_cpu = s.vm.vmmem_cores_known ? to_float(s.cpu_derived.vm_cpu_pct) : gap;
+  n.windows_ram = s.memory.total > 0 ? to_float(100.0 * static_cast<double>(s.memory.total - std::min(s.memory.total, s.memory.available)) / static_cast<double>(s.memory.total)) : gap;
+  n.wsl_busy = guest ? to_float(w.busy_pct) : gap;
+  n.wsl_iowait = guest && w.cpu_iowait ? to_float(*w.cpu_iowait) : gap;
+  n.wsl_ram = guest && w.mem_total > 0 ? to_float(100.0 * static_cast<double>(w.mem_total - std::min(w.mem_total, w.mem_available)) / static_cast<double>(w.mem_total)) : gap;
+  n.lost_vcpus = s.lost.state == lost_state::known ? to_float(s.lost.vcpus) : gap;
+  n.windows_threads = put_cores(s.cpu.core_pct, n.windows_core);
+  static const std::vector<double> kNone;
+  n.wsl_threads = put_cores(guest ? w.core_pct : kNone, n.wsl_core);
+
+  // One sample older than what is kept stays, so the left edge is drawn from where that sample ended.
+  while (count_ > 1 && at(1).unix_ms < t - kKeepMs) {
+    first_ = (first_ + 1) % kCapacity;
+    --count_;
   }
 }
 

@@ -1,6 +1,7 @@
 // Checks the renderer on hand-built snapshots. render_check <busy|bare> W H prints a frame as text,
 // the one overall screen with no history; add overall, gpu or cpu for that panel over a made-up minute.
 // render_check <busy|bare> draws on the console until Ctrl+C; add live for the panels, keys 1 2 3 q.
+// render_check quick runs everything but the size sweeps, about a second, for mutating the renderer.
 // Build: scripts/build.sh src/ui/render_check.cpp   (it includes the sources it tests)
 #include "ui/render.cpp"
 #include "ui/history.h"
@@ -457,9 +458,12 @@ void check_time_axis() {
   h.push(sample_at(back, kNow - 2000000, 40, 1, 1));
   check(h.samples().size() == 1, "a backward step after a long stall drops what is off the span");
   check(known_columns(util_columns(h, kNow - 2000000)) == 1, "a long stall does not join as continuous");
-  back.interval_s = 60;
+  back.interval_s = 899;
   h.push(sample_at(back, kNow - 3000000, 40, 1, 1));
-  check(h.samples().size() == 1, "a stall of exactly the span is off the graph too");
+  check(h.samples().size() == 2 && h.samples()[1].unix_ms - h.samples()[0].unix_ms == 899000, "a stall under what is kept shifts");
+  back.interval_s = 900;
+  h.push(sample_at(back, kNow - 4000000, 40, 1, 1));
+  check(h.samples().size() == 1, "a stall of exactly what is kept is off every graph too");
 
   // Gaps, at the threshold.
   h = history();
@@ -538,10 +542,121 @@ void check_time_axis() {
 
   h = history();
   for (int i = 0; i < 2000; ++i) h.push(sample_at(base, kNow + i * 1000, 40, 1, 1));
-  check(h.samples().size() == 62, "the ring keeps 60 s and the sample before them");
+  check(h.samples().size() == 901 && h.samples().back().unix_ms - h.samples().front().unix_ms == 900000, "the ring keeps 15 minutes, both ends in");
   h = history();
   for (int i = 0; i < 5000; ++i) h.push(sample_at(base, kNow + i, 40, 1, 1));
-  check(h.samples().size() <= 600, "the ring is bounded however fast it is pushed");
+  check(h.samples().size() == 901, "the ring is bounded however fast it is pushed");
+}
+
+// What the large layout of panel 3 reads, sample by sample. Everything here is by value: no frame draws it yet.
+void check_history_ring() {
+  snapshot base = busy();
+  const auto at = [&](snapshot s, int64_t t, double guest_busy) {
+    s = sample_at(s, t, 40, 1, 1, guest_busy);
+    return s;
+  };
+
+  // Retention and the drawing span are two things.
+  history h;
+  for (int age = 400; age >= 0; --age) h.push(sample_at(base, kNow - age * 1000, 40, 1, 1));
+  check(h.samples().size() == 401, "400 s are all kept");
+  check(known_columns(util_columns(h)) <= kDots && !std::isnan(util_columns(h)[0]), "60 s still fill a 60 s graph");
+  check(plot_columns(h, &history_sample::gpu_util, kNow, kDots, 300000)[0] == 40, "the span is an argument");
+  check(std::isnan(plot_columns(h, &history_sample::gpu_util, kNow, kDots, 900000)[kDots / 2 - 2]), "and 400 s of 900 fill under half of it");
+  h = history();
+  for (int age = 2000; age >= 0; age -= 100) h.push(sample_at(base, kNow - age * 1000, 40, 1, 1));
+  check(h.samples().size() == 11 && h.samples().front().unix_ms == kNow - 1000000, "kept for 900 s, and the one sample before them");
+
+  // The slots never move once the first push has sized the ring.
+  h = history();
+  h.push(sample_at(base, kNow, 40, 1, 1));
+  const history_sample* const ring = &h.samples().front();
+  for (int i = 1; i < 3000; ++i) h.push(sample_at(base, kNow + i * 1000, 40, 1, 1));
+  bool same_block = h.samples().size() == 901;
+  for (const history_sample& p : h.samples()) same_block = same_block && &p >= ring && &p < ring + 901;
+  check(same_block, "a full ring writes over its own slots: nothing is allocated per sample");
+
+  // Per-thread values, for each side, and NaN past what the sample read.
+  h = history();
+  h.push(at(base, kNow, 11));
+  const history_sample one = h.samples().back();
+  check(one.windows_threads == 20 && one.wsl_threads == 20, "both sides' thread counts");
+  check(one.windows_core[3] == 96.0f && one.wsl_core[6] == 97.0f, "both sides' per-thread values");
+  check(std::isnan(one.windows_core[20]) && std::isnan(one.wsl_core[63]), "past the count is NaN, not 0");
+  check(one.wsl_busy == 11.0f && !std::isnan(one.wsl_ram) && !std::isnan(one.windows_ram), "the guest's busy and both sides' RAM");
+
+  // A slot written over keeps nothing of what was there.
+  snapshot wide = base;
+  wide.cpu.core_pct.assign(64, 50.0);
+  snapshot narrow = base;
+  narrow.cpu.core_pct.assign(2, 50.0);
+  h = history();
+  for (int i = 0; i < 901; ++i) h.push(sample_at(wide, kNow + i * 1000, 40, 1, 1));
+  h.push(sample_at(narrow, kNow + 901000, 40, 1, 1));
+  check(h.samples().back().windows_threads == 2 && std::isnan(h.samples().back().windows_core[2]) && std::isnan(h.samples().back().windows_core[63]), "a reused slot keeps no old thread");
+  snapshot many = base;
+  many.cpu.core_pct.assign(128, 50.0);
+  h = history();
+  h.push(many);
+  check(h.samples().back().windows_threads == 64 && h.samples().back().windows_core[63] == 50.0f, "past 64 threads a sample keeps 64");
+
+  // Lanes: unknown is NaN, and vmmem_cores_known decides, not the number.
+  snapshot lanes = base;
+  lanes.vm.vmmem_cores_known = true;
+  lanes.cpu_derived.own_kernel_pct = 6;
+  lanes.cpu_derived.vm_cpu_pct = 29;
+  lanes.lost = {lost_state::known, 13.96};
+  lanes.wsl_json.insert(lanes.wsl_json.size() - 1, R"(,"cpu_split":{"user":99,"sys":1,"iowait":3})");
+  h = history();
+  h.push(lanes);
+  check(h.samples().back().own_kernel == 6.0f && h.samples().back().vm_cpu == 29.0f && h.samples().back().wsl_iowait == 3.0f, "the lanes' figures");
+  check(std::fabs(h.samples().back().lost_vcpus - 13.96f) < 0.001f, "the lost figure, in vCPUs");
+  lanes.vm.vmmem_cores_known = false;
+  lanes.lost = {lost_state::guest_under_99, 13.96};
+  lanes.wsl_json = base.wsl_json;
+  h = history();
+  h.push(lanes);
+  check(std::isnan(h.samples().back().own_kernel) && std::isnan(h.samples().back().vm_cpu), "vmmem_cores_known false is a gap, whatever the figures say");
+  check(std::isnan(h.samples().back().lost_vcpus), "only the known state has a lost figure");
+  check(std::isnan(h.samples().back().wsl_iowait), "no cpu_split, no iowait");
+
+  snapshot failed = base;
+  failed.cpu = {};
+  failed.memory = {};
+  h = history();
+  h.push(failed);
+  check(h.samples().back().windows_threads == 0 && std::isnan(h.samples().back().windows_core[0]) && std::isnan(h.samples().back().windows_ram), "a failed read keeps no 0");
+
+  // A repeated line carries for one sample in these fields, and is still a gap in the old one.
+  h = history();
+  h.push(at(base, kNow - 3000, 11));
+  h.push(at(base, kNow - 2000, 11));
+  check(h.samples().back().wsl_busy == 11.0f && h.samples().back().wsl_core[6] == 97.0f && !std::isnan(h.samples().back().wsl_ram), "one repeat carries the last value");
+  check(std::isnan(h.samples().back().wsl_cpu), "and is still a gap for the small layout and panel 2");
+  h.push(at(base, kNow - 1000, 11));
+  check(std::isnan(h.samples().back().wsl_busy) && std::isnan(h.samples().back().wsl_core[6]) && h.samples().back().wsl_threads == 0 && std::isnan(h.samples().back().wsl_ram), "two repeats in a row are a gap");
+  h.push(at(base, kNow, 12));
+  check(h.samples().back().wsl_busy == 12.0f, "a new line starts again");
+  h.push(at(base, kNow + 1000, 12));
+  check(h.samples().back().wsl_busy == 12.0f, "and one repeat after it carries again");
+
+  snapshot stale = at(base, kNow, 13);
+  stale.wsl_age_s = 5;
+  h = history();
+  h.push(stale);
+  check(std::isnan(h.samples().back().wsl_busy) && h.samples().back().wsl_threads == 0, "a stale line is a gap here too");
+  stale.wsl_json = "{\"schema\":1,\"busy";
+  stale.wsl_age_s = 0.1;
+  h = history();
+  h.push(stale);
+  check(std::isnan(h.samples().back().wsl_busy) && h.samples().back().wsl_threads == 0, "an unreadable line is a gap");
+
+  snapshot huge = base;
+  huge.cpu.core_pct[0] = 1e308;
+  huge.cpu.core_pct[1] = kInf;
+  h = history();
+  h.push(huge);
+  check(std::isnan(h.samples().back().windows_core[0]) && std::isnan(h.samples().back().windows_core[1]), "what a float cannot hold is not a height");
 }
 
 void check_scale() {
@@ -1193,6 +1308,7 @@ void check_console() {
 }  // namespace
 
 int main(int argc, char** argv) {
+  const bool quick = argc == 2 && strcmp(argv[1], "quick") == 0;
 #ifdef _WIN32
   { console c; int w = 0, h = 0; check(!c.is_terminal() || c.size(w, h), "console opens"); }
 #endif
@@ -1214,7 +1330,7 @@ int main(int argc, char** argv) {
     }
     return 0;
   }
-  if (argc == 2) {  // A frame on the real console, until Ctrl+C
+  if (argc == 2 && !quick) {  // A frame on the real console, until Ctrl+C
     const snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
     console c;
     int w = 131, h = 40;
@@ -1241,16 +1357,21 @@ int main(int argc, char** argv) {
 #endif
   check_width();
   check_reader();
-  check_size(busy(), "busy");
-  check_size(bare(), "bare");
+  if (!quick) {
+    check_size(busy(), "busy");
+    check_size(bare(), "bare");
+  }
   check_honesty();
   check_edges();
   check_time_axis();
+  check_history_ring();
   check_scale();
   check_panels();
-  check_denied_note();
-  check_holder_wording();
-  check_sizes_with_history();
+  if (!quick) {
+    check_denied_note();
+    check_holder_wording();
+    check_sizes_with_history();
+  }
   printf("%d checks, %d failed\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }
