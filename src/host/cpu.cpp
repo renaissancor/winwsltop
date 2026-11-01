@@ -37,8 +37,8 @@ bool cpu_collector::sample(cpu_view& out) {
   prev_ = std::move(now);
   if (have_prev) out.busy_pct = sum_total ? 100.0 * (1.0 - static_cast<double>(sum_idle) / static_cast<double>(sum_total)) : 0.0;
   // Ledger: "User and kernel time come from the call `cpu.cpp` already makes" and "The VM's time is
-  // Windows kernel time". Over busy's own sum_total, summed first: one LP's kernel less idle can go below
-  // zero, so kernel is only subtracted across the whole machine, and clamped there. NaN stays on priming.
+  // Windows kernel time". Over busy's own sum_total: kernel is subtracted across the whole machine, after
+  // summing, and clamped there, because the deltas are unsigned. NaN stays on priming.
   if (have_prev && sum_total) {
     const double total = static_cast<double>(sum_total);
     const uint64_t not_kernel = sum_user + sum_idle;

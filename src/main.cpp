@@ -62,7 +62,7 @@ void print_help(FILE* to) {
     "\n"
     "usage: winwsltop [--text | --once | --record N] [--distro NAME]\n"
     "\n"
-    "  (no option)    live screen: 1 overall, 2 GPU, 3 CPU, q quit\n"
+    "  (no option)    live screen: 1 overall, 2 GPU, 3 CPU, t span, q quit\n"
     "  --text         print one text frame and exit\n"
     "  --once         print one JSON line and exit; about 3 s, about 8 s if WSL does not answer\n"
     "  --record N     print N JSON lines, one a second, N at least 1\n"
@@ -130,25 +130,36 @@ int main(int argc, char** argv) {
   wwt::console* screen = run == mode::live ? new wwt::console : nullptr;  // restores the terminal when deleted
   wwt::history hist;
   wwt::view panel = wwt::view::overall;
+  int64_t span = wwt::kSpansMs[0];
   bool have_frame = false, quit = false;  // nothing to draw until the first sample after priming
   const auto draw = [&] {
     int w = 131, h = 40;
     screen->size(w, h);
     // A redirected live run has no panels to switch, so it gets the plain frame.
-    if (screen->is_terminal()) screen->draw(wwt::render(s, w, h, unix_ms(), &hist, panel));
+    if (screen->is_terminal()) {
+      wwt::render_options o;
+      o.span_ms = span;
+      o.span_key = true;
+      screen->draw(wwt::render(s, w, h, unix_ms(), &hist, panel, o));
+    }
     else screen->draw(wwt::render(s, w, h, unix_ms()));
   };
   // Called inside the wait, so a switch redraws the last snapshot at once instead of up to a second later.
   const auto handle_keys = [&] {
     if (!screen) return;
     const wwt::view was = panel;
+    const int64_t was_span = span;
     for (char key = screen->poll_key(); key != 0; key = screen->poll_key()) {
       if (key == '1') panel = wwt::view::overall;
       else if (key == '2') panel = wwt::view::gpu;
       else if (key == '3') panel = wwt::view::cpu;
-      else if (key == 'q') quit = true;
+      else if (key == 't') {
+        int w = 131, h = 40;
+        screen->size(w, h);
+        if (have_frame && wwt::span_key_acts(s, hist, panel, w, h)) span = wwt::next_span(span);
+      } else if (key == 'q') quit = true;
     }
-    if (panel != was && have_frame && !quit && screen->is_terminal()) draw();
+    if ((panel != was || span != was_span) && have_frame && !quit && screen->is_terminal()) draw();
   };
   for (int i = 0; run == mode::live || i <= lines; ++i) {  // The first pass only primes the deltas.
     if (i) {

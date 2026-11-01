@@ -168,12 +168,13 @@ the panel 2 VRAM grammar: `41.2/63.7 GiB  free 22.5 GiB`, and `left_tone`.
   busy at 95% or more, for the case replay does not reach; a guest line under `kStaleS` old with at most one
   consecutive repeat; 5 finite samples since the last reset. Intervals up to 2500 ms are kept, wider than
   `kGapMs`, because the loop itself runs late under contention. Otherwise `n/a`, drawn as a gap, never 0.
-- **Outside the evidence:** `.wslconfig` vCPU limits, and memory, disk or GPU load. Named in the README, and
-  the reason a gated `n/a` is common. A real game beside a build may read `n/a`, which is honest.
+- **Outside the evidence:** memory, disk or GPU load, named in the README (TARGET, commit 8). A guest whose
+  vCPU count differs from Windows', as a `.wslconfig` limit gives, is gated out: state `vcpus_differ`, screen
+  `lost CPU n/a, vCPUs differ`. Gated `n/a` is common, and honest. A real game beside a build may read `n/a`, which is honest.
 - **Floor:** under 1 vCPU it prints `<1` and draws quiet. `wsl-20` alone read 0.354 to 0.767 with nothing
   competing. It is a judgement, not a clean noise floor: the tail below passes it with nothing competing.
 - **Lag:** a 5-sample mean, so the figure lags. After a Windows load stops under a full guest it fades over
-  about 7 samples (`lost_check` pins them). Stated in the README.
+  about 7 samples (`lost_check` pins them). Stated in `docs/json-output.md`, and in the README at commit 8.
 - **Tone:** `watch` from 1 vCPU in the head, amber in the lane, because the row the panel exists for must
   not look calmer than a healthy busy machine.
 - **Always labelled `inferred`** in the head and in JSON; in the lane the gutter's `│` becomes `≈`.

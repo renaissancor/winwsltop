@@ -37,7 +37,7 @@ WSL_DATA = {"schema", "distro", "kernel", "unix_s", "mono_s", "busy_pct", "core_
             "steal_pct", "memory", "pressure", "process_count", "processes", "dxg_pids", "dxg_denied", "cost_ms"}
 WSL_SPLIT = {"user", "sys", "iowait"}
 WSL_PROCESS = {"pid", "name", "state", "rss", "cores", "threads", "on_gpu"}
-LOST_STATES = {"collecting", "no_data", "guest_under_99", "windows_under_95", "known"}
+LOST_STATES = {"collecting", "no_data", "guest_under_99", "windows_under_95", "vcpus_differ", "known"}
 
 
 def fail(why):

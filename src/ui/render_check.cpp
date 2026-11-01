@@ -62,7 +62,7 @@ snapshot busy() {
   for (int i = 0; i < 20; ++i) s.cpu.core_pct.push_back(i == 3 ? 96.0 : (i * 11) % 55 + 3.0);
   s.cpu.busy_pct = 38.2;
   s.memory = {68449929216, 39 * kG, 31 * kG, 80 * kG, 12 * kG};
-  s.vm = {7120, 11736, 10898438144, 3.1};
+  s.vm = {7120, 11736, 10898438144, 3.1, true};
   const auto proc = [&](uint32_t pid, const char* name, double cores, uint64_t ws) {
     process_row p;
     p.pid = pid; p.name = name; p.cores = cores; p.working_set = ws;
@@ -1964,7 +1964,7 @@ void check_lost_text() {
   check(third(s, h) == "load 19.8 · lost CPU n/a, Windows under 95%", "under 95% Windows busy, n/a and why");
   s.lost = {lost_state::no_data, kNaN};
   check(third(s, h) == "load 19.8 · lost CPU n/a", "with a stale line or a reset, n/a");
-  for (const lost_state state : {lost_state::collecting, lost_state::guest_under_99, lost_state::windows_under_95, lost_state::no_data}) {
+  for (const lost_state state : {lost_state::collecting, lost_state::guest_under_99, lost_state::windows_under_95, lost_state::vcpus_differ, lost_state::no_data}) {
     s.lost = {state, 3.5};  // Only known has a figure, whatever vcpus holds
     const std::string t = as_text(large(s, h));
     check(!has(t, "WSL short") && !has(t, "inferred"), "a gated lost prints no figure and no claim");
@@ -1972,7 +1972,13 @@ void check_lost_text() {
   s.lost = {lost_state::known, kNaN};
   check(!has(as_text(large(s, h)), "WSL short"), "known with no figure is no figure");
   s = contended(20, 4);
-  s.lost = {lost_state::no_data, kNaN};
+  {
+    snapshot first_sample = busy();
+    first_sample.vm.vmmem_cores_known = false;
+    check(has(as_text(render(first_sample, 131, 40)), "vmmemWSL 10.1 GiB, n/a cores"), "the overall screen never prints an unmeasured 0 as cores");
+    check(has(as_text(render(busy(), 131, 40)), "vmmemWSL 10.1 GiB, 3.10 cores"), "and prints a measured one");
+  }
+  s.lost = {lost_state::vcpus_differ, kNaN};
   check(has(third(s, h), "lost CPU n/a, vCPUs differ"), "a guest with fewer vCPUs than Windows has threads is outside the evidence");
 
   // When a load stops the figure is gone at once and the lane holds nothing new: never a 0.
@@ -2276,6 +2282,7 @@ void check_no_sums() {
   s.cpu.user_pct = 21;
   s.cpu_derived = {13, 4, 7, 3};
   s.vm.vmmem_cores = 2.60;
+  s.vm.vmmem_cores_known = true;
   s.memory.total = 40 * kG;
   s.memory.available = 30 * kG;
   guest_figures g;

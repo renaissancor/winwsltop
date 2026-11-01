@@ -512,7 +512,7 @@ void vm_row(std::vector<line>& out, const snapshot& s) {
   if (s.vm.vmmem_pid == 0) {
     r.add("vmmemWSL not found on Windows", tone::watch);
   } else {
-    r.add(fmt("vmmemWSL %.1f GiB, %.2f cores", gib(s.vm.vmmem_working_set), s.vm.vmmem_cores));
+    r.add(fmt("vmmemWSL %.1f GiB, ", gib(s.vm.vmmem_working_set)) + (s.vm.vmmem_cores_known ? fmt("%.2f cores", s.vm.vmmem_cores) : "n/a cores"));  // Without the flag, an unmeasured 0
     r.add("   Windows' view, included in WINDOWS", tone::dim);
   }
   out.push_back(r);
@@ -1666,7 +1666,7 @@ void short_head(row& r, const snapshot& s, const wsl_view& w, int col) {
   const std::string load = "load " + number(or_nan(w.load[0]), "%.1f");
   if (s.lost.state != lost_state::known || !std::isfinite(s.lost.vcpus)) {
     r.add(load);
-    r.add_if_fits(w.core_pct.size() != s.cpu.core_pct.size() && !s.cpu.core_pct.empty() ? " · lost CPU n/a, vCPUs differ" : lost_reason(s.lost.state), col);
+    r.add_if_fits(s.lost.state == lost_state::vcpus_differ ? " · lost CPU n/a, vCPUs differ" : lost_reason(s.lost.state), col);
     return;
   }
   const bool real = s.lost.vcpus >= kLostFloor;  // watch from here: this row must not look calmer than a healthy busy machine

@@ -51,9 +51,10 @@ struct feed {
     guest(100);
   }
   // One sample as main.cpp would see it: a new guest line unless repeat says otherwise.
+  int vcpus = 20;
   void guest(double busy) {
     std::string cores;
-    for (int i = 0; i < 20; ++i) cores += i ? ",0" : "0";
+    for (int i = 0; i < vcpus; ++i) cores += i ? ",0" : "0";
     s.wsl_json = "{\"schema\":1,\"mono_s\":" + std::to_string(++line) + ",\"busy_pct\":" + std::to_string(busy) +
                  ",\"core_pct\":[" + cores + "],\"memory\":{}}";
   }
@@ -255,7 +256,61 @@ void record_cases() {
   f.fill(4);
   line = to_json_line(f.s);
   check(line.find("\"lost_cpu_inferred\":{\"state\":\"known\",\"vcpus\":14.000,\"source\":\"inferred\"}") != std::string::npos, "known in the record");
-  check(line.find("\"source\":\"derived\"") != std::string::npos, "cpu_derived says derived");
+  const size_t derived = line.find("\"cpu_derived\":{");
+  check(derived != std::string::npos && line.find("\"source\":\"derived\"", derived) < line.find('}', derived), "cpu_derived's own source says derived");
+
+  const auto named = [](feed& g, const char* state) {
+    return to_json_line(g.s).find(std::string("\"lost_cpu_inferred\":{\"state\":\"") + state + "\"") != std::string::npos;
+  };
+  feed under; under.fill(5, 98);
+  check(under.s.lost.state == lost_state::guest_under_99 && named(under, "guest_under_99"), "guest_under_99 by name");
+  feed quiet; quiet.s.cpu.busy_pct = 90; quiet.fill(5);
+  check(quiet.s.lost.state == lost_state::windows_under_95 && named(quiet, "windows_under_95"), "windows_under_95 by name");
+  feed none; none.s.wsl_age_s = 60; none.step();
+  check(none.s.lost.state == lost_state::no_data && named(none, "no_data"), "no_data by name");
+  feed few; few.vcpus = 4; few.step();
+  check(few.s.lost.state == lost_state::vcpus_differ && named(few, "vcpus_differ"), "vcpus_differ by name");
+}
+
+// The window and a reset, with values that change, so a stale value in a mean shows.
+void window_cases() {
+  {
+    feed f;
+    f.fill(5);
+    check(near(f.s.lost.vcpus, 14, 1e-9), "20 less 6");
+    f.s.wsl_age_s = 60;
+    f.step();
+    f.s.wsl_age_s = 0.5;
+    f.s.vm.vmmem_cores = 2;
+    f.fill(4);
+    check(f.s.lost.state == lost_state::collecting, "a reset empties every window, so 4 are not enough");
+    f.step();
+    check(f.s.lost.state == lost_state::known && near(f.s.lost.vcpus, 18, 1e-9), "nothing from before the reset is in the mean");
+  }
+  {
+    feed f;
+    for (const double busy : {99.0, 100.0, 99.0, 100.0, 99.0}) f.step(busy);
+    check(f.s.lost.state == lost_state::known && near(f.s.lost.vcpus, 19.88 - 6, 1e-9), "the guest side is a mean, not the newest");
+  }
+  {
+    feed f;
+    f.vcpus = 4;
+    for (int i = 0; i < 8; ++i) check(f.step() == lost_state::vcpus_differ, "4 vCPUs on 20 logical CPUs never count");
+    check(std::isnan(f.s.lost.vcpus), "and have no figure");
+    f.vcpus = 20;
+    f.fill(4);
+    check(f.s.lost.state == lost_state::collecting, "a change of vCPUs starts the count again");
+    f.step();
+    check(f.s.lost.state == lost_state::known && near(f.s.lost.vcpus, 14, 1e-9), "with nothing from the other count in the mean");
+  }
+  {
+    feed f;
+    f.fill(5);
+    check(std::isfinite(f.s.cpu_derived.vm_ready_threads_mean), "VM ready mean");
+    f.s.vm.vmmem_cores_known = false;
+    f.step();
+    check(std::isnan(f.s.cpu_derived.vm_ready_threads_mean), "a VM on its first sample starts the ready mean again");
+  }
 }
 
 // ---- The replay -----------------------------------------------------------------------------------
@@ -385,7 +440,7 @@ void replay_cases(const std::string& dir) {
 
   // A Windows load that stops while the guest stays full. Windows stays at 100, so the gate holds, and the
   // figure falls as the contended samples leave the mean: the lag, pinned here so a change shows.
-  // Not "no firing": contracts/core.md, open questions.
+  // Not "no firing": contracts/core.md, decision log.
   std::vector<double> tail;
   for (const replayed& r : rows) if (r.t >= m.at("both-win-20-end") && r.t < m.at("both-after-end")) tail.push_back(r.vcpus);
   printf("  after both-win-20 stops, guest still full:");
@@ -446,6 +501,7 @@ int main(int argc, char** argv) {
   gate_cases();
   derived_cases();
   record_cases();
+  window_cases();
   replay_cases(argv[1]);
   printf("lost_check: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed ? 1 : 0;

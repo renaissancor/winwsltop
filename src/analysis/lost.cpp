@@ -15,7 +15,7 @@ namespace {
 constexpr double kGuestBusyMin = 99;
 constexpr double kWindowsBusyMin = 95;
 // Wider than the graph's kGapMs: a loop short of CPU runs late in exactly the case this figure exists for,
-// and experiment 05 has a 1.503 s interval inside both-win-20. Past a skipped second the window is stale.
+// as both-win-20 in experiment 05 shows. Past a skipped second the window is stale.
 constexpr double kLostGapMs = 2500;
 
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
@@ -50,10 +50,8 @@ void lost_tracker::update(snapshot& s) {
   const bool new_vm = s.vm.vmmem_pid != vm_pid_;
   vm_pid_ = s.vm.vmmem_pid;
   if (gap) ready_.clear();
-  if (gap || new_vm) {
-    vm_ready_.clear();
-    clear_lost();
-  }
+  if (gap || new_vm) clear_lost();
+  if (gap || new_vm || !s.vm.vmmem_cores_known) vm_ready_.clear();  // A reused pid is a new VM
 
   // Derived. std::max would turn a NaN into 0, so each is guarded rather than clamped blind.
   cpu_derived_view& d = s.cpu_derived;
@@ -79,6 +77,11 @@ void lost_tracker::update(snapshot& s) {
   if (!line_ok || !windows_ok || !vm_ok || repeats_ > 1) {
     clear_lost();
     s.lost.state = lost_state::no_data;
+    return;
+  }
+  if (w.core_pct.size() != logical) {  // Every contended case had as many vCPUs as logical CPUs
+    clear_lost();
+    s.lost.state = lost_state::vcpus_differ;
     return;
   }
   if (repeated && guest_busy_.empty()) return;  // A value from before the reset: nothing to carry

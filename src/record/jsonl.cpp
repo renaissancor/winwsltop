@@ -50,6 +50,7 @@ std::string state_name(lost_state v) {
     case lost_state::collecting: return "collecting";
     case lost_state::guest_under_99: return "guest_under_99";
     case lost_state::windows_under_95: return "windows_under_95";
+    case lost_state::vcpus_differ: return "vcpus_differ";
     case lost_state::known: return "known";
     case lost_state::no_data: break;
   }

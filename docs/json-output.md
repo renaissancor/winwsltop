@@ -61,16 +61,17 @@ work". That is one trial per case.
 | `collecting` | `null` | Fewer than 5 usable samples since the last reset. `--once` takes one sample, so it is never `known` |
 | `guest_under_99` | `null` | 5 samples, and at least one guest busy under 99%. This is the usual state of a machine that isn't saturated |
 | `windows_under_95` | `null` | 5 samples, and the newest Windows busy under 95% |
-| `no_data` | `null` | This sample can't count, and the count restarts: no guest line under 5 s old that parses, the same line a second time in a row, or `vm.vmmem_cores` or Windows CPU unread |
+| `vcpus_differ` | `null` | The guest doesn't have one vCPU per Windows logical CPU, as a `.wslconfig` limit gives. Outside the evidence, and it restarts the count |
+| `no_data` | `null` | This sample can't count, and the count restarts: no guest line under 5 s old that parses, the same line a third time in a row, or `vm.vmmem_cores` or Windows CPU unread |
 
 The gate, all of it on every sample: 5 finite samples since the last reset, all 5 guest busy at 99% or more,
 the newest Windows busy at 95% or more, `vmmem_cores_known` true on all 5, a guest line under 5 s old, and no
 more than one repeated guest line in a row. A repeated line counts as a sample carrying the guest's last
-value, because under contention the two 1 Hz loops slip. A reset is a gap of more than 1.5 s between samples, a new
-`vmmem_pid`, a stale or unreadable line, or anything else `no_data` lists.
+value, because under contention the two 1 Hz loops slip. A reset is more than 2.5 s between samples, a new
+`vmmem_pid`, a stale or unreadable line, a vCPU count that differs from Windows', or anything else `no_data` lists.
 
-**It lags.** A 5-sample mean takes about 5 s to rise and as long to fall. A Windows load that stops
-while WSL stays at 100% still reads as lost for several seconds, because Windows stays busy with the VM and the
+**It lags.** A 5-sample mean takes about 5 s to rise. A Windows load that stops
+while WSL stays at 100% still reads as lost for about 7 s, because Windows stays busy with the VM and the
 gate holds.
 
 **Below 1 is noise.** A full guest with nothing competing reads above 0: Windows' own work shares the same
@@ -100,7 +101,7 @@ contended case had WSL at full load on a machine with no such limit, under CPU l
 | `gpu_memory` | Per-process WDDM accounting: `pid`, `dedicated`, `shared`, `local`. `local` is the closest per-process figure, and `dedicated` is not VRAM in use |
 | `gpu_split` | Derived from the engine counters: `valid`, `vm_pct`, `windows_pct`, `vm_local`, `windows_local`, `source` |
 | `lost_cpu_inferred` | Inferred, see "The lost CPU figure": `state`, `vcpus`, `source`. `source` is always `inferred` |
-| `cpu_derived` | Worked out from Windows' own figures, `source` always `derived`, each value `null` when unknown. `vm_cpu_pct` is `vmmem_cores` as percent of the logical CPUs. `own_kernel_pct` is `cpu.kernel_pct` less that, clamped at 0, so `user_pct`, `own_kernel_pct` and `vm_cpu_pct` add to `busy_pct` unless the clamp acts. `ready_threads_mean` and `vm_ready_threads_mean` are means of the last 5 samples, `null` until 5 known samples in a row exist, and after a gap of more than 1.5 s. `vm_ready_threads_mean` also starts again for a new `vmmem_pid` |
+| `cpu_derived` | Worked out from Windows' own figures, `source` always `derived`, each value `null` when unknown. `vm_cpu_pct` is `vmmem_cores` as percent of the logical CPUs. `own_kernel_pct` is `cpu.kernel_pct` less that, clamped at 0, so `user_pct`, `own_kernel_pct` and `vm_cpu_pct` add to `busy_pct` unless the clamp acts. `ready_threads_mean` and `vm_ready_threads_mean` are means of the last 5 samples, `null` until 5 known samples in a row exist, and after more than 2.5 s between samples. `vm_ready_threads_mean` also starts again for a new `vmmem_pid` |
 | `wsl` | `age_s`, `restarts`, `clock_known`, `clock_offset_s` (Windows unix time minus WSL's), and `data` |
 | `wsl.data` | The collector's line, or `null`. Its fields are in [`PROTOCOL.md`](../wsl-collector/PROTOCOL.md) |
 | `cost_ms` | Time each collector took this sample: `cpu`, `memory`, `processes`, `disk`, `net`, `gpu`, `gpu_device`, `gpu_memory` |

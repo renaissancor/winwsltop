@@ -107,6 +107,7 @@ enum class lost_state {
   no_data,           // This sample cannot count, so it reset: no fresh guest line, a second repeat in a row, or the VM or Windows unread
   guest_under_99,    // 5 samples, and at least one guest busy under 99%: outside the evidence
   windows_under_95,  // 5 samples, and the newest Windows busy under 95%: a load has stopped
+  vcpus_differ,      // The guest's vCPUs are not Windows' logical CPUs: outside the evidence, and it resets
   known,
 };
 

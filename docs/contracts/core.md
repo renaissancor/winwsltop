@@ -53,7 +53,7 @@ documents true.
 - `winwsltop --once` prints one line that a JSON parser accepts, and every key is in
   `docs/json-output.md` (`scripts/check.sh --windows`).
 - `scripts/lost_check.cpp`, built and run by `scripts/check.sh --windows`: each clause of the `lost` gate by
-  hand, `cpu_derived`, the record's labels, and a replay through `lost_tracker` of the fixture
+  hand, a reset with changing values, `cpu_derived`, every state's and `source` label in the record, and a replay through `lost_tracker` of the fixture
   `experiments/05-cpu-contention/results/run1-record-2026-11-01.txt`, with
   `experiments/05-cpu-contention/results/run1-marks-2026-11-01.txt` to place each case. It starts no load.
 
@@ -164,11 +164,13 @@ documents true.
 - 2026-11-01. `lost_check` is `scripts/lost_check.cpp`, not a `src/analysis/` file, because `msvc.cmd` builds that folder into
   the program. The slim record has no `vmmem_cores_known`, `schema`, `memory`, `kernel_pct` or ready counts: the first
   is rebuilt from the pid, the next two put back empty, and the rest are checked by hand-built cases only. The
-  10 s rule is asserted for the stops of `wsl-20`, `win-20` and `both-after`; `both-win-20`'s stop is pinned, see open questions.
+  10 s rule is asserted for the stops of `wsl-20`, `win-20` and `both-after`; `both-win-20`'s stop is pinned, see the decision log.
 - 2026-11-01. `lost` after a Windows load stops while the guest stays full fades over about 7 samples:
   13.534, 11.066, 8.708, 5.870, 3.219, 1.502, 1.211, 0.874 in `both-after`. Accepted as the lag of a 5-sample
-  mean, stated in the README, with no further clause: the guest really is full there, and a clause tuned to
+  mean, stated in `docs/json-output.md` and, as a TARGET of commit 8, the README, with no further clause: the guest really is full there, and a clause tuned to
   one trial would not be evidence. `lost_check` pins these values.
 - 2026-11-01. `lost` tolerates an interval up to 2500 ms, wider than the graph's `kGapMs`. A loop short of CPU
   runs late in exactly the case the figure exists for: the 1.503 s interval in `both-win-20` cost 4 samples
   mid-contention.
+- 2026-11-01. `lost` needs as many guest vCPUs as Windows logical CPUs, state `vcpus_differ`: the audit showed
+  a 4 vCPU guest reading `known` on 20 logical CPUs, against the design's own edge of the evidence.
