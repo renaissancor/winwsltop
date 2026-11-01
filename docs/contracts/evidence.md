@@ -47,11 +47,11 @@ about this machine lives.
 
 | item | value |
 |---|---|
-| experiments | 4: 04 run 2026-11-01, no load started, i5-13600K; 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
+| experiments | 5: 05 run 2026-11-01, one CPU-only load, no GPU load, same machine line; 04 run 2026-11-01, no load started, i5-13600K; 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
 | raw result files | 20, 10512 lines in total |
 | run with no file | experiment 01 run 1, idle baseline (3 s probe, noted in the ledger only) |
 | trials per case | 1; experiment 03 is one session of 3 windows and 10 network brackets |
-| ledger rows | 123 table rows in 16 tables |
+| ledger rows | 161 table rows in 20 tables |
 | numbers checked against raw files, 2026-11-01 audit | three ranges and four values were off and are corrected; three sections and four rows have no raw file and now say so |
 
 ## Open questions
@@ -87,10 +87,18 @@ about this machine lives.
 - Experiment 04 left five items unresolved: the status of 4 whole-array PDH read failures, the
   9452541.6 `System Calls/sec` peak, `cpu0` reading 2.260% in the guest against 1.021% on `Hv VP 0`,
   the gap between process cores and busy, and the clock rate slope that does not repeat 3.68 percent.
-- PROPOSED: rerun experiment 04's probe printing the whole-array PDH status, and repeat the clock-rate
+- PROPOSED: rerun experiment 04's probe printing the whole-array PDH status (experiment 05 printed it for its own failures; 04's four stay unconfirmed), and repeat the clock-rate
   check alone over a longer span.
-- PROPOSED: a short CPU load, which needs the user's approval, to settle what experiment 04 could not:
-  whether `vmmem_cores` stays linear above about 2 cores, and whether Windows busy includes the VM.
+- Why `vmmemWSL` threads in `Ready` sit at priority 1 and running ones at 15, and whether that is why WSL
+  lost 71.143 percent against Windows' 30.625 percent (experiment 05, one trial).
+- Why vCPUs 10 to 17 ran at about the E rate at saturation, when at low load vCPUs 12 and 13 ran at the
+  P rate.
+- The guest io pressure at `win-20`, 105271.2 us/s, not repeated at `both-win-20`.
+- The unit of `CPU Wait Time Per Dispatch`.
+- What a partly busy guest shows under contention: not tested, every contended case had WSL at 20
+  threads.
+- PROPOSED, needs the user's approval: repeat experiment 05, with a partly busy guest under contention
+  and a Windows-alone reference at 5 and 10 threads.
 
 ## Decision log
 
@@ -135,3 +143,10 @@ about this machine lives.
   about 100 KB each and name this PC's programs in a public repo. The kept fields are unchanged.
 - 2026-11-01. Experiment 04 ledger rows cite full paths, because `analysis-` and `window1-probe-` file
   names repeat experiment 03's.
+- 2026-11-01. Experiment 05 verdict: VM figures are linear to saturation, Windows busy includes the VM's
+  time as kernel time, guest busy does not show lost CPU, and guest busy times threads less `Hv VP`
+  total tracks lost work. One trial per case, at three loss levels.
+- 2026-11-01. Experiment 05 added two lighter Windows steps and a WSL-alone stretch inside the approved
+  time, so that tracking could be tested, not only movement. No repeat was run.
+- 2026-11-01. Experiment 05 record files mask other programs as `other-N`, numbered in order first seen,
+  so a program can be followed without being named.

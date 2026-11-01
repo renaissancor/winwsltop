@@ -24,6 +24,7 @@ missing from this list or a link below does not resolve.
 | [`../experiments/02-gpu-device/README.md`](../experiments/02-gpu-device/README.md) | Do the GPU device and memory collectors read true? Procedure and verdict | evidence | repeating or extending experiment 02 |
 | [`../experiments/03-host-counters/README.md`](../experiments/03-host-counters/README.md) | Do the disk and network collectors read true? Procedure, how independent each comparison is, and verdict | evidence | repeating or extending experiment 03 |
 | [`../experiments/04-cpu-counters/README.md`](../experiments/04-cpu-counters/README.md) | Which CPU counters are readable non-elevated, which move, and does Windows' figure for the VM follow the guest? Procedure and verdict, no load started | evidence |
+| [`../experiments/05-cpu-contention/README.md`](../experiments/05-cpu-contention/README.md) | When Windows and WSL both want the CPU, what shows it? Linearity of the VM figures, whether Windows busy holds the VM, what reveals lost CPU. Procedure and verdict; one approved CPU-only load | evidence | repeating or extending experiment 05 |
 | [`../.claude/agents/core.md`](../.claude/agents/core.md) | The core role: what it may read and write, its return format | a fresh core agent | when spawned |
 | [`../.claude/agents/collect.md`](../.claude/agents/collect.md) | The collect role | a fresh collect agent | when spawned |
 | [`../.claude/agents/ui.md`](../.claude/agents/ui.md) | The ui role | a fresh ui agent | when spawned |

@@ -1,0 +1,461 @@
+
+=== run
+margins: first 2.0 s and last 1.0 s of a case left out. One trial of each case.
+clock: Windows less WSL, from the pings, s: start1=+0.057(+-0.022) start2=+0.055(+-0.019) start3=+0.055(+-0.019) end1=+0.004(+-0.018) end2=+0.013(+-0.026) end3=+0.003(+-0.017)
+clock offset used, mean of the six: +0.031 s
+first mark 1793540234.018, load from 1793540254.027 to 1793540501.090 unix s, 247.1 s of which burners ran 217.0 s
+recorded rounds: probe 300, guest 300, record 296
+         case     s  probe rounds  guest rounds  records
+     baseline  20.0            16            17       16
+        wsl-1  15.0            10            11       11
+        wsl-2  15.0            11            11       11
+        wsl-5  15.0            11            11       11
+       wsl-10  15.0            11            11       11
+       wsl-20  15.0            11            11       11
+     settle-1  15.0            11            11       11
+       win-20  40.0            36            36       36
+     settle-2  15.0            11            11       11
+  both-before  10.0             5             6        6
+   both-win-5  12.0             8             8        8
+  both-win-10  12.1             8             8        8
+  both-win-20  60.0            56            56       55
+   both-after   7.9             4             4        4
+     settle-3  15.0            11            11       11
+
+=== ground truth: work per second
+units/s over all threads, the mean of the burner's per-second rows; cpu = thread CPU cores as that side's OS counts them
+         case  wsl units/s   n  wsl cpu  win units/s   n  win cpu  wsl moves/s  win moves/s
+        wsl-1       2777.4  12    1.000          n/a   0      n/a          0.0          n/a
+        wsl-2       5545.6  12    1.993          n/a   0      n/a          0.4          n/a
+        wsl-5      13874.2  12    5.013          n/a   0      n/a          0.1          n/a
+       wsl-10      26853.2  12    9.937          n/a   0      n/a          0.2          n/a
+       wsl-20      45686.5  12   20.029          n/a   0      n/a          0.0          n/a
+       win-20          n/a   0      n/a      45664.0  37   19.308          n/a        352.3
+  both-before      45090.0   7   19.746          n/a   0      n/a          0.3          n/a
+   both-win-5      33007.7   7   20.049      12605.1   7    4.948          0.0         79.5
+  both-win-10      23026.2   9   19.590      17908.0   9    8.053          0.6        197.0
+  both-win-20      12876.6  56   19.718      31679.3  56   13.260          0.9        399.9
+   both-after      44153.2   4   19.750          n/a   0      n/a          0.0          n/a
+WSL reference, mean of both-before and both-after: 44621.6; wsl-20 alone 45686.5
+         case  wsl units/s  loss % of reference  loss % of wsl-20
+  both-before      45090.0               -1.050             1.306
+   both-win-5      33007.7               26.028            27.752
+  both-win-10      23026.2               48.397            49.599
+  both-win-20      12876.6               71.143            71.815
+   both-after      44153.2                1.050             3.356
+Windows burner, 20 threads: alone 45664.0, with WSL 20 31679.3, loss 30.625%
+Windows 20 alone over WSL 20 alone: 0.9995
+per-second range of WSL units/s in both-win-20: 11485.5 to 13811.1 ; Windows: 28637.1 to 33438.1
+
+units/s per processor the burner was on, from bycpu rows, whole run of that burner less the first 2 and last rows
+  wsl wsl-1        0 2779 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+  wsl wsl-2        0 0 1419 1355 0 0 0 0 0 0 0 0 971 1803 0 0 0 0 0 0
+  wsl wsl-5        0 2779 0 0 0 2779 0 0 1029 1744 0 2779 0 0 0 0 0 0 2773 0
+  wsl wsl-10       0 2698 2192 496 2688 0 2688 0 2672 0 2672 0 2688 0 1296 1381 2693 0 0 2677
+  wsl wsl-20       2629 2571 2544 2603 2661 2640 2629 2661 2635 2667 1701 1893 1781 1771 1776 1723 1776 1957 2480 2581
+  wsl both         1300 1297 1312 1327 1108 1113 1127 1131 1122 1111 833 846 831 826 831 843 836 836 1303 1291
+  win win-20       2499 2625 2682 2741 2731 2755 2563 2750 2764 2705 2732 2762 1439 1665 1627 1742 1745 1710 1703 1724
+  win both-win-5   370 377 384 491 541 584 562 704 882 1195 2142 2619 43 121 121 135 228 285 420 406
+  win both-win-10  391 348 270 597 505 462 689 654 988 903 2103 2437 540 597 796 1101 1052 1002 1087 1379
+  win both-win-20  1122 1437 1705 1952 2317 2627 1169 1527 1814 2231 2506 2672 685 887 1068 1080 1164 1152 1250 1353
+
+=== A: is a VM figure linear with the guest up to saturation?
+figures in cores. guest = collector busy % times 20 / 100. cycles in 1e9/s. Mean over the case
+      case  threads   guest  vmmem_cores  proc cores  VP guest  VP total  cycles  units/s
+  baseline        0   0.125        0.155       0.154     0.129     0.143   0.533      n/a
+     wsl-1        1   1.087        1.073       1.077     1.062     1.069   3.757   2777.4
+     wsl-2        2   2.202        2.159       2.100     2.069     2.081   7.309   5545.6
+     wsl-5        5   5.066        5.061       5.058     5.026     5.042  17.689  13874.2
+    wsl-10       10  10.133       10.059      10.058     9.995    10.026  35.211  26853.2
+    wsl-20       20  20.000       19.430      19.443    19.302    19.365  67.996  45686.5
+straight line through the six case means, against guest:
+  vmmem_cores  slope 0.97228 intercept 0.065981 largest residual 0.1417
+  proc cores   slope 0.97368 intercept 0.049 largest residual 0.14313
+  VP guest     slope 0.96765 intercept 0.036435 largest residual 0.15333
+  VP total     slope 0.97033 intercept 0.043257 largest residual 0.15118
+  cycles       slope 3.4065e+09 intercept 1.5969e+08 largest residual 5.3382e+08
+same, up to wsl-10 only (below saturation):
+  vmmem_cores  slope 0.99261 intercept 0.0065579 predicts at 20.000: 19.859, read 19.43
+  proc cores   slope 0.99366 intercept -0.0093979 predicts at 20.000: 19.864, read 19.443
+  VP guest     slope 0.98949 intercept -0.027378 predicts at 20.000: 19.762, read 19.302
+  VP total     slope 0.99162 intercept -0.018977 predicts at 20.000: 19.813, read 19.365
+  cycles       slope 3.4802e+09 intercept -5.5529e+07 predicts at 20.000: 6.9548e+10, read 6.7996e+10
+per-round r against guest over baseline to wsl-20 (all rounds in those cases):
+  vmmem_cores  r +0.9996 rank r +0.9823 n 71
+  proc cores   r +0.9999 rank r +0.9801 n 66
+  VP guest     r +0.9999 rank r +0.9919 n 66
+  VP total     r +0.9999 rank r +0.9913 n 66
+  cycles       r +0.9999 rank r +0.9894 n 66
+
+CycleTime: cycles per second over cores, by case
+         case  cycles 1e9/s  per proc core  per VP total  per VP guest
+     baseline        0.5328         3.4565        3.7347        4.1206
+        wsl-1        3.7571         3.4869        3.5138        3.5392
+        wsl-2        7.3085         3.4801        3.5113        3.5322
+        wsl-5       17.6894         3.4972        3.5082        3.5198
+       wsl-10       35.2107         3.5008        3.5118        3.5230
+       wsl-20       67.9962         3.4973        3.5114        3.5227
+     settle-1        0.4461         3.3410        3.7264        4.1010
+       win-20        0.3697         3.2689        3.7194        4.0754
+     settle-2        0.4569         3.0602        3.7531        4.1832
+  both-before       68.0034         3.4813        3.5148        3.5262
+   both-win-5       50.5658         3.4911        3.5152        3.5298
+  both-win-10       33.9551         3.4805        3.5191        3.5357
+  both-win-20       20.1467         3.5016        3.5131        3.5267
+   both-after       66.3057         3.4911        3.5128        3.5245
+     settle-3        0.4880         3.6772        3.7414        4.1650
+cpu_burn process, same ratio: win-20 3.4917 both-win-5 3.4782 both-win-10 3.4795 both-win-20 3.4993
+guest cpuinfo MHz, distinct values over the run: ['3494.272']
+vmmemWSL cycles divided by 3.494272e9, in cores, against process cores and VP total:
+         case  cycles as cores  proc cores  VP total  vmmem_cores
+     baseline            0.152       0.154     0.143        0.155
+        wsl-1            1.075       1.077     1.069        1.073
+        wsl-2            2.092       2.100     2.081        2.159
+        wsl-5            5.062       5.058     5.042        5.061
+       wsl-10           10.077      10.058    10.026       10.059
+       wsl-20           19.459      19.443    19.365       19.430
+     settle-1            0.128       0.134     0.120        0.128
+       win-20            0.106       0.113     0.099        0.113
+     settle-2            0.131       0.149     0.122        0.160
+  both-before           19.461      19.534    19.348       19.536
+   both-win-5           14.471      14.484    14.385       14.479
+  both-win-10            9.717       9.756     9.649        9.628
+  both-win-20            5.766       5.754     5.735        5.755
+   both-after           18.976      18.993    18.875       19.004
+     settle-3            0.140       0.133     0.130        0.134
+largest gap, cycles as cores against process cores, any case: 0.072
+VP total less VP guest, cores, 1 to 20 threads: 0.008 0.012 0.017 0.032 0.062
+
+the contended cases: each figure and the work, cores equivalent = units/s over WSL units per VP-guest core in both-before
+         case  work as cores  vmmem_cores  VP guest  VP total   guest  cycles as cores  units per VP core  units per vmmem core
+  both-before         19.285       19.536    19.285    19.348  20.000           19.461             2338.1                2308.1
+   both-win-5         14.117       14.479    14.326    14.385  20.000           14.471             2304.1                2279.7
+  both-win-10          9.848        9.628     9.603     9.649  20.000            9.717             2397.7                2391.5
+  both-win-20          5.507        5.755     5.713     5.735  19.999            5.766             2254.0                2237.4
+   both-after         18.884       19.004    18.813    18.875  20.000           18.976             2347.0                2323.3
+
+=== B: does Windows busy include the VM's time?
+      case  threads  win busy cores  less baseline  VP total less baseline  user %  kernel %  Root VP total  Hv LP total %  Hv LP idle %  vmmem kernel  vmmem user  other procs
+  baseline        0           1.027          0.000                   0.000   1.126     4.007          1.089          6.239        93.748         0.154       0.000        0.633
+     wsl-1        1           1.619          0.592                   0.927   0.690     7.403          0.622          8.488        91.471         1.077       0.000        0.394
+     wsl-2        2           2.667          1.641                   1.939   0.596    12.741          0.663         13.748        86.216         2.100       0.000        0.436
+     wsl-5        5           5.609          4.582                   4.900   0.648    27.396          0.579         28.133        71.855         5.058       0.000        0.420
+    wsl-10       10          10.924          9.897                   9.884   1.058    53.562          0.995         55.140        44.848        10.058       0.000        0.622
+    wsl-20       20          20.000         18.973                  19.222   0.543    99.457          0.636        100.000         0.027        19.443       0.000        0.372
+Windows busy cores against VP total, six cases: slope 1.0007 intercept 0.6819; up to wsl-10: slope 1.0156
+per round over the same cases: r +0.9982 rank r +0.9773 n 70
+wsl-20: `_Total` % Processor Time 100.000, NT busy 100.000, guest user ticks/s 1997.91 of 1999.27, Windows user 0.543%, cpu_burn cores 0.000
+both-before: `_Total` % Processor Time 100.000, NT busy 100.000, guest user ticks/s 1997.33 of 2000.00, Windows user 0.561%, cpu_burn cores 0.000
+guest user share of its ticks at wsl-20: 99.932%
+Hv LP guest time holds Windows as well: LP guest %, as cores, against Root VP guest plus VP guest, cores
+         case  LP guest %  as cores  Root + VP  Root VP guest  VP guest
+     baseline       5.680     1.136      1.136          1.006     0.129
+       wsl-20      99.252    19.850     19.851          0.548    19.302
+       win-20      99.766    19.953     19.956         19.865     0.091
+  both-win-20      99.584    19.917     19.913         14.201     5.713
+
+=== C: what reveals that WSL lost CPU?
+                  candidate, case mean      baseline          wsl-1           wsl-5          wsl-10          wsl-20        win-20     both-before      both-win-5     both-win-10     both-win-20      both-after
+                         steal ticks/s          0.00           0.00            0.00            0.00            0.00          0.00            0.00            0.00            0.00            0.00            0.00
+                    PSI cpu some avg10          0.00           0.00            0.00            0.00            0.21          0.00            0.32            0.99            1.91            4.97            4.61
+               PSI cpu some total us/s        898.48         387.54           78.09          152.80         7565.22        828.17        15389.79        17619.69        50959.96        56632.81        19551.85
+               PSI cpu full total us/s          0.00           0.00            0.00            0.00            0.00          0.00            0.00            0.00            0.00            0.00            0.00
+                          guest busy %          0.62           5.44           25.33           50.66          100.00          0.57          100.00          100.00          100.00          100.00          100.00
+             guest ticks/s, all fields       1998.77        2001.19         2000.88         2006.60         1999.27       1995.78         2000.00         1926.19         1517.33         1075.72         1998.56
+                     guest sys ticks/s          2.71           1.00            0.73            2.55            1.27          3.44            2.50           16.11           37.83           42.94            3.99
+              VP % Total Run Time, sum          0.14           1.07            5.04           10.03           19.36          0.10           19.35           14.38            9.65            5.73           18.88
+              VP % Guest Run Time, sum          0.13           1.06            5.03            9.99           19.30          0.09           19.29           14.33            9.60            5.71           18.81
+                        vm.vmmem_cores          0.16           1.07            5.06           10.06           19.43          0.11           19.54           14.48            9.63            5.76           19.00
+          vmmemWSL process time, probe          0.15           1.08            5.06           10.06           19.44          0.11           19.53           14.48            9.76            5.75           18.99
+             vmmemWSL CycleTime, probe  532769431.53  3757128144.41  17689415339.72  35210721810.12  67996168685.27  369679058.73  68003449975.25  50565799797.64  33955088293.23  20146681852.40  66305721403.30
+  VP % Guest-Relative Utilization, sum          0.14           1.08            5.11           10.11           20.00          0.10           20.00           20.00           20.00           20.00           20.00
+        VP Contention/Dispatch, _Total          0.00           0.00            0.00            0.00            0.00          0.00            0.00            0.00            0.00            0.00            0.00
+       VP Contention/Dispatch, largest          0.00           0.00            0.00            0.00            0.00          0.00            0.00            0.00            0.00            0.00            0.00
+              VP Wait/Dispatch, _Total       3454.25        1291.60         1040.62         1237.36         1220.76       1645.42         1236.73         1353.10         1425.89         2499.94         1258.01
+           VP Wake Up/Dispatch, _Total          0.00           0.00            0.00            0.00            0.00          0.00            0.00            0.00            0.00            0.00            0.00
+                  VP dispatches/s, sum       2500.63        3190.32         7407.18        11932.35        20761.91       2883.01        22347.71        19046.46        17445.11         6898.69        21426.83
+                  VP migrations/s, sum       1053.62        1047.57         1510.85         1800.91         1715.39       1140.24         2181.25         4219.91         3457.59          930.22         2242.56
+                   vmmem threads Ready          0.00           0.00            0.00            0.00            1.18          0.06            1.60            6.00            9.00           13.11            1.75
+                     all threads Ready          0.25           0.30            0.36            0.09            2.55         27.72            2.80            7.12           38.88           40.91            3.00
+                Processor Queue Length          0.00           0.20            0.00            0.00            2.27         22.92            2.20            7.12           38.62           39.64            3.00
+       deficit, guest*20 less VP total         -0.02           0.02            0.03            0.10            0.64          0.02            0.65            5.62           10.35           14.26            1.12
+    deficit, guest*20 less vmmem_cores         -0.03           0.01            0.00            0.07            0.57          0.00            0.46            5.52           10.37           14.24            1.00
+                   guest procs_running          1.06           2.00            6.00           11.00           21.09          1.08           21.50           21.38           22.00           22.32           21.25
+                            load 1 min          0.13           0.21            1.14            2.53            5.25          4.34            3.65            6.59            9.36           14.89           17.99
+                          guest ctxt/s       1183.10        1037.82          829.80         1038.47         1058.39       1353.08         1895.14         2105.29         2447.81         1319.04         1644.52
+VP Wait/Dispatch _Total, every case: baseline 3454.25 wsl-1 1291.60 wsl-2 1132.70 wsl-5 1040.62 wsl-10 1237.36 wsl-20 1220.76 settle-1 4175.40 win-20 1645.42 settle-2 4233.72 both-before 1236.73 both-win-5 1353.10 both-win-10 1425.89 both-win-20 2499.94 both-after 1258.01 settle-3 3975.69
+WSL work loss, % of reference: both-before -1.050 both-win-5 26.028 both-win-10 48.397 both-win-20 71.143 both-after 1.050
+VP CPU Contention Time Per Dispatch, any VP: largest over 299 rounds of the whole run 0.000000
+VP CPU Wake Up Time Per Dispatch, any VP: largest over 299 rounds of the whole run 0.000000
+VP % Total Core Run Time, sum: largest over 299 rounds of the whole run 0.000000
+steal ticks/s: largest over 299 rounds of the whole run 0.000000
+
+round by round against the loss in that round's own span. section = every round of both-before to both-after inside a case;
+win-20 only = both-win-20 rounds, where the loss barely steps, so r there is a test of following small changes. Loss computed from the burner's cumulative count.
+                             candidate   n  section r  section rank r  win-20 r  win-20 rank r
+                         steal ticks/s  82        n/a             n/a       n/a            n/a
+                    PSI cpu some avg10  82     +0.751          +0.681    +0.236         +0.264
+               PSI cpu some total us/s  82     +0.597          +0.704    +0.482         +0.537
+               PSI cpu full total us/s  82        n/a             n/a       n/a            n/a
+                          guest busy %  82     -0.063          -0.002    +0.092         +0.104
+             guest ticks/s, all fields  82     -0.976          -0.961    -0.880         -0.881
+                     guest sys ticks/s  82     +0.727          +0.722    +0.522         +0.503
+              VP % Total Run Time, sum  81     -0.999          -0.966    -0.895         -0.898
+              VP % Guest Run Time, sum  81     -0.999          -0.966    -0.895         -0.898
+                        vm.vmmem_cores  81     -0.997          -0.787    -0.367         -0.323
+          vmmemWSL process time, probe  81     -0.995          -0.757    -0.299         -0.267
+             vmmemWSL CycleTime, probe  81     -0.999          -0.943    -0.844         -0.830
+  VP % Guest-Relative Utilization, sum  81     -0.065          +0.008    +0.180         -0.089
+        VP Contention/Dispatch, _Total  81        n/a             n/a       n/a            n/a
+       VP Contention/Dispatch, largest  81        n/a             n/a       n/a            n/a
+              VP Wait/Dispatch, _Total  81     +0.580          +0.553    -0.217         -0.256
+           VP Wake Up/Dispatch, _Total  81        n/a             n/a       n/a            n/a
+                  VP dispatches/s, sum  81     -0.946          -0.752    -0.280         -0.278
+                  VP migrations/s, sum  81     -0.673          -0.653    -0.124         -0.088
+                   vmmem threads Ready  81     +0.826          +0.721    +0.284         +0.281
+                     all threads Ready  81     +0.601          +0.599    +0.192         +0.100
+                Processor Queue Length  81     +0.691          +0.630    +0.321         +0.219
+       deficit, guest*20 less VP total  81     +0.999          +0.966    +0.896         +0.898
+    deficit, guest*20 less vmmem_cores  81     +0.997          +0.787    +0.368         +0.324
+                   guest procs_running  82     +0.289          +0.299    +0.065         +0.054
+                            load 1 min  82     +0.630          +0.494    +0.210         +0.188
+                          guest ctxt/s  82     -0.280          -0.061    +0.446         +0.503
+
+does a figure equal the loss? (each in cores of the 20; work lost = 20 less work as cores, with work per core from both-before)
+         case  work lost, cores  guest*20 less VP total  guest*20 less vmmem_cores  vmmem Ready  range  ticks missing, cores
+  both-before             0.000                   0.652                      0.464        1.600    1-3                 0.000
+   both-win-5             5.359                   5.615                      5.521        6.000    5-7                 0.738
+  both-win-10             9.787                  10.351                     10.372        9.000   7-11                 4.827
+  both-win-20            14.288                  14.265                     14.244       13.107   6-18                 9.243
+   both-after             0.416                   1.125                      0.996        1.750    1-3                 0.014
+
+the same differences with no Windows burner, where no contention was started (raw observation, cores):
+      case  guest*20 less VP total  guest*20 less vmmem_cores   range of first
+     wsl-1                   0.018                      0.014  -0.008 to 0.082
+     wsl-2                   0.037                      0.043  -0.141 to 0.209
+     wsl-5                   0.034                      0.004  -0.028 to 0.071
+    wsl-10                   0.105                      0.073   0.068 to 0.163
+    wsl-20                   0.635                      0.570   0.348 to 1.334
+    win-20                   0.015                      0.002  -0.037 to 0.170
+  settle-1                  -0.017                     -0.025  -0.062 to 0.011
+  settle-3                  -0.020                     -0.023  -0.054 to 0.011
+
+reverse: the Windows burner. threads wanted, thread CPU cores Windows counted, work, threads Ready at the sample
+         case  threads  proc cores  burner cpu  units/s  units/s per thread  burner Ready  burner Running  rest Ready   queue  win busy %
+       win-20       20      19.320      19.308  45664.0              2283.2         1.694          18.306      25.972  22.917      99.998
+   both-win-5        5       4.947       4.948  12605.1              2521.0         0.000           5.000       1.125   7.125     100.000
+  both-win-10       10       8.130       8.053  17908.0              1790.8         4.125           5.875      25.750  38.625     100.000
+  both-win-20       20      13.253      13.260  31679.3              1584.0         8.875          11.125      18.929  39.643     100.000
+Windows burner per thread, alone: 2283.2 units/s
+
+vmmemWSL threads by state and priority, mean count per sample, over the 20 threads that carried the load
+         case   n                      state s, priority p: mean threads
+     baseline  17                                 s5p15=19.94 s2p15=0.06
+        wsl-1  11                       s5p15=19.00 s2p1=0.64 s2p15=0.36
+       wsl-10  12                       s5p15=10.00 s2p1=6.42 s2p15=3.58
+       wsl-20  12                        s2p1=11.00 s2p15=7.75 s1p1=1.25
+       win-20  37                       s5p15=19.81 s2p15=0.14 s1p1=0.05
+  both-before   6                        s2p1=11.17 s2p15=7.33 s1p1=1.50
+   both-win-5   9                         s2p15=7.33 s2p1=6.67 s1p1=6.00
+  both-win-10   9                         s2p15=9.22 s1p1=8.78 s2p1=2.00
+  both-win-20  57  s1p1=13.12 s2p15=6.79 s1p15=0.05 s2p1=0.02 s3p15=0.02
+   both-after   5                        s2p1=10.20 s2p15=7.80 s1p1=2.00
+
+=== D: does guest busy stay high when the host has taken the vCPU?
+         case  guest busy %      low     high  guest thread cpu cores  VP total  units/s  ticks/s     user    sys  idle  steal
+       wsl-20       100.000  100.000  100.000                  20.029    19.365  45686.5  1999.27  1997.91   1.27  0.00   0.00
+  both-before       100.000  100.000  100.000                  19.746    19.348  45090.0  2000.00  1997.33   2.50  0.00   0.00
+   both-win-5       100.000  100.000  100.000                  20.049    14.385  33007.7  1926.19  1906.20  16.11  0.00   0.00
+  both-win-10       100.000  100.000  100.000                  19.590     9.649  23026.2  1517.33  1469.52  37.83  0.00   0.00
+  both-win-20        99.997   99.817  100.000                  19.718     5.735  12876.6  1075.72  1014.65  42.94  0.04   0.00
+   both-after       100.000  100.000  100.000                  19.750    18.875  44153.2  1998.56  1994.32   3.99  0.00   0.00
+per vCPU in both-win-20: guest busy ticks/s, VP % Total Run Time, burner units/s on that vCPU
+  vCPU  guest ticks/s  VP total %  units/s
+     0          51.44       26.53      703
+     1          51.19       26.09      696
+     2          51.72       27.19      728
+     3          51.76       27.30      739
+     4          49.74       24.83      661
+     5          50.54       25.56      681
+     6          50.23       25.74      689
+     7          50.83       25.61      694
+     8          51.00       25.67      683
+     9          49.73       24.92      665
+    10          57.44       32.13      560
+    11          58.38       32.79      571
+    12          57.97       32.30      551
+    13          58.06       32.57      562
+    14          58.05       32.52      558
+    15          58.10       32.78      567
+    16          58.17       32.69      567
+    17          57.83       32.29      563
+    18          51.96       27.14      723
+    19          51.60       26.82      715
+r over 20 vCPUs, VP total against units/s: -0.889; guest ticks against units/s: -0.908
+
+=== also: per-LP DPC, interrupt and the user/kernel split
+per-LP percent of that LP's time, over all rounds of a case
+         case     n  dpc mean  dpc max  dpc>0  int mean  int max  int>0  user mean  kernel mean
+     baseline   320     0.131    4.688     21     0.291    4.688     48      1.128        4.015
+       wsl-20   220     0.175    3.077     24     0.246    3.077     32      0.543       99.457
+       win-20   720     0.093    3.125     39     0.179    3.125     73     96.878        3.120
+  both-win-20  1120     0.187    4.688    108     0.275    6.250    171     65.254       34.746
+NT per-LP against PDH per-LP over the whole run, percent points, n and mean and p99 and largest gap:
+  user: n 5980 mean 0.150 p99 1.260 largest 7.309
+  priv: n 5980 mean 0.208 p99 1.473 largest 9.313
+  ptime: n 5975 mean 0.456 p99 5.889 largest 17.973
+  LP readings missing on the PDH side: 5
+  dpc: gcd of round deltas 156250, deltas above 0: 451 of 5980
+  interrupt: gcd of round deltas 156250, deltas above 0: 786 of 5980
+  interrupt_count per second, _sum over LPs_, case means: baseline 16645 wsl-20 19006 win-20 19348 both-win-20 24198
+
+=== also: ready threads on Windows
+         case  all Ready  low  high  vmmem  cpu_burn   rest  Processor Queue Length
+     baseline       0.25    0     4   0.00      0.00   0.25                    0.00
+        wsl-1       0.30    0     2   0.00      0.00   0.30                    0.20
+        wsl-2       0.18    0     1   0.00      0.00   0.18                    0.00
+        wsl-5       0.36    0     4   0.00      0.00   0.36                    0.00
+       wsl-10       0.09    0     1   0.00      0.00   0.09                    0.00
+       wsl-20       2.55    2     6   1.18      0.00   1.36                    2.27
+     settle-1       0.09    0     1   0.00      0.00   0.09                    0.18
+       win-20      27.72    6    58   0.06      1.69  25.97                   22.92
+     settle-2       0.45    0     1   0.00      0.00   0.45                    0.09
+  both-before       2.80    2     4   1.60      0.00   1.20                    2.20
+   both-win-5       7.12    6     8   6.00      0.00   1.12                    7.12
+  both-win-10      38.88   12    99   9.00      4.12  25.75                   38.62
+  both-win-20      40.91   21   116  13.11      8.88  18.93                   39.64
+   both-after       3.00    2     4   1.75      0.00   1.25                    3.00
+     settle-3       0.09    0     1   0.00      0.00   0.09                    0.09
+all Ready against Processor Queue Length, every round in a case: r +0.8852 rank r +0.9443 n 220
+
+=== also: guest run state
+         case  procs_running  low  high  procs_blocked  D tasks  D max  R tasks  iowait ticks/s  sampler s
+     baseline           1.06    1     2           0.00     0.00      0     1.06            0.12      0.008
+        wsl-1           2.00    2     2           0.00     0.00      0     2.09            0.18      0.004
+        wsl-2           3.36    3     5           0.09     0.09      1     3.09            3.73      0.004
+        wsl-5           6.00    6     6           0.00     0.00      0     6.00            0.18      0.004
+       wsl-10          11.00   11    11           0.00     0.00      0    11.00            0.55      0.008
+       wsl-20          21.09   21    22           0.00     0.00      0    21.18            0.00      0.011
+     settle-1           1.09    1     2           0.00     0.00      0     1.00            0.27      0.007
+       win-20           1.08    1     2           0.17     0.25      1     1.22           16.28      0.010
+     settle-2           1.09    1     2           0.09     0.00      0     1.00            0.27      0.006
+  both-before          21.50   21    24           0.00     0.00      0    21.33            0.00      0.018
+   both-win-5          21.38   21    23           0.00     0.00      0    21.00            0.00      0.022
+  both-win-10          22.00   21    23           0.12     0.25      1    21.75            0.00      0.043
+  both-win-20          22.32   21    29           0.02     0.18      2    22.18            0.00      0.046
+   both-after          21.25   21    22           0.00     0.00      0    21.00            0.00      0.010
+     settle-3           1.00    1     1           0.00     0.00      0     1.36            0.27      0.008
+burner process row: num_threads, and whether /proc/pid/stat processor is where the work ran
+  burner  rows  num_threads  stat processor  task processors    vCPUs that got work
+   wsl-1    12          [2]              10                1                    0,1
+   wsl-2    12          [3]               5        2,3,12,13              2,3,12,13
+   wsl-5    12          [6]           13,19    1,5,8,9,11,18  0,1,5,8,9,10,11,18,19
+  wsl-10    12         [11]              11         12 vCPUs               13 vCPUs
+  wsl-20    12         [21]             2,3         20 vCPUs               20 vCPUs
+    both    99         [21]           0,2,3         20 vCPUs               20 vCPUs
+task row processor is among the vCPUs the burner's threads reported in its nearest row: 2434 of 2436
+
+=== also: pressure, `total=` as us per second, and avg10 at the end of the case
+         case  cpu some  cpu full  mem some  mem full   io some   io full  cpu avg10  io avg10
+     baseline     898.5       0.0       0.0       0.0     541.5     538.2       0.00      0.00
+        wsl-1     387.5       0.0       0.0       0.0      27.1      26.7       0.00      0.00
+        wsl-2     488.3       0.0       0.0       0.0    3132.1    3117.3       0.00      0.18
+        wsl-5      78.1       0.0       0.0       0.0      39.8      39.6       0.00      0.03
+       wsl-10     152.8       0.0       0.0       0.0      34.7      34.5       0.00      0.00
+       wsl-20    7565.2       0.0       0.0       0.0     151.9       0.0       0.12      0.00
+     settle-1     766.1       0.0       0.0       0.0    1115.8    1109.0       0.02      0.00
+       win-20     828.2       0.0       0.0       0.0  105271.2  105032.2       0.00     16.44
+     settle-2     718.9       0.0       0.0       0.0    1627.2    1624.1       0.00      3.32
+  both-before   15389.8       0.0       0.0       0.0     127.7       0.0       0.58      1.22
+   both-win-5   17619.7       0.0       0.0       0.0     219.0       0.0       1.27      0.36
+  both-win-10   50960.0       0.0       0.0       0.0    2560.3       0.0       3.04      0.11
+  both-win-20   56632.8       0.0       0.0       0.0    2078.9       0.3       5.76      0.00
+   both-after   19551.9       0.0       0.0       0.0      63.3       0.0       3.87      0.00
+     settle-3     973.4       0.0       0.0       0.0     938.1     931.3       0.95      0.00
+
+=== also: heat, limits and clock at all-core load
+Temperature: distinct values over the run [301.0], rounds 299
+High Precision Temperature: distinct values over the run [3010.0], rounds 299
+% Passive Limit: distinct values over the run [100.0], rounds 299
+Throttle Reasons: distinct values over the run [0.0], rounds 299
+% Performance Limit _Total: distinct values over the run [100.0], rounds 299
+Performance Limit Flags _Total: distinct values over the run [0.0], rounds 299
+per LP: % Performance Limit [100.0], Performance Limit Flags [0.0]
+         case  NT busy  % Proc Time  Utility     Perf  freq P  freq E   perf P   perf E   max% P   max% E   util P   util E
+     baseline    5.133        5.112    4.781   72.359  2347.1  2069.0   67.056   59.093   40.792   34.016    5.647    3.484
+        wsl-1    8.094        8.308   11.293  133.146  4652.4  2200.8  132.925   62.851   90.050   56.138   17.208    2.420
+        wsl-5   28.044       28.005   39.231  139.472  5076.6  1996.0  145.045   57.014  100.000   44.830   63.180    3.308
+       wsl-10   54.620       54.623   77.434  140.499  5099.9  3514.3  145.711  100.408  100.000   84.761  117.907   16.725
+       wsl-20  100.000      100.000  131.995  131.996  5099.8  3900.0  145.708  111.428  100.000  100.000  145.708  111.427
+       win-20   99.998       99.998  131.995  131.995  5099.7  3900.0  145.707  111.427  100.000  100.000  145.707  111.427
+  both-win-20  100.000      100.000  131.970  131.973  5098.5  3900.0  145.671  111.427  100.000  100.000  145.669  111.423
+     settle-3    3.980        4.115    3.474   62.563  2115.0  1717.5   60.417   49.062   66.508   40.261    4.366    2.137
+wsl-20: Actual Frequency P 5098.2-5100.2, E 3899.8-3900.2; Utility per LP 111.425-145.723; _Total Utility over busy 1.3200
+win-20: Actual Frequency P 5097.9-5100.1, E 3899.9-3900.0; Utility per LP 111.426-145.716; _Total Utility over busy 1.3200
+both-win-20: Actual Frequency P 5088.6-5100.2, E 3899.3-3900.7; Utility per LP 111.240-145.854; _Total Utility over busy 1.3197
+guest cpu MHz distinct: ['3494.272']
+win-20, burner units/s per LP: P mean 2692.4 (2499.0-2763.6), E mean 1669.5 (1438.9-1745.0), E over P 0.6201, frequency E over P 0.7647
+one WSL thread alone, wsl-1: 2777.4 units/s. Windows P-LP rate over that: 0.9694
+
+=== also: migration and where the VM ran
+         case  dispatches/s  migrations/s  per dispatch  guest thread vCPU moves/s, burner's own
+     baseline        2500.6        1053.6         0.421                                      n/a
+        wsl-1        3190.3        1047.6         0.328                                     0.00
+        wsl-2        5852.1        2125.9         0.363                                     0.42
+        wsl-5        7407.2        1510.8         0.204                                     0.08
+       wsl-10       11932.3        1800.9         0.151                                     0.17
+       wsl-20       20761.9        1715.4         0.083                                     0.00
+     settle-1        1681.3         668.3         0.398                                      n/a
+       win-20        2883.0        1140.2         0.396                                      n/a
+     settle-2        1949.9         782.5         0.401                                      n/a
+  both-before       22347.7        2181.2         0.098                                     0.29
+   both-win-5       19046.5        4219.9         0.222                                     0.00
+  both-win-10       17445.1        3457.6         0.198                                     0.56
+  both-win-20        6898.7         930.2         0.135                                     0.93
+   both-after       21426.8        2242.6         0.105                                     0.00
+     settle-3        2181.1         823.3         0.377                                      n/a
+by step: the vCPUs with VP total above 20% and the LPs with busy above 20%, percent
+  wsl-1: VP 1:98.9 | LP 8:40.4 7:28.1 10:28.0 0:22.0
+  wsl-1: migrations/s of the busiest VP 154.2; P LP busy 11.81, E LP busy 2.47
+  wsl-2: VP 13:62.6 3:52.2 2:47.0 12:36.7 | LP 10:64.9 7:43.0 8:39.9
+  wsl-2: migrations/s of the busiest VP 81.1; P LP busy 19.90, E LP busy 3.52
+  wsl-5: VP 18:99.3 11:99.3 5:99.3 1:99.3 9:65.9 8:33.5 | LP 8:83.1 6:77.3 11:57.4 10:54.8 9:52.1 7:49.0 2:45.4 4:39.5 0:33.4
+  wsl-5: migrations/s of the busiest VP 42.8; P LP busy 43.20, E LP busy 5.34
+  wsl-10: VP 1:99.2 4:99.2 8:99.2 16:99.2 19:99.2 6:99.2 10:99.2 12:99.2 2:82.5 15:51.1 14:49.6 | LP 11:95.4 8:92.4 10:92.3 4:87.0 6:87.0 9:84.8 5:83.1 7:81.8 2:79.7 0:70.5 3:61.0 1:55.3
+  wsl-10: migrations/s of the busiest VP 44.4; P LP busy 80.87, E LP busy 15.25
+guest cpuN against LP busy over the rounds of wsl-1 to wsl-10, 20 by 20 pairs, r on the same number against the rest; the largest in its row:
+  vCPUs with any movement 20: mean r same number +0.360, off +0.388, largest on the same number in 0 of 20
+vmmemWSL threads against VP total, r over baseline to wsl-10 rounds; each thread's best VP:
+  thread: best VP (r): 51996:0(0.999) 27272:1(1.000) 48952:2(1.000) 23912:3(1.000) 17124:5(1.000) 35816:6(1.000) 23460:6(1.000) 7044:7(0.927) 24736:8(1.000) 1692:9(0.999) 48424:10(1.000) 35868:11(1.000) 41392:12(1.000) 49036:13(1.000) 48364:14(0.999) 33852:15(1.000) 30364:16(1.000) 13732:17(0.767) 26716:18(0.999) 37732:19(1.000)
+  distinct VPs named: 19 of 20
+
+=== also: other work during the run
+         case  Windows other cores  largest  guest other cores  System Calls/sec  Context Switches/sec
+     baseline                0.633    1.572              0.114             60589                 21052
+        wsl-1                0.394    0.981              0.065             52279                 17750
+        wsl-2                0.436    0.967              0.047             50363                 15454
+        wsl-5                0.420    1.046              0.061             31622                 12093
+       wsl-10                0.622    1.399              0.075             69334                 16646
+       wsl-20                0.372    1.059              0.054             47406                 12890
+     settle-1                0.548    1.101              0.089             46381                 16703
+       win-20                0.425    0.924              0.083             51547                 15757
+     settle-2                0.603    1.102              0.090             50676                 14425
+  both-before                0.313    0.429              0.116             44690                 16277
+   both-win-5                0.402    0.691              0.115             46979                 16679
+  both-win-10                1.892    3.760              0.240            195704                 37922
+  both-win-20                0.762    1.930              0.235             69697                 23804
+   both-after                0.677    1.063              0.204             82588                 15399
+     settle-3                0.474    0.802              0.104             40506                 14644
+masked Windows rows that reached 0.25 cores in any record: label, case, largest cores
+   other-30 both-win-10=1.379 both-win-20=1.103 both-after=1.129
+   other-47 both-win-20=0.842
+   other-5 baseline=0.448 wsl-1=0.425 wsl-2=0.405 wsl-10=0.660 wsl-20=0.465 settle-1=0.329 win-20=0.344 settle-2=0.427 both-before=0.520 both-win-5=0.281 both-win-10=0.564 both-win-20=0.443 both-after=0.612 settle-3=0.455
+   other-1 baseline=0.433 wsl-1=0.251 wsl-2=0.435 wsl-5=0.268 wsl-10=0.417 settle-1=0.388 win-20=0.332 settle-2=0.392 both-win-10=0.312 both-win-20=0.276
+   other-21 both-win-10=0.265 both-after=0.267
+winwsltop cost_ms.processes: baseline 5.04 wsl-20 3.91 win-20 3.57 both-win-20 5.16
+winwsltop interval_s 0.975 to 1.503
+whole-array reads that failed, with their status (pdhmsg.h: 0x800007d8 PDH_CALC_NEGATIVE_VALUE, 0x800007d6 PDH_CALC_NEGATIVE_DENOMINATOR):
+  \Hyper-V Hypervisor Logical Processor(*)\% Idle Time 0x800007d8: 81 reads, rounds 85 to 269
+  \Processor Information(*)\% Processor Performance 0x800007d6: 1 reads, rounds 243 to 243
+  \Processor Information(*)\Actual Frequency 0x800007d6: 1 reads, rounds 243 to 243
+Hv LP `_Total` % Idle Time at rounds that read, lowest 0.000
