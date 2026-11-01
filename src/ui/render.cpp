@@ -235,6 +235,15 @@ line message(std::string_view label, std::string_view text, tone c = tone::watch
   return r;
 }
 
+// The warning under a /dev/dxg holder list, in the columns its row has. Those processes could not be
+// read, so a holder running as root could be unseen: whether one exists is not known, and this never
+// says one does. The shorter wording keeps it whole down to the 31 columns of the narrowest side list.
+std::string denied_note(int64_t denied, int room) {
+  const long long n = denied;
+  const std::string full = fmt("dxg_denied %lld: may miss a root holder", n);
+  return display_width(full) <= room ? full : fmt("dxg_denied %lld: may miss root", n);
+}
+
 void memory_row(std::vector<line>& out, int width, uint64_t total, uint64_t available, const std::vector<std::string>& details) {
   const double left = 100.0 * static_cast<double>(available) / static_cast<double>(total);
   const uint64_t used = total - std::min(total, available);
@@ -374,8 +383,7 @@ std::vector<line> gpu_section(const snapshot& s, const wsl_view& w, int width) {
     r.add(kTail, tone::dim);
     out.push_back(r);
     if (w.dxg_denied > 0) {
-      out.push_back(message("", fmt("dxg_denied %lld: unreadable, a root GPU process could be missing",
-                                    static_cast<long long>(w.dxg_denied)), tone::watch, kCol - 5));
+      out.push_back(message("", denied_note(w.dxg_denied, width - (kCol - 5)), tone::watch, kCol - 5));
     }
   }
   return out;
@@ -1079,8 +1087,7 @@ std::vector<line> dxg_holder_list(const wsl_view& w, int col, int rows, bool& cu
     }
   }
   if (denied_rows(w)) {
-    out.push_back(message("", fmt("dxg_denied %lld: unreadable, a root GPU process could be missing",
-                                  static_cast<long long>(w.dxg_denied)), tone::watch, 0));
+    out.push_back(message("", denied_note(w.dxg_denied, col), tone::watch, 0));
   }
   return out;
 }

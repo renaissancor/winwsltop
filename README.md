@@ -38,7 +38,7 @@ Windows  top 3 of 3 by GPU%, busiest engine      │ WSL /dev/dxg holders, no us
  GPU%     pid name                  LOCAL        │     pid name  top 2 of 2
    52   11736 vmwp.exe                4.2 WSL VM │    4121 python3
    36    9002 Game.Shipping-Win64-…   1.4        │    4388 한글추론기
-    1    5120 -                         -        │ dxg_denied 36: unreadable, a root GPU process co…
+    1    5120 -                         -        │ dxg_denied 36: may miss a root holder
 [1] overall  [2] gpu  [3] cpu  [q] quit
 ```
 

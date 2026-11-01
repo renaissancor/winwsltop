@@ -57,8 +57,8 @@ reads schema 1 of the collector's line.
 
 | item | value |
 |---|---|
-| source | `src/ui` 2878 lines, of which `render_check.cpp` 1033 |
-| checks | 93701, 0 failed, run on Windows 2026-11-01. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
+| source | `src/ui` 2932 lines, of which `render_check.cpp` 1080 |
+| checks | 95325, 0 failed, run on Windows 2026-11-01. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
 | sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66 |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once; conhost not checked |
@@ -105,3 +105,6 @@ reads schema 1 of the collector's line.
   where the frame without a history differs from before.
 - 2026-11-01. The size sweep covers every third size for four cases, because all sizes for all cases
   took about 2 minutes on Windows; layout depends on size and number width, not on the history's shape.
+- 2026-11-01. The `dxg_denied` warning has two wordings, chosen by the room it has, because no single
+  honest string fits every width. It is whole in both panels from 37 columns up, and neither wording says
+  a root process holds the GPU.

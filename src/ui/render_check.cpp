@@ -835,6 +835,52 @@ std::vector<int> sizes(int top, int step) {
 // Widths 1 to 300 and heights 1 to 66, every view: one check a frame. A frame costs about 0.4 ms, and
 // layout turns on the size and the width of the numbers, not on the shape of the history. So every size
 // goes to the hostile numbers, and every third size to the rest.
+// The dxg_denied warning is drawn whole: a row cut at its panel's edge cannot end in the wording, and
+// a wording that names a root process as a fact is not one of these two.
+void check_denied_note() {
+  const snapshot base = busy();
+  const history demo = demo_minute(base);
+  const auto row_of = [](const std::string& text, const char* word) {
+    const size_t at = text.find(word);
+    if (at == std::string::npos) return std::string();
+    const size_t start = text.rfind('\n', at) + 1;  // No newline before it wraps to 0
+    return text.substr(start, text.find('\n', at) - start);
+  };
+  const auto ends = [](const std::string& s, const std::string& tail) {
+    return s.size() >= tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+  };
+  for (const int denied : {38, 100, 999}) {
+    snapshot s = base;
+    const std::string key = "\"dxg_denied\":36";
+    s.wsl_json.replace(s.wsl_json.find(key), key.size(), "\"dxg_denied\":" + std::to_string(denied));
+    const std::string head = "dxg_denied " + std::to_string(denied) + ": ";
+    const std::string full = head + "may miss a root holder", brief = head + "may miss root";
+
+    for (int w = 37; w <= 300; ++w) {
+      const std::string at = " at " + std::to_string(w) + ", " + head;
+      const int list = w >= 64 ? w - 3 - (w - 3) / 2 : w;  // The holders' column, stacked below 64
+      const std::string gpu = row_of(as_text(render(s, w, 66, kNow, &demo, view::gpu)), "dxg_denied");
+      const std::string overall = row_of(as_text(render(s, w, 66, kNow, &demo, view::overall)), "dxg_denied");
+      check(ends(gpu, static_cast<int>(full.size()) <= list ? full : brief), "the warning is whole in the GPU panel" + at);
+      check(ends(overall, static_cast<int>(full.size()) <= w - 8 ? full : brief), "the warning is whole in the overall panel" + at);
+    }
+
+    // The clear wording where it has room, on the frames people read.
+    for (const int w : {80, 100, 131, 200}) {
+      const std::string at = " at " + std::to_string(w) + "x24, " + head;
+      check(ends(row_of(as_text(render(s, w, 24, kNow, &demo, view::gpu)), "dxg_denied"), full), "the clear wording fits the GPU panel" + at);
+      check(ends(row_of(as_text(render(s, w, 24, kNow, &demo, view::overall)), "dxg_denied"), full), "the clear wording fits the overall panel" + at);
+      check(ends(row_of(as_text(render(s, w, 24, kNow)), "dxg_denied"), full), "the clear wording fits the plain screen" + at);
+    }
+  }
+  bool cut = false;
+  const wsl_view read = read_wsl(base.wsl_json);
+  check(ends(as_text(dxg_holder_list(read, 39, 2, cut)), "dxg_denied 36: may miss a root holder\n"), "39 columns, the list at 80 wide, hold it");
+  check(ends(as_text(dxg_holder_list(read, 37, 2, cut)), "dxg_denied 36: may miss a root holder\n"), "37 columns are the least for the clear wording");
+  check(ends(as_text(dxg_holder_list(read, 36, 2, cut)), "dxg_denied 36: may miss root\n"), "36 columns take the shorter one");
+  check(denied_note(1000, 31) == "dxg_denied 1000: may miss root", "31 columns hold four digits");
+}
+
 void check_sweep(const snapshot& s, const history& h, const char* name, int step = 3) {
   for (const view v : {view::overall, view::gpu, view::cpu}) {
     for (const int w : sizes(300, step)) {
@@ -1027,6 +1073,7 @@ int main(int argc, char** argv) {
   check_time_axis();
   check_scale();
   check_panels();
+  check_denied_note();
   check_sizes_with_history();
   printf("%d checks, %d failed\n", g_checks, g_failed);
   return g_failed ? 1 : 0;

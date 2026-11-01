@@ -16,8 +16,8 @@ at once.
 ## Reading it safely
 
 - **Check before you trust a figure.** Use `gpu_split` only when `valid` is true. An empty `gpu_engines`
-  means idle only when `gpu_engines_known` is true. `wsl.data` is `null` when the collector has sent
-  nothing. `gpu_device` leaves out any field the driver didn't answer, and `present` is false with no NVML.
+  means idle only when `gpu_engines_known` is true. `wsl.data` is `null` and `wsl.age_s` is -1 when the
+  collector has sent nothing, and `gpu_split` can still be valid then. `gpu_device` leaves out any field the driver didn't answer, and `present` is false with no NVML.
 - **Never add Windows and WSL figures.** They describe overlapping resources.
 - **`vm_pct` is the whole WSL VM.** No field says how much GPU one Linux process used.
   `wsl.data.dxg_pids` lists who holds the GPU, which is identity, not usage.
