@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <limits>
 
 using namespace wwt;
@@ -297,10 +298,57 @@ std::string graph_rows(const std::string& t) {
   for (size_t from = 0; from < t.size();) {
     const size_t nl = std::min(t.find('\n', from), t.size());
     const std::string l = t.substr(from, nl - from);
-    if (has(l, "│") && !has(l, " │ ") && (has(l, "   │") || has(l, "100│") || has(l, "  0│"))) out += l + "\n";
+    if (l.rfind("100│", 0) == 0 || l.rfind("  0│", 0) == 0 || l.rfind("   │", 0) == 0) out += l + "\n";
     from = nl + 1;
   }
   return out;
+}
+
+// What is drawn in one panel of a row of panels: text after the nth gutter, up to the next.
+std::string panel_cells(const std::string& rows, int nth) {
+  static constexpr std::string_view kBar = "│";
+  std::string out;
+  for (size_t from = 0; from < rows.size();) {
+    const size_t nl = std::min(rows.find('\n', from), rows.size());
+    size_t at = from;
+    bool found = true;
+    for (int k = 0; k <= nth && found; ++k) {
+      at = rows.find(kBar, at);
+      found = at < nl;
+      if (found) at += kBar.size();
+    }
+    if (found) out += rows.substr(at, std::min(rows.find(kBar, at), nl) - at) + "\n";
+    from = nl + 1;
+  }
+  return out;
+}
+
+std::string line_with(const std::vector<line>& frame, const char* what, int after = 0) {
+  for (size_t i = 0; i < frame.size(); ++i) {
+    const std::string t = as_text({frame[i]});
+    if (has(t, what)) return i + static_cast<size_t>(after) < frame.size() ? as_text({frame[i + static_cast<size_t>(after)]}) : std::string();
+  }
+  return {};
+}
+
+// n /dev/dxg holders, named from the busy snapshot's processes.
+snapshot with_holders(snapshot s, int n) {
+  const std::string pids = "\"dxg_pids\":[4121,4388]";
+  std::string list = "\"dxg_pids\":[";
+  for (int i = 0; i < n; ++i) list += std::to_string(2000 + i) + (i + 1 < n ? "," : "]");
+  s.wsl_json.replace(s.wsl_json.find(pids), pids.size(), list);
+  return s;
+}
+
+snapshot no_cpu_or_wsl() {
+  snapshot s = busy();
+  s.wsl_json.clear();
+  return s;
+}
+
+bool marks_hidden(const std::vector<line>& frame) {
+  const std::string last = as_text({frame.back()});
+  return has(last, "some rows hidden") || last.rfind("…", 0) == 0;
 }
 
 int known_columns(const std::vector<double>& cols) {
@@ -385,6 +433,64 @@ void check_time_axis() {
   check(graph_end(h, kNow - 7200000) == kNow - 3599000, "a clock behind the newest sample is not the graph's end");
   check(count_braille(graph_rows(as_text(render(busy(), 131, 40, kNow - 7200000, &h, view::gpu)))) > 0, "drawing behind the newest sample still draws");
 
+  h = history();
+  h.push(sample_at(base, kNow, 40, 1, 1));
+  snapshot back = sample_at(base, kNow - 1000000, 40, 1, 1);
+  back.interval_s = 7;
+  h.push(back);
+  check(h.samples().size() == 2 && h.samples()[1].unix_ms - h.samples()[0].unix_ms == 7000, "a backward step takes its spacing from interval_s");
+  back.interval_s = 7200;
+  h.push(sample_at(back, kNow - 2000000, 40, 1, 1));
+  check(h.samples().size() == 1, "a backward step after a long stall drops what is off the span");
+  check(known_columns(util_columns(h, kNow - 2000000)) == 1, "a long stall does not join as continuous");
+  back.interval_s = 60;
+  h.push(sample_at(back, kNow - 3000000, 40, 1, 1));
+  check(h.samples().size() == 1, "a stall of exactly the span is off the graph too");
+
+  // Gaps, at the threshold.
+  h = history();
+  h.push(sample_at(base, kNow - 1500, 40, 1, 1));
+  h.push(sample_at(base, kNow, 40, 1, 1));
+  check(known_columns(util_columns(h)) == 7, "samples 1.5 s apart join");
+  h = history();
+  h.push(sample_at(base, kNow - 1600, 40, 1, 1));
+  h.push(sample_at(base, kNow, 40, 1, 1));
+  check(known_columns(util_columns(h)) == 2, "samples 1.6 s apart do not");
+
+  // Highest in a column, in either order.
+  for (const double first : {10.0, 90.0}) {
+    h = history();
+    h.push(sample_at(base, kNow - 500, first, 1, 1));
+    h.push(sample_at(base, kNow, 100 - first, 1, 1));
+    check(plot_columns(h, &history_sample::gpu_util, kNow, 4)[3] == 90, "a column shows its highest sample");
+  }
+
+  // A repeated collector line measured nothing new.
+  h = history();
+  h.push(sample_at(base, kNow - 2000, 40, 1, 1, 11));
+  h.push(sample_at(base, kNow - 1000, 40, 1, 1, 11));
+  check(std::isnan(h.samples().back().wsl_cpu), "a repeated line is a gap");
+  check(!std::isnan(h.samples().back().gpu_util), "and only for the WSL figure");
+  h.push(sample_at(base, kNow, 40, 1, 1, 12));
+  check(!std::isnan(h.samples().back().wsl_cpu), "a new line is a sample again");
+
+  // has_* and the unreadable line, in the graph cells as well as the text.
+  h = history();
+  for (int age = 3; age >= 0; --age) {
+    snapshot s = sample_at(base, kNow - age * 1000, 40, 1, 1);
+    s.gpu_device.has_mem = s.gpu_device.has_power = false;
+    s.wsl_json = age % 2 ? "{\"schema\":1,\"busy" + std::to_string(age) : R"({"schema":2,"busy_pct":1,"memory":{},"n":)" + std::to_string(age) + "}";
+    h.push(s);
+  }
+  check(std::isnan(h.samples().back().gpu_mem_pct), "has_mem false is a gap, whatever mem_total says");
+  check(std::isnan(h.samples().back().gpu_power_pct), "has_power false is a gap, whatever power_w says");
+  check(known_columns(plot_columns(h, &history_sample::wsl_cpu, kNow, kDots)) == 0, "an unreadable line is not a sample");
+  snapshot unreadable = base;
+  unreadable.wsl_json = "{\"schema\":1,\"busy";
+  const std::string cells = graph_rows(as_text(render(unreadable, 131, 30, kNow, &h, view::cpu)));
+  check(count_braille(panel_cells(cells, 0)) > 0, "the Windows CPU graph is drawn");
+  check(count_braille(panel_cells(cells, 1)) == 0, "an unreadable line draws no cell in the WSL graph");
+
   snapshot same = base;
   h = history();
   for (int i = 0; i < 5; ++i) h.push(same);
@@ -452,15 +558,16 @@ void check_panels() {
   const snapshot full = busy();
   const history empty, demo = demo_minute(full), demo_bare = demo_minute(bare());
 
-  // Without a history the screen is today's, whatever view is asked for.
+  // Without a history there are no panels, whatever view is asked for. This compares the code with
+  // itself: it cannot show that the frames match any older version.
   for (const auto& s : {busy(), bare()}) {
     const std::string plain = as_text(render(s, 131, 50, kNow));
     check(as_text(render(s, 131, 50, kNow, nullptr, view::gpu)) == plain && as_text(render(s, 131, 50, kNow, nullptr, view::cpu)) == plain, "no history, no panels");
     check(!has(plain, "[q] quit"), "no history, no footer");
-    // The overall panel is the same screen one row shorter, with the footer as its last row.
+    // The overall panel is the screen without a history, one row shorter, then the footer.
     const auto with = render(s, 131, 50, kNow, &demo, view::overall);
     const auto without = render(s, 131, 49, kNow);
-    check(with.size() == without.size() + 1 && as_text({with.begin(), with.end() - 1}) == as_text(without), "the overall panel is today's screen");
+    check(with.size() == without.size() + 1 && as_text({with.begin(), with.end() - 1}) == as_text(without), "the overall panel is the screen without a history");
     check(count_braille(graph_rows(as_text(with))) == 0 && !has(as_text(with), "-60s"), "the overall panel has no graphs");
   }
 
@@ -493,7 +600,7 @@ void check_panels() {
     check(has(t, "device · NVML") && has(t, "engine counters,") && has(t, "VM level, not exact shares") && has(t, "Windows · engine counters"), "wrapped titles stay whole" + n);
     check(has(t, "dxg_denied 36") && has(t, "no usage measured"), "holders carry no usage" + n);
     check(!has(t, "88%"), "52 + 36 is never shown" + n);
-    check(has(t, "different measures"), "device and engine figures are not expected to match" + n);
+    check(has(t, "unexplained") && !has(t, "different measures") && !has(t, "expected to match"), "device and engine: only that the difference is unexplained" + n);
   }
   check(has(g, "9.0/12.0 GiB") && has(g, "187/200 W") && !has(g, "75%") && !has(g, "94%"), "bytes and watts stay in their units");
 
@@ -531,6 +638,17 @@ void check_panels() {
     check(!has(t, "62%") && !has(t, "61.6"), "Windows and WSL busy are not added" + where);
     check(has(t, "top ") && has(t, "ollama") && has(t, "svchost.exe"), "both process lists" + where);
   }
+  // The title rows themselves: the WINDOWS and WSL rule rows hold the same words.
+  for (const int w : {131, 200}) {
+    const auto f = render(full, w, 60, kNow, &demo, view::cpu);
+    const std::string title = line_with(f, "%  Windows CPU");
+    check(has(title, "Windows CPU · whole machine, includes the WSL VM"), "the Windows graph title names its source");
+    check(has(title, "WSL CPU · guest view, inside the VM"), "the WSL graph title names its source");
+    check(has(as_text(f), "two systems' own views of overlapping work, never added"), "the CPU rule says the views overlap");
+  }
+  const auto wrapped = render(full, 80, 60, kNow, &demo, view::cpu);
+  const std::string second = line_with(wrapped, "%  Windows CPU", 1);
+  check(has(second, "includes the WSL VM") && has(second, "guest view, inside the VM"), "wrapped titles keep their source");
   const auto cpu = render(full, 131, 60, kNow, &demo, view::cpu);
   for (const line& l : cpu) {
     const std::string t = as_text({l});
@@ -551,6 +669,10 @@ void check_panels() {
   snapshot no_cpu = bare();
   no_cpu.cpu = {};
   check(has(as_text(render(no_cpu, 131, 50, kNow, &demo_bare, view::cpu)), "n/a  Windows CPU"), "a failed CPU read is n/a");
+  const std::string no_cpu_screen = as_text(render(no_cpu, 131, 50, kNow));
+  const std::string windows_block = no_cpu_screen.substr(no_cpu_screen.find("WINDOWS"));
+  check(has(windows_block, "CPU   n/a") && !has(windows_block.substr(0, windows_block.find("cores")), "0%"), "a failed CPU read is n/a on the overall screen too");
+  check(has(as_text(render(bare(), 131, 50, kNow)), "CPU   ━"), "a CPU read keeps its bar");
   history nc;
   no_cpu.unix_ms = kNow;
   nc.push(no_cpu);
@@ -575,13 +697,65 @@ void check_panels() {
 
   // Short windows: graphs shrink, then lower blocks go, the footer stays.
   const std::string tall = as_text(render(full, 131, 50, kNow, &demo, view::gpu));
-  check(has(tall, "device  util") && has(tall, "PROCESSES") && !has(tall, "window too short"), "a tall window shows everything");
+  check(has(tall, "device  util") && has(tall, "PROCESSES") && !has(tall, "rows hidden"), "a tall window shows everything");
   const std::string mid = as_text(render(full, 131, 12, kNow, &demo, view::gpu));
-  check(has(mid, "100│") && has(mid, "window too short") && has(mid, "[q] quit"), "a short window says what it dropped");
+  check(has(mid, "100│") && has(mid, "some rows hidden") && has(mid, "[q] quit"), "a short window says it dropped something");
+  panel one{{"title"}, "1%", tone::text, &history_sample::gpu_util};
+  const std::vector<panel> pair = {one, one};
+  std::vector<grid_row> fitted;
+  add_panels(fitted, pair, 131);
+  const int whole = rows_height(fitted);
+  check(!fit_rows(fitted, whole) && fitted[0].plot, "what fits is not hidden");
+  check(fit_rows(fitted, whole - 1) && !fitted[0].plot, "a plot that does not fit is reported");
+  // The rule row is the first to go; it counts as hidden too.
+  const auto no_rule = render(full, 80, 23, kNow, &demo, view::gpu);
+  check(!has(as_text(no_rule), "GPU ─") && has(as_text(no_rule), "vmwp.exe") && marks_hidden(no_rule), "a dropped GPU rule is marked");
+  // Too narrow for the note: a marker the right edge cannot cut.
+  for (const int w : {1, 10, 36, 40, 48, 59}) {
+    for (const view v : {view::gpu, view::cpu}) {
+      const auto f = render(full, w, 8, kNow, &demo, v);
+      check(as_text({f.back()}).rfind("…", 0) == 0, "hidden is marked at width " + std::to_string(w));
+    }
+  }
+  check(has(as_text({render(full, 60, 8, kNow, &demo, view::gpu).back()}), "[q] quit   … some rows hidden"), "60 columns hold the note");
+  check(!marks_hidden(render(full, 40, 66, kNow, &demo, view::cpu)), "nothing hidden, no marker");
+
+  // /dev/dxg holders: a count, and the warning whenever the block is drawn.
+  const snapshot many = with_holders(full, 22);
+  const auto crowded = render(many, 131, 50, kNow, &demo, view::gpu);
+  check(has(as_text(crowded), "of 22") && has(as_text(crowded), "dxg_denied 36") && marks_hidden(crowded), "a cut holder list counts itself");
+  check(has(as_text(render(full, 131, 50, kNow, &demo, view::gpu)), "top 2 of 2"), "a whole holder list counts too");
+  for (const int w : {30, 40, 50, 63, 64, 80, 100, 131, 200}) {
+    for (int rows = 1; rows <= 66; ++rows) {
+      const auto f = render(many, w, rows, kNow, &demo, view::gpu);
+      const std::string text = as_text(f);
+      const std::string at = " at " + std::to_string(w) + "x" + std::to_string(rows);
+      if (!has(text, "no usage measured")) continue;
+      check(has(text, "dxg_denied 36"), "the warning survives" + at);
+      check(has(text, "of 22"), "the count survives" + at);
+      check(marks_hidden(f), "the cut is marked" + at);
+      check(!has(text, "top 0 of 22"), "a drawn list has a name in it" + at);
+    }
+  }
+  check(!has(as_text(render(no_cpu_or_wsl(), 131, 50, kNow, &demo, view::gpu)), "dxg_denied"), "no WSL line, no warning row");
+  bool no_room_cut = false;
+  const wsl_view many_view = read_wsl(many.wsl_json);
+  check(has(as_text(dxg_holder_list(many_view, 60, 0, no_room_cut)), "dxg_denied 36") && no_room_cut, "the warning needs no name row");
+
+  // A process at zero is no GPU use.
+  snapshot zero = busy();
+  zero.gpu_engines.push_back({4, "3D", 0});
+  const auto zf = render(zero, 131, 50, kNow, &demo, view::gpu);
+  check(has(as_text(zf), "top 3 of 3 by GPU%") && !has(as_text(zf), "System"), "an engine at 0% is not a GPU user");
+
+  // Without a limit the watts stand alone and the title says why the graph is blank.
+  snapshot limitless = busy();
+  limitless.gpu_device.power_limit_w = 0;
+  check(has(as_text(render(limitless, 200, 50, kNow, &empty, view::gpu)), "no limit reported, not graphed"), "no limit is named in the title");
   const std::string low = as_text(render(full, 131, 6, kNow, &demo, view::gpu));
   check(has(low, "91%  device · NVML") && has(low, "52%  WSL VM") && has(low, "[q] quit") && !has(low, "100│"), "a very short window keeps the values and labels");
   const std::string narrow_low = as_text(render(full, 50, 12, kNow, &demo, view::gpu));
-  check(has(narrow_low, "100│") && has(narrow_low, "36%  Windows ·") && has(narrow_low, "… hidden"), "a stack that cannot fit keeps every value it can");
+  check(has(narrow_low, "100│") && has(narrow_low, "36%  Windows ·") && marks_hidden(render(full, 50, 12, kNow, &demo, view::gpu)), "a stack that cannot fit keeps every value it can");
   const std::string cpu_low = as_text(render(full, 80, 24, kNow, &demo, view::cpu));
   check(has(cpu_low, "svchost.exe") || has(cpu_low, "vmmemWSL"), "at 80x24 the CPU panel's Windows list has rows");
   const std::string gpu_low = as_text(render(full, 80, 24, kNow, &demo, view::gpu));
@@ -678,37 +852,70 @@ void check_console() {
     if (in != INVALID_HANDLE_VALUE) CloseHandle(in);
     return;
   }
+  const DWORD start = before | ENABLE_VIRTUAL_TERMINAL_INPUT;  // So that clearing it is seen
+  check(SetConsoleMode(in, start) != 0, "VT input can be set for the check");
   {
     console c;
     DWORD during = 0;
     GetConsoleMode(in, &during);
     check(!(during & ENABLE_ECHO_INPUT) && !(during & ENABLE_LINE_INPUT), "echo and line input off");
     check((during & ENABLE_PROCESSED_INPUT) != 0, "Ctrl+C stays processed");
+    check(!(during & ENABLE_VIRTUAL_TERMINAL_INPUT), "VT input off");
+    // Removing a handler fails unless it is registered. Under check.sh stdout is a pipe, the case
+    // where the handler once came too late.
+    check(SetConsoleCtrlHandler(on_ctrl, FALSE) != 0, "Ctrl+C is caught whatever stdout is");
+    SetConsoleCtrlHandler(on_ctrl, TRUE);
     FlushConsoleInputBuffer(in);
     check(c.poll_key() == 0, "no key waiting, no wait");
-    const auto key = [](WCHAR ch, BOOL down) {
+    const auto key = [](WORD vk, WCHAR ch, BOOL down = TRUE, DWORD state = 0) {
       INPUT_RECORD r{};
       r.EventType = KEY_EVENT;
       r.Event.KeyEvent.bKeyDown = down;
       r.Event.KeyEvent.wRepeatCount = 1;
+      r.Event.KeyEvent.wVirtualKeyCode = vk;
       r.Event.KeyEvent.uChar.UnicodeChar = ch;
+      r.Event.KeyEvent.dwControlKeyState = state;
       return r;
     };
     INPUT_RECORD other{};
     other.EventType = FOCUS_EVENT;
-    const INPUT_RECORD events[] = {other, key(L'q', TRUE), key(L'q', FALSE), key(0, TRUE), key(0xD55C, TRUE), key(L'2', TRUE), key(L'2', FALSE)};
+    const INPUT_RECORD events[] = {
+        other, key('Q', L'q'), key('Q', L'q', FALSE),
+        key(VK_LEFT, 0), key(0, 0xD55C), key('2', L'2'), key('2', L'2', FALSE),
+        key('Q', 0x3142),                                       // q under Hangul input mode
+        key(VK_DELETE, 0x7F), key(VK_PACKET, 0xD83D), key(VK_PACKET, 0xDE00),  // Delete, a surrogate pair
+        key(0, L'q'), key('X', L'x'), key('Q', 0x11, TRUE, LEFT_CTRL_PRESSED),  // A character alone, another key, Ctrl+Q
+        key(VK_NUMPAD3, L'3'), key('1', L'!', TRUE, SHIFT_PRESSED), key('Q', L'Q', TRUE, SHIFT_PRESSED)};
+    const DWORD total = static_cast<DWORD>(std::size(events));
     DWORD put = 0;
-    WriteConsoleInputW(in, events, 7, &put);
-    check(put == 7, "events written");
+    WriteConsoleInputW(in, events, total, &put);
+    check(put == total, "events written");
     check(c.poll_key() == 'q', "a key comes back");
     check(c.poll_key() == '2', "releases, focus, arrows and non-ASCII are passed over");
+    check(c.poll_key() == 'q', "q under Hangul input mode");
+    check(c.poll_key() == '3', "Delete, a surrogate pair, Ctrl+Q and a bare character are passed over; the numeric keypad counts");
+    check(c.poll_key() == '1', "Shift on a digit, for the layouts that need it");
+    check(c.poll_key() == 'q', "Shift on q");
     check(c.poll_key() == 0, "then nothing");
   }
   DWORD after = 0;
   GetConsoleMode(in, &after);
-  check(after == before, "the input mode is restored");
+  check(after == start, "the input mode is restored");
+  check(SetConsoleCtrlHandler(on_ctrl, FALSE) == 0, "the Ctrl+C handler is removed");
+  SetConsoleMode(in, before);
   CloseHandle(in);
   printf("console input: key checks ran\n");
+
+  // A failed CONIN$ open. Only with stdout elsewhere: this process keeps no console afterwards.
+  DWORD out_mode = 0;
+  if (!GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &out_mode) && FreeConsole()) {
+    HANDLE gone = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    check(gone == INVALID_HANDLE_VALUE, "CONIN$ cannot be opened without a console");
+    if (gone != INVALID_HANDLE_VALUE) CloseHandle(gone);
+    console c;
+    check(c.poll_key() == 0 && !c.is_terminal(), "a failed CONIN$ open gives no key");
+    printf("console input: CONIN$ failure checked\n");
+  }
 }
 #endif
 

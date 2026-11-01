@@ -13,13 +13,13 @@ namespace wwt {
 namespace {
 
 // When a value turns amber or red. Judgement calls, not measurements: tune them here.
-constexpr double kHotPct = 90;           // CPU, one core, one disk
+constexpr double kHotPct = 90;           // CPU, one core, one disk, GPU util, both split figures
 constexpr double kMemWatchPct = 10;      // Available memory left, Windows and WSL; free GPU memory
 constexpr double kMemActPct = 4;
 constexpr double kGpuTempWatch = 83;     // The value sshvllmtop's spec uses
 constexpr double kGpuTempAct = 90;
 constexpr double kPressureWatch = 20;    // PSI some avg10
-constexpr double kStaleS = history::kStaleS;  // Data older than this is called out; the graphs gap on it
+constexpr double kStaleS = 5;            // Data older than this is called out; the WSL graph gaps on it
 
 constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
 constexpr int kLabel = 6;  // Width of "CPU", "MEM", ... at the start of a row
@@ -451,8 +451,13 @@ std::vector<line> windows_section(const snapshot& s, int width) {
 
   const tone t = hot(s.cpu.busy_pct);
   row cpu;
-  cpu.add("CPU", tone::title, true).to(kLabel).bar(bar_width(width), s.cpu.busy_pct, t == tone::text ? tone::bar : t);
-  cpu.add(" ").add(pct_text(s.cpu.busy_pct), t, true);
+  cpu.add("CPU", tone::title, true).to(kLabel);
+  if (s.cpu.core_pct.empty()) {  // A failed read leaves a default view: its 0 was not measured
+    cpu.add("n/a", tone::dim);
+  } else {
+    cpu.bar(bar_width(width), s.cpu.busy_pct, t == tone::text ? tone::bar : t);
+    cpu.add(" ").add(pct_text(s.cpu.busy_pct), t, true);
+  }
   out.push_back(cpu);
   core_rows(out, width, s.cpu.core_pct);
 
@@ -994,7 +999,7 @@ struct panel_frame {
   bool hidden = false;  // A block was dropped for want of rows
 };
 
-std::vector<line> gpu_users_list(const snapshot& s, int col, int rows) {
+std::vector<line> gpu_users_list(const snapshot& s, int col, int rows, bool& cut) {
   std::vector<line> out;
   std::vector<std::pair<uint32_t, double>> list;
   for (const auto& e : busiest_engine(s)) {
@@ -1014,6 +1019,7 @@ std::vector<line> gpu_users_list(const snapshot& s, int col, int rows) {
   for (const gpu_memory_row& m : s.gpu_memory) vram[m.pid] = m.local;
 
   const size_t shown = std::min(list.size(), static_cast<size_t>(std::max(0, rows)));
+  cut = cut || shown < list.size();
   head.add(fmt("  top %d of %d by GPU%%, busiest engine", static_cast<int>(shown), static_cast<int>(list.size())), tone::dim);
   out.push_back(head);
 
@@ -1041,8 +1047,12 @@ std::vector<line> gpu_users_list(const snapshot& s, int col, int rows) {
   return out;
 }
 
+// The warning goes with the list: a list with no warning reads as complete.
+int denied_rows(const wsl_view& w) { return w.ok && w.dxg_denied > 0 ? 1 : 0; }
+
 // Names only. /dev/dxg says who holds the GPU; nothing here says how much each one uses.
-std::vector<line> dxg_holder_list(const wsl_view& w, int col, int rows) {
+// rows is for names: the head, the columns and the dxg_denied warning come on top of it.
+std::vector<line> dxg_holder_list(const wsl_view& w, int col, int rows, bool& cut) {
   std::vector<line> out;
   row head;
   head.add("WSL", tone::title, true).add(col >= 39 ? " /dev/dxg holders, no usage measured" : " holders, no usage measured", tone::dim);
@@ -1054,11 +1064,12 @@ std::vector<line> dxg_holder_list(const wsl_view& w, int col, int rows) {
   if (w.dxg_pids.empty()) {
     out.push_back(message("", "no holder seen", tone::dim, 0));
   } else {
+    const size_t shown = std::min(w.dxg_pids.size(), static_cast<size_t>(std::max(0, rows)));
+    cut = cut || shown < w.dxg_pids.size();
     row cols;
     cols.add(pad_left("pid", 7), tone::dim).add(" ").add("name", tone::dim);
+    cols.add(fmt("  top %d of %d", static_cast<int>(shown), static_cast<int>(w.dxg_pids.size())), tone::dim);
     out.push_back(cols);
-    const int denied = w.dxg_denied > 0 ? 1 : 0;
-    const size_t shown = std::min(w.dxg_pids.size(), static_cast<size_t>(std::max(0, rows - denied)));
     for (size_t i = 0; i < shown; ++i) {
       const uint32_t pid = w.dxg_pids[i];
       const auto it = std::find_if(w.processes.begin(), w.processes.end(), [&](const wsl_process& p) { return p.pid == pid; });
@@ -1067,22 +1078,27 @@ std::vector<line> dxg_holder_list(const wsl_view& w, int col, int rows) {
       out.push_back(r);
     }
   }
-  if (w.dxg_denied > 0 && rows > 0) {
+  if (denied_rows(w)) {
     out.push_back(message("", fmt("dxg_denied %lld: unreadable, a root GPU process could be missing",
                                   static_cast<long long>(w.dxg_denied)), tone::watch, 0));
   }
   return out;
 }
 
-void gpu_lists(std::vector<line>& out, const snapshot& s, const wsl_view& w, int width, int avail) {
+// avail covers everything drawn here. cut comes back true if either list left a row out.
+void gpu_lists(std::vector<line>& out, const snapshot& s, const wsl_view& w, int width, int avail, bool& cut) {
   out.push_back(rule("PROCESSES", kTwoLists, width));
   if (width >= kSideBySideGpu) {
     const int col = (width - kListGap) / 2;
-    side_by_side(out, gpu_users_list(s, col, avail - 3), dxg_holder_list(w, width - col - kListGap, avail - 3), col);
+    side_by_side(out, gpu_users_list(s, col, avail - 3, cut), dxg_holder_list(w, width - col - kListGap, avail - 3 - denied_rows(w), cut), col);
     return;
   }
-  const int total = std::max(0, avail - 5);
-  const std::vector<line> top = gpu_users_list(s, width, total - total / 2), bottom = dxg_holder_list(w, width, total / 2);
+  // Stacked: rule, two heads, two column rows, the warning. The rest is shared, and what the first
+  // list leaves over goes to the second.
+  const int total = std::max(0, avail - 5 - denied_rows(w));
+  const int holders = w.ok ? static_cast<int>(std::min<size_t>(w.dxg_pids.size(), static_cast<size_t>(total))) : 0;
+  const std::vector<line> top = gpu_users_list(s, width, total - std::min(total / 2, holders), cut);
+  const std::vector<line> bottom = dxg_holder_list(w, width, avail - 3 - denied_rows(w) - static_cast<int>(top.size()), cut);
   out.insert(out.end(), top.begin(), top.end());
   out.insert(out.end(), bottom.begin(), bottom.end());
 }
@@ -1123,9 +1139,12 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   const bool device = room >= 1;
   if (device) --room;
   std::vector<line> lists;
-  if (const int least = width >= kSideBySideGpu ? 4 : 6; room >= least) {
-    gpu_lists(lists, s, w, width, std::min(room, kMaxGpuList));
+  // At least one row of each list, and the warning.
+  if (const int least = (width >= kSideBySideGpu ? 4 : 7) + denied_rows(w); room >= least) {
+    bool cut = false;
+    gpu_lists(lists, s, w, width, std::min(room, kMaxGpuList), cut);
     room -= static_cast<int>(lists.size());
+    f.hidden = f.hidden || cut;
   } else {
     f.hidden = true;
   }
@@ -1133,8 +1152,11 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
 
   const bool head = room >= 1;
   if (head) {
-    f.lines.push_back(rule("GPU", width >= 100 ? "device and engine counters are different measures, not expected to match" : "device, engine: different measures", width));
+    // docs/measurable.md: close under load, not at idle, and the cause is unresolved.
+    f.lines.push_back(rule("GPU", width >= 100 ? "device and engine counters can differ, the difference is unexplained" : "device vs engine gap unexplained", width));
     --room;
+  } else {
+    f.hidden = true;
   }
   if (room > 0) grow_rows(rows, room);
   draw_rows(f.lines, rows, h, graph_end(h, now_ms));
@@ -1191,6 +1213,7 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
     f.hidden = true;
   }
   if (head) f.lines.push_back(rule("CPU", "two systems' own views of overlapping work, never added", width));
+  else f.hidden = true;
   if (room > 0) grow_rows(rows, room);
   draw_rows(f.lines, rows, h, graph_end(h, now_ms));
   if (show_cores) f.lines.insert(f.lines.end(), cores.begin(), cores.end());
@@ -1198,25 +1221,67 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   return f;
 }
 
+constexpr int kHiddenNote = 21;  // Columns of the note below, after the 39 of the keys
+
 line footer(view v, int width, bool hidden) {
   row r;
   const auto key = [&](const char* text, view which) {
     const bool on = v == which;
     r.add(text, on ? tone::title : tone::dim, on).add("  ");
   };
+  // Too narrow for the note, a marker first: the cut at the right edge cannot take it.
+  if (hidden && width < 39 + kHiddenNote) r.add("… ", tone::watch);
   key("[1] overall", view::overall);
   key("[2] gpu", view::gpu);
   key("[3] cpu", view::cpu);
   r.add("[q] quit", tone::dim);
-  if (hidden) {
-    const int before = r.cols();
-    r.add_if_fits("   … window too short, lower blocks hidden", width, tone::watch);
-    if (r.cols() == before) r.add_if_fits("  … hidden", width, tone::watch);
-  }
+  if (hidden) r.add_if_fits("   … some rows hidden", width, tone::watch);
   return r;
 }
 
 }  // namespace
+
+void history::push(const snapshot& s) {
+  const int64_t t = s.unix_ms;
+  if (t <= 0 || t > kLatestMs) return;  // A sample that cannot be placed in time is a gap
+
+  // The wall clock stepped back. interval_s comes from QPC, so the old samples keep their spacing and
+  // move with the clock: nothing is lost and nothing lands ahead of "now". After a stall as long as
+  // the span they are off the graph anyway, and must not join the new sample as if continuous.
+  if (!samples_.empty() && t <= samples_.back().unix_ms) {
+    if (s.interval_s >= static_cast<double>(kSpanMs) / 1000.0) {
+      samples_.clear();
+    } else {
+      const double gap_s = s.interval_s > 0 ? s.interval_s : 1.0;
+      const int64_t shift = samples_.back().unix_ms + static_cast<int64_t>(gap_s * 1000.0) - t;
+      for (history_sample& old : samples_) old.unix_ms -= shift;
+    }
+  }
+
+  const double missing = std::numeric_limits<double>::quiet_NaN();
+  const gpu_device_view& g = s.gpu_device;
+  history_sample n;
+  n.unix_ms = t;
+  n.gpu_util = g.present && g.has_util ? g.util_pct : missing;
+  n.gpu_mem_pct = g.present && g.has_mem && g.mem_total > 0 ? 100.0 * static_cast<double>(g.mem_used) / static_cast<double>(g.mem_total) : missing;
+  n.gpu_power_pct = g.present && g.has_power && g.power_limit_w > 0 ? 100.0 * g.power_w / g.power_limit_w : missing;
+  n.vm_pct = s.gpu_split.valid ? s.gpu_split.vm_pct : missing;
+  n.windows_pct = s.gpu_split.valid ? s.gpu_split.windows_pct : missing;
+  n.windows_cpu = s.cpu.core_pct.empty() ? missing : s.cpu.busy_pct;  // A failed read leaves no cores
+  // The bridge hands over its latest line, so the same line twice measured nothing new: a silent
+  // collector is a gap at once, not a flat line until the line turns stale. The line carries mono_s,
+  // so a new line always differs; wsl_view has no mono_s and this needs none.
+  const wsl_view w = read_wsl(s.wsl_json);
+  const bool repeated = s.wsl_json == last_wsl_;
+  last_wsl_ = s.wsl_json;
+  n.wsl_cpu = w.ok && !repeated && s.wsl_age_s < kStaleS ? w.busy_pct : missing;
+  samples_.push_back(n);
+
+  // One sample older than the span stays, so the left edge is drawn from where that sample ended.
+  while (samples_.size() > kMaxSamples || (samples_.size() > 1 && samples_[1].unix_ms < t - kSpanMs)) {
+    samples_.pop_front();
+  }
+}
 
 int display_width(std::string_view s) {
   int w = 0;

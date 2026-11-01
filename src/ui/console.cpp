@@ -33,15 +33,32 @@ void write_utf8(HANDLE out, std::string_view s) {
   write_wide(out, w);
 }
 
+// The key pressed, not the character it made: under Hangul input mode q arrives as U+3142, and Delete
+// has no character worth reading. Shift stays allowed, because some layouts need it for the digits.
+char key_of(const KEY_EVENT_RECORD& k) {
+  if (k.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED | LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) return 0;
+  switch (k.wVirtualKeyCode) {
+    case '1': case VK_NUMPAD1: return '1';
+    case '2': case VK_NUMPAD2: return '2';
+    case '3': case VK_NUMPAD3: return '3';
+    case 'Q': return 'q';
+    default: return 0;
+  }
+}
+
 }  // namespace
 
 console::console() {
-  // Input first, on its own: a redirected stdout does not take the keyboard away. Echo needs line
-  // input, so both go; ENABLE_PROCESSED_INPUT stays so that Ctrl+C still reaches on_ctrl.
+  // Before any mode changes, whatever stdout is: Ctrl+C has to end in the destructor, which puts them back.
+  SetConsoleCtrlHandler(on_ctrl, TRUE);
+
+  // Input on its own: a redirected stdout does not take the keyboard away. Echo needs line input, so
+  // both go; ENABLE_PROCESSED_INPUT stays so that Ctrl+C still reaches on_ctrl. VT input would turn a
+  // key like Delete into text, and poll_key wants the key.
   HANDLE in = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
   DWORD in_mode = 0;
   if (in != INVALID_HANDLE_VALUE && GetConsoleMode(in, &in_mode) &&
-      SetConsoleMode(in, (in_mode | ENABLE_PROCESSED_INPUT) & ~static_cast<DWORD>(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT))) {
+      SetConsoleMode(in, (in_mode | ENABLE_PROCESSED_INPUT) & ~static_cast<DWORD>(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_VIRTUAL_TERMINAL_INPUT))) {
     in_ = in;
     saved_in_mode_ = in_mode;
   } else if (in != INVALID_HANDLE_VALUE) {
@@ -54,7 +71,6 @@ console::console() {
   if (!SetConsoleMode(out_, mode | ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING)) return;
   saved_mode_ = mode;
   terminal_ = true;
-  SetConsoleCtrlHandler(on_ctrl, TRUE);
   write_utf8(out_, "\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[2J");  // alternate screen, no cursor, no wrap
 }
 
@@ -63,9 +79,10 @@ console::~console() {
     SetConsoleMode(in_, saved_in_mode_);
     CloseHandle(in_);
   }
-  if (!terminal_) return;
-  write_utf8(out_, "\x1b[0m\x1b[?7h\x1b[?25h\x1b[?1049l");
-  SetConsoleMode(out_, saved_mode_);
+  if (terminal_) {
+    write_utf8(out_, "\x1b[0m\x1b[?7h\x1b[?25h\x1b[?1049l");
+    SetConsoleMode(out_, saved_mode_);
+  }
   SetConsoleCtrlHandler(on_ctrl, FALSE);
 }
 
@@ -99,8 +116,7 @@ char console::poll_key() {
     DWORD got = 0;
     if (!ReadConsoleInputW(in_, &e, 1, &got) || got == 0) return 0;
     if (e.EventType != KEY_EVENT || !e.Event.KeyEvent.bKeyDown) continue;  // Releases, resizes, the mouse
-    const WCHAR c = e.Event.KeyEvent.uChar.UnicodeChar;
-    if (c > 0 && c < 0x80) return static_cast<char>(c);
+    if (const char key = key_of(e.Event.KeyEvent)) return key;
   }
   return 0;
 }

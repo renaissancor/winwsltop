@@ -7,7 +7,7 @@ namespace wwt {
 
 class console {
  public:
-  console();   // On a console: alternate screen, cursor hidden, VT on, Ctrl+C caught, no input echo
+  console();   // Ctrl+C caught; on a console: alternate screen, cursor hidden, VT on, no input echo
   ~console();  // Puts all of that back
   console(const console&) = delete;
   console& operator=(const console&) = delete;
@@ -17,8 +17,9 @@ class console {
   void draw(const std::vector<line>& lines);
   // Ctrl+C or a closing window asked to end. Poll it, so that the destructor runs.
   static bool stop_requested();
-  // The next key as a char, or 0: no key waiting, no console, or a key with no ASCII character.
-  // Never blocks. Reads CONIN$, so it works when stdin is not the console.
+  // The next key this program uses: '1', '2', '3' or 'q'. 0 when none is waiting or there is no
+  // console; every other key is passed over. Keys are told by virtual key code, so q still works in
+  // Hangul input mode. Never blocks. Reads CONIN$, so it works when stdin is not the console.
   char poll_key();
 
  private:

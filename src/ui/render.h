@@ -22,7 +22,7 @@ using line = std::vector<span>;
 
 class history;
 
-// The panels of the live screen. Keys choose one; only main.cpp acts on a key.
+// The panels of the live screen. render() knows nothing of keys: its caller maps them to a view.
 enum class view : uint8_t { overall, gpu, cpu };
 
 // At most `height` lines of at most `width` columns, wide characters counted as 2. Names from either
