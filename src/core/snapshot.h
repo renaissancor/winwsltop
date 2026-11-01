@@ -2,6 +2,8 @@
 // Everything here is measured. Inference about Windows vs WSL belongs in a later layer.
 #pragma once
 #include <cstdint>
+#include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -10,6 +12,25 @@ namespace wwt {
 struct cpu_view {
   double busy_pct = 0;
   std::vector<double> core_pct;
+  // Windows' own split of the whole machine, NaN when not read, and user_pct + kernel_pct is busy_pct.
+  // kernel_pct has idle taken out and still holds the VM's time: docs/measurable.md, "The VM's time is
+  // Windows kernel time". Taking the VM out of it is for whoever draws it.
+  double user_pct = std::numeric_limits<double>::quiet_NaN();
+  double kernel_pct = std::numeric_limits<double>::quiet_NaN();
+};
+
+// One logical CPU, from GroupMask bits and never index arithmetic: docs/measurable.md, "CPU layout".
+struct cpu_layout_row {
+  uint32_t core = 0;        // Physical core, numbered from 0. Rows with the same core are siblings
+  uint32_t thread = 0;      // Place within that core, lowest logical CPU first, so 0 on a one-thread core
+  uint32_t efficiency = 0;  // EfficiencyClass: higher is faster, and the same on a machine that is not hybrid
+};
+
+// Read once at start, and kept out of cpu_view, which is reset on a failed read. rows[i] is
+// cpu.core_pct[i]; known is false with no rows. A reader still compares the two sizes.
+struct cpu_layout_view {
+  bool known = false;
+  std::vector<cpu_layout_row> rows;
 };
 
 struct memory_view {
@@ -28,6 +49,9 @@ struct vm_view {
   uint32_t vmmem_pid = 0, vmwp_pid = 0;
   uint64_t vmmem_working_set = 0;
   double vmmem_cores = 0;
+  // False when vmmem_pid is 0 or on a new vmmemWSL's first sample: vmmem_cores is then an unmeasured 0,
+  // which a reader of the figure takes as NaN. A pid and create time seen last sample make it true.
+  bool vmmem_cores_known = false;
 };
 
 struct disk_row {
@@ -80,9 +104,14 @@ struct snapshot {
   int64_t unix_ms = 0;
   double interval_s = 0;
   cpu_view cpu;
+  cpu_layout_view cpu_layout;  // Set once at start; no sample() touches it
   memory_view memory;
   vm_view vm;
   std::vector<process_row> processes;
+  // Threads in Ready or DeferredReady in the process read, one instant, and vmmemWSL's among them:
+  // docs/measurable.md, "A Windows `Ready` count is a free "short of CPU" figure". Empty when not read, never
+  // 0, and vm_ready_threads is also empty when vmmemWSL is not found. Only the VM count names a side.
+  std::optional<uint32_t> ready_threads, vm_ready_threads;
   std::vector<disk_row> disks;
   std::vector<net_row> nets;
   std::vector<gpu_engine_row> gpu_engines;

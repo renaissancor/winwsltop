@@ -63,6 +63,16 @@ class reader {
     if (!bad_) out = v;
   }
 
+  template <class T> void whole_or_null(std::optional<T>& out) {
+    if (word("null")) { out.reset(); return; }
+    T v{};
+    whole(v);
+    if (!bad_) out = v;
+  }
+
+  // For a key whose whole value can be null: consumes it and says so.
+  bool null() { return word("null"); }
+
   void boolean(bool& out) {
     if (word("true")) out = true;
     else if (word("false")) out = false;
@@ -189,6 +199,21 @@ wsl_view read_wsl(std::string_view json) {
     else if (key == "busy_pct") { r.number(v.busy_pct); has_cpu = true; }
     else if (key == "steal_pct") r.number(v.steal_pct);
     else if (key == "core_pct") r.array([&] { r.number(v.core_pct.emplace_back()); });
+    else if (key == "cpu_split") {
+      if (!r.null()) r.object([&](const std::string& k) {
+        if (k == "user") r.number_or_null(v.cpu_user);
+        else if (k == "sys") r.number_or_null(v.cpu_sys);
+        else if (k == "iowait") r.number_or_null(v.cpu_iowait);
+        else r.skip();
+      });
+    } else if (key == "load") {
+      size_t n = 0;
+      if (!r.null()) r.array([&] {
+        std::optional<double> minutes;
+        r.number_or_null(minutes);
+        if (n < v.load.size()) v.load[n++] = minutes;
+      });
+    }
     else if (key == "process_count") r.whole(v.process_count);
     else if (key == "dxg_denied") r.whole(v.dxg_denied);
     else if (key == "dxg_pids") r.array([&] { r.whole(v.dxg_pids.emplace_back()); });
@@ -218,6 +243,7 @@ wsl_view read_wsl(std::string_view json) {
           else if (k == "cores") r.number(p.cores);
           else if (k == "rss") r.whole(p.rss);
           else if (k == "on_gpu") r.boolean(p.on_gpu);
+          else if (k == "threads") r.whole_or_null(p.threads);
           else r.skip();
         });
         v.processes.push_back(std::move(p));

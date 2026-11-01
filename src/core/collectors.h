@@ -13,15 +13,18 @@ class cpu_collector {
  public:
   bool sample(cpu_view& out);
  private:
-  struct times { uint64_t idle = 0, total = 0; };
+  struct times { uint64_t idle = 0, total = 0, user = 0; };  // 100 ns. total is kernel + user; kernel includes idle
   std::vector<times> prev_;
 };
+
+// Called once, at start, for the processor group cpu_collector reads. A failure leaves out unknown.
+bool read_cpu_layout(cpu_layout_view& out);
 
 bool sample_memory(memory_view& out);
 
 class process_collector {
  public:
-  bool sample(std::vector<process_row>& out, vm_view& vm);
+  bool sample(std::vector<process_row>& out, vm_view& vm, std::optional<uint32_t>& ready_threads, std::optional<uint32_t>& vm_ready_threads);
  private:
   using key = std::pair<uint32_t, int64_t>;  // pid + create time: a PID can be reused
   std::vector<unsigned char> buf_;

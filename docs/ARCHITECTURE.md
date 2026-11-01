@@ -45,7 +45,8 @@ orchestrator and reads [contracts/core.md](contracts/core.md) first.
 1. **evidence → collect.** A counter is used only after `docs/measurable.md` records it as observed on
    this machine. The collector comment cites the ledger row; it does not restate the number.
 2. **collect → core.** A new measured value needs a snapshot field. collect requests it; core adds it
-   to `snapshot.h`, the recorder and, if the collector's line changes, `PROTOCOL.md` with a schema bump.
+   to `snapshot.h`, the recorder and, if the collector's line changes, `PROTOCOL.md`. A change of meaning
+   raises `schema`; a new key does not.
 3. **core → ui.** The screen reads the snapshot, schema 1 of the protocol, and its own in-memory history
    of earlier snapshots (`src/ui/history.h`), and nothing else. A field
    the screen wants is requested from core.

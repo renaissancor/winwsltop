@@ -242,6 +242,20 @@ void check_reader() {
   check(!v.psi_cpu && v.psi_memory && !v.psi_io, "null pressure stays unknown");
   check(v.processes.size() == 1 && v.processes[0].name == "😀\xEF\xBF\xBDx", "surrogate pair and lone surrogate");
 
+  // The CPU keys are additive: a line without them, or with a null, reads, and the figure stays unknown.
+  v = read_wsl(busy_json());
+  check(v.ok && !v.cpu_user && !v.cpu_sys && !v.cpu_iowait && !v.load[0] && !v.processes[0].threads, "a line without the CPU keys reads");
+  v = read_wsl(R"({"schema":1,"busy_pct":1,"memory":{},"cpu_split":{"user":99.5,"sys":0.5,"iowait":0},"load":[19.8,12.25,6,7],"processes":[{"pid":1,"threads":21}]})");
+  check(v.ok && v.cpu_user == 99.5 && v.cpu_sys == 0.5 && v.cpu_iowait == 0.0, "reads cpu_split, and a measured 0 is kept");
+  check(v.load[0] == 19.8 && v.load[1] == 12.25 && v.load[2] == 6.0, "reads load, and a longer list does not write past it");
+  check(v.processes.size() == 1 && v.processes[0].threads == 21u, "reads threads");
+  v = read_wsl(R"({"schema":1,"busy_pct":1,"memory":{},"cpu_split":{"user":null,"sys":2,"iowait":null},"load":[null,2,null],"processes":[{"pid":1,"threads":null}]})");
+  check(v.ok && !v.cpu_user && v.cpu_sys == 2.0 && !v.cpu_iowait, "a null in cpu_split stays unknown");
+  check(!v.load[0] && v.load[1] == 2.0 && !v.load[2], "a null in load stays unknown");
+  check(v.processes.size() == 1 && !v.processes[0].threads, "a null threads stays unknown");
+  v = read_wsl(R"({"schema":1,"busy_pct":1,"memory":{},"cpu_split":null,"load":null})");
+  check(v.ok && !v.cpu_user && !v.load[0], "a null cpu_split or load does not fail the line");
+
   for (const char* bad : {"", "{", "[]", "null", "{\"schema\":1}", "{\"schema\":1,\"busy_pct\":1,\"memory\":{}} x", "{\"schema\":1,\"busy_pct\":nan,\"memory\":{}}",
                           "{\"schema\":1,\"busy_pct\":-inf,\"memory\":{}}", "{\"schema\":1,\"busy_pct\":1,\"memory\":{},\"distro\":\"a\\q\"}",
                           "{\"schema\":1,\"busy_pct\":1,\"memory\":{},\"distro\":\"a\\u12\"}", "{\"schema\":\"1\",\"busy_pct\":1,\"memory\":{}}"}) {

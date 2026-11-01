@@ -56,13 +56,16 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 
 | item | value |
 |---|---|
-| source | `src/host` 269 lines, `src/gpu` 253, `src/wsl` 575 (233 of them generated), `collector.py` 144 |
+| source | `src/host` 356 lines, `src/gpu` 253, `src/wsl` 620 (278 of them generated), `collector.py` 165 |
 | collector cost | 3.46 ms per sample; line 0.08 to 0.17 s old on arrival (ledger, "WSL collector checked") |
+| collector line | 3522 to 3536 bytes with 30 rows, 443 to 447 larger with `cpu_split`, `load` and `threads`, against a 1 KB budget (`docs/design/cpu-panel.md` section 8). Cost 6.99 ms against 7.05 for the old collector, run side by side for 10 samples |
+| Ready count | 29.3 µs mean, 57.3 max, over 345 processes and 6152 threads, on 6.32 ms for a sample; `cost.processes` averaged 5.04 ms over 11 samples. No load |
 | `GPU Engine` read | 0.53 ms over 485 instances (ledger, "Windows collector checked") |
 | NVML init | about 626 ms at construction, about 1 ms per sample (ledger, experiment 02) |
 | `/dev/dxg` scan | incomplete without root: 36 of about 64 processes unreadable (ledger) |
 | verified against the other side | memory total, process count, `vmmemWSL` working set equal; threads and CPU within a window (ledger) |
-| not verified | GPU memory under a WSL allocation; the NVML `NVSMI` fallback path; a failing `nvmlInit_v2` |
+| CPU split and layout | `user_pct` plus `kernel_pct` within 0.001 of `busy_pct` over 11 samples. The same formula on the same NT counts against `_Total` `% User Time` and `% Privileged Time`, 11 windows: mean gap 0.004 and 0.026 points, largest 0.009 and 0.091. Layout on this machine: 20 rows, 6 two-thread cores of class 1 then 8 one-thread cores of class 0, as the ledger's "CPU layout" |
+| not verified | GPU memory under a WSL allocation; the NVML `NVSMI` fallback path; a failing `nvmlInit_v2`; the Ready counts under load, where at most 1 and 0 were seen at idle; `vmmem_cores_known` false on a new `vmmemWSL`; a failed layout read; more than one processor group |
 
 ## Open questions
 
@@ -72,7 +75,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - Whether WSL GPU memory appears under `vmwp.exe` under load. Only idle has been seen.
 - PROPOSED: a start-failure count or message so an invalid `--distro` or a missing `wsl.exe` is
   visible on the screen (`TODO.md` item 8). Needs a snapshot field: request to core.
-- Eight of the ten hand-written collector files still name no ledger section (`TODO.md` item 21).
+- Six of the ten hand-written collector files still name no ledger section (`TODO.md` item 21).
   `pdh_memory.cpp` also repeats a ratio derived from ledger figures in its comment. `scripts/check.sh` does not check
   comment citations, so a renamed ledger section would break them silently.
 - A disk row reports 0 for a field it could not read, because `disk_row` has no `has_*`
@@ -84,6 +87,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - A reset network counter (`TODO.md` item 6) leaves that rate at 0 for the sample, not absent, because
   `net_row` has no `has_rate`. Rule 2 says absent; a flag would need a snapshot field: request to core
   if the distinction matters on the screen. Added 2026-11-01.
+  `user` plus `sys` is unaffected. Not seen in 21 samples. Added 2026-11-01.
 
 ## Decision log
 
@@ -115,3 +119,14 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
   folder and the current directory are not searched. If System32 cannot be resolved, it is a failed start,
   never a search. `python3` runs with `-I`, so a `json.py` in the current folder cannot run in the guest;
   it also ignores `PYTHON*` variables and the user site, which a stdlib-only collector does not need.
+- 2026-11-01. `nt_process` carries its 48-byte I/O tail and a `sizeof` assert, because the thread rows start
+  after it. The Ready count covers every process including PID 0, whose threads never read Ready or
+  DeferredReady in experiment 05's 300 rows, so leaving them in changes nothing.
+- 2026-11-01. `user_pct` and `kernel_pct` are computed over busy's own `sum_total` after summing, and left
+  NaN when it is 0, where `busy_pct` stays 0 as before.
+- 2026-11-01. `read_cpu_layout` numbers cores in `GetLogicalProcessorInformationEx` record order, and reports
+  unknown when a mask bit is at or past the group's processor count or an index is in no record. Two records
+  naming one bit are not treated as a failure; the later one wins.
+- 2026-11-01. `load_average` returns `None` for a non-finite value as well as a failed read, so `load` can
+  never put `NaN` in a line. `threads` shares the parse of the other `/proc/pid/stat` fields, so this
+  collector never sends the `null` the protocol allows for it.

@@ -23,7 +23,8 @@ answer. A stopped distro gets started, which can take longer, and the run may th
   collector has sent nothing, and `gpu_split` can still be valid then. A dead collector's last line stays
   in `wsl.data`, so treat it as stale when `wsl.age_s` is above 5, which is when the screen stops using it.
   `gpu_device` leaves out readings the driver didn't answer, `present` is false with no NVML, and
-  `power_limit_w` can read 0 when only the limit failed.
+  `power_limit_w` can read 0 when only the limit failed. `cpu_layout` is empty when `cpu_layout_known` is
+  false. `ready_threads`, `vm_ready_threads`, `user_pct` and `kernel_pct` are `null` when unknown, never 0.
 - **Never add Windows and WSL figures.** They describe overlapping resources.
 - **`vm_pct` is the whole WSL VM.** No field says how much GPU one Linux process used.
   `wsl.data.dxg_pids` lists who holds the GPU, and `on_gpu` on a WSL process means the same. Both are
@@ -31,7 +32,8 @@ answer. A stopped distro gets started, which can take longer, and the run may th
 - **The split is not an exact share.** `vm_pct` and `windows_pct` have summed to 88% and peaked at 112%
   here, and they can differ from `gpu_device.util_pct`. The difference is unexplained.
 - **A zero can be a failed read.** Disk fields, CPU busy, `memory` fields, network rates after a counter
-  reset, and `vm_local` and `windows_local` can read 0 instead of being absent, even with `valid` true;
+  reset, and `vm_local` and `windows_local` can read 0 instead of being absent, even with `valid` true.
+  `vmmem_cores` reads 0 when it was not measured, so use it only when `vmmem_cores_known` is true;
   [`TODO.md`](TODO.md) tracks most of these. Numbers that aren't finite print as `null`.
 
 `schema` is 1. A change of meaning raises it, and new keys can appear without raising it, so ignore keys
@@ -43,10 +45,13 @@ Percentages are 0 to 100, except `pct`, `vm_pct` and `windows_pct`, which can pa
 | key | meaning |
 |---|---|
 | `schema`, `unix_ms`, `interval_s` | Format version, Windows wall clock, seconds since the last sample |
-| `cpu` | Windows CPU: `busy_pct`, and `core_pct` per logical CPU |
+| `cpu` | Windows CPU: `busy_pct`, `user_pct`, `kernel_pct`, and `core_pct` per logical CPU. `user_pct` plus `kernel_pct` is `busy_pct`. `kernel_pct` has idle taken out and still holds the WSL VM's time, because Windows counts the VM as kernel time, even when Linux runs user code |
+| `cpu_layout_known` | Whether the CPU layout could be read at start |
+| `cpu_layout` | One row per logical CPU, in `core_pct` order, read once at start: `core`, `thread`, `efficiency`. Rows with the same `core` are sibling threads, and `thread` is the place within that core. `efficiency` is Windows' class, higher is faster |
 | `memory` | Windows memory: `total`, `available`, `cache`, `commit_used`, `commit_limit` |
-| `vm` | The WSL VM as Windows sees it: `vmmem_pid`, `vmwp_pid`, `vmmem_working_set`, `vmmem_cores`. The PIDs are 0 when not found |
+| `vm` | The WSL VM as Windows sees it: `vmmem_pid`, `vmwp_pid`, `vmmem_working_set`, `vmmem_cores`, `vmmem_cores_known`. The PIDs are 0 when not found, and `vmmem_cores_known` is false then and on a new `vmmemWSL`'s first sample |
 | `processes` | Windows processes: `pid`, `ppid`, `name`, `cores`, `working_set`, `private`, `threads`, `handles` |
+| `ready_threads`, `vm_ready_threads` | Threads ready to run and not running, at one instant, and `vmmemWSL`'s among them, which are `null` when it isn't found. Noisy, so average several samples. `ready_threads` shows a shortage but not whose; only `vm_ready_threads` names a side. Neither is a count of blocked threads |
 | `disks` | `name`, `read_bytes_s`, `write_bytes_s`, `busy_pct` |
 | `nets` | `name`, `in_bytes_s`, `out_bytes_s`, `link_bits_s`, and `hardware` for a physical adapter |
 | `gpu_engines_known` | Whether the engine counters could be read this sample |

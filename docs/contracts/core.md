@@ -51,7 +51,7 @@ the one inferred value, and keep the build, the checks and the ownership documen
 
 | item | value |
 |---|---|
-| source under core | `src/core` 243 lines, `src/main.cpp` 197, `src/record` 130, `src/analysis` 33 |
+| source under core | `src/core` 275 lines, `src/main.cpp` 198, `src/record` 140, `src/analysis` 33 |
 | JSON schema | 1 |
 | collection cost per sample | about 9 ms on this machine, ledger "Windows collector checked" |
 | checks that exist | the two `check.sh` modes above, and `scripts/release.sh` |
@@ -66,6 +66,11 @@ the one inferred value, and keep the build, the checks and the ownership documen
 - PROPOSED: record the adapter LUID in `gpu_engine_row` and `gpu_memory_row` so a second adapter
   can be told apart (`TODO.md` item 4). Needs a ledger row first: two LUIDs are seen, the second unexplained.
 - Who owns the GUI if one is built as a separate process over the JSON stream (`ROADMAP.md`)? Not decided.
+- `docs/design/cpu-panel.md` section 7 wants `64 of 128` past 64 logical CPUs. `cpu_layout_view` holds one
+  processor group only, so that head needs a machine-wide count: a field with no ledger row, since this
+  machine has one group. Not added.
+- Should `vm.vmmem_cores` read `null` instead of 0 when `vmmem_cores_known` is false? It would match
+  "unknown is null", but it changes an existing key, so it would raise `schema`. Left at 0.
 
 ## Decision log
 
@@ -105,3 +110,18 @@ the one inferred value, and keep the build, the checks and the ownership documen
   `DevOverrideEnable=1`, a developer setting. It is not tested on a default machine, and is accepted as
   outside what a release can close. Publishing order: merge, then `scripts/release.sh`, then
   `gh release create vX.Y.Z dist/winwsltop.exe dist/winwsltop.exe.sha256 --notes-file docs/releases/vX.Y.Z.md`.
+- 2026-11-01. CPU panel data seam, `docs/design/cpu-panel.md` commit 2, all additive, schema stays 1.
+  Snapshot: `cpu.user_pct`, `cpu.kernel_pct` (percent of the machine, the NT call, ledger "User and kernel
+  time come from the call"), `cpu_layout` (ledger "CPU layout"), `ready_threads`, `vm_ready_threads` (threads,
+  the `SystemProcessInformation` call, ledger "A Windows `Ready` count is a free "short of CPU" figure" and
+  "The count of `vmmemWSL` threads in `Ready` tracks lost work"), `vm.vmmem_cores_known`. Protocol:
+  `cpu_split` (ledger "`/proc/stat` fields move"), `load` (ledger "`/proc/loadavg`"), per-process `threads`
+  (ledger, "`num_threads`" under "A process's `/proc/pid/stat` `processor` is where it works").
+- 2026-11-01. `vmmem_cores` keeps its value and meaning, 0 when unmeasured, and `vmmem_cores_known` tells the two
+  apart, as `gpu_engines_known` does for its list. The design's NaN belongs to the reader of the figure, not the
+  field: `render.cpp` prints `vmmem_cores` with `%.2f` on the overall panel, so a NaN in the field would change
+  that screen, and in the record it would turn a number into `null` on an existing key.
+- 2026-11-01. The layout sits in the snapshot beside `cpu_view`, set once by `main.cpp`, and its rows go
+  in every record line, so each line can still be read alone. `ready_threads` and `vm_ready_threads` are
+  `std::optional`, so an unknown cannot be read as a count. New `double` figures default to NaN, so a reset
+  view gives `null` in the record.

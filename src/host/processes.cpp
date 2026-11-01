@@ -37,21 +37,40 @@ struct nt_process {
   SIZE_T PagefileUsage;
   SIZE_T PeakPagefileUsage;
   SIZE_T PrivatePageCount;
+  LARGE_INTEGER Io[6];
 };
 static_assert(sizeof(void*) == 8, "x64 only");
 static_assert(offsetof(nt_process, ImageName) == 0x38);
 static_assert(offsetof(nt_process, UniqueProcessId) == 0x50);
 static_assert(offsetof(nt_process, WorkingSetSize) == 0x90);
+static_assert(sizeof(nt_process) == 0x100);  // The thread rows start here
+
+// One thread row, NumberOfThreads of them following each nt_process.
+struct nt_thread {
+  LARGE_INTEGER KernelTime, UserTime, CreateTime;
+  ULONG WaitTime;
+  PVOID StartAddress;
+  CLIENT_ID ClientId;
+  LONG Priority, BasePriority;
+  ULONG ContextSwitches, ThreadState, WaitReason;
+};
+static_assert(sizeof(nt_thread) == 0x50);
+
+constexpr ULONG kReady = 1, kDeferredReady = 7;  // ThreadState, as the kernel numbers them
 
 constexpr NTSTATUS kLengthMismatch = static_cast<NTSTATUS>(0xC0000004L);
 
 }  // namespace
 
-// out and vm are reset first, so a failed query or the priming call leaves them empty, never the
-// previous sample (docs/TODO.md item 1).
-bool process_collector::sample(std::vector<process_row>& out, vm_view& vm) {
+// All four outputs are reset first, so a failed query or the priming call leaves them empty, never the
+// previous sample (docs/TODO.md item 1). The Ready counts come from this same call. Ledger: "A Windows
+// `Ready` count is a free "short of CPU" figure", "The count of `vmmemWSL` threads in `Ready` tracks lost
+// work". They are one instant, so a new vmmemWSL has its count on its first sample, though no cores yet.
+bool process_collector::sample(std::vector<process_row>& out, vm_view& vm, std::optional<uint32_t>& ready_threads, std::optional<uint32_t>& vm_ready_threads) {
   out.clear();
   vm = {};
+  ready_threads.reset();
+  vm_ready_threads.reset();
   if (buf_.empty()) buf_.resize(1 << 20);
   for (;;) {
     ULONG need = 0;
@@ -65,6 +84,7 @@ bool process_collector::sample(std::vector<process_row>& out, vm_view& vm) {
   const double elapsed = now_t - prev_t_;
   const bool have_prev = prev_t_ != 0 && elapsed > 0;
   std::map<key, uint64_t> now;
+  uint32_t ready = 0;
 
   for (size_t at = 0;;) {
     const auto* p = reinterpret_cast<const nt_process*>(buf_.data() + at);
@@ -83,16 +103,26 @@ bool process_collector::sample(std::vector<process_row>& out, vm_view& vm) {
     const uint64_t cpu = static_cast<uint64_t>(p->UserTime.QuadPart) + static_cast<uint64_t>(p->KernelTime.QuadPart);
     const key k{r.pid, p->CreateTime.QuadPart};
     now[k] = cpu;
+    bool rated = false;
     if (have_prev) {
       if (const auto it = prev_.find(k); it != prev_.end() && cpu >= it->second) {
         r.cores = static_cast<double>(cpu - it->second) / 1e7 / elapsed;
+        rated = true;
       }
     }
+    const auto* threads = reinterpret_cast<const nt_thread*>(p + 1);
+    uint32_t ready_here = 0;
+    for (ULONG i = 0; i < p->NumberOfThreads; ++i) {
+      if (threads[i].ThreadState == kReady || threads[i].ThreadState == kDeferredReady) ++ready_here;
+    }
+    ready += ready_here;
     if (_stricmp(r.name.c_str(), "vmmemWSL") == 0) {
       vm.vmmem_pid = r.pid;
       vm.vmwp_pid = r.ppid;
       vm.vmmem_working_set = r.working_set;
       vm.vmmem_cores = r.cores;
+      vm.vmmem_cores_known = rated;
+      vm_ready_threads = ready_here;
     }
     out.push_back(std::move(r));
     if (p->NextEntryOffset == 0) break;
@@ -100,8 +130,14 @@ bool process_collector::sample(std::vector<process_row>& out, vm_view& vm) {
   }
   prev_ = std::move(now);
   prev_t_ = now_t;
-  if (!have_prev) { out.clear(); vm = {}; }  // The priming call has no rates: it reports no rows.
-  return have_prev;
+  if (!have_prev) {  // The priming call has no rates: it reports no rows.
+    out.clear();
+    vm = {};
+    vm_ready_threads.reset();
+    return false;
+  }
+  ready_threads = ready;
+  return true;
 }
 
 }  // namespace wwt

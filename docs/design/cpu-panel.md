@@ -147,7 +147,7 @@ the panel 2 VRAM grammar: `41.2/63.7 GiB  free 22.5 GiB`, and `left_tone`.
 | WSL `user`, `sys`, `iowait` | Same read. `user` is user plus nice. `sys` is system plus irq plus softirq plus steal, so user plus sys is busy | small | same; softirq is shown moving |
 | `load` | `/proc/loadavg`: the one figure with past in it at launch | small | "`/proc/loadavg`" |
 | `pressure cpu mem io` | Read today | none | "`/proc/pressure/cpu`", "`/proc/pressure` memory and io". Not presented as lost CPU: "PSI cpu shows lost CPU: No" |
-| `thr` | `threads` in Windows rows today; `num_threads` new in the collector | small | "`num_threads`" |
+| `thr` | `threads` in Windows rows today; `num_threads` new in the collector | small | "A process's `/proc/pid/stat` `processor` is where it works", which records `num_threads` |
 | RAM, both sides | Read today. Two-row plots, fixed 0-100, like panel 2's memory. The two are never added: WSL's memory is inside `vmmemWSL`'s | none | Existing memory rows |
 
 ### The inference

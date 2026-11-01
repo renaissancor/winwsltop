@@ -32,18 +32,24 @@ starting with `{"pong":` are consumed by the bridge and never reach the snapshot
 
 | field | meaning |
 |---|---|
-| `schema` | 1; a change of meaning raises it |
+| `schema` | 1; a change of meaning raises it, a new key does not |
 | `distro` | `WSL_DISTRO_NAME`. One collector sees one distro's processes |
 | `kernel` | `uname -r` of the guest, informational |
 | `unix_s`, `mono_s` | wall clock and `CLOCK_MONOTONIC`, seconds, kept for clock alignment |
 | `busy_pct`, `core_pct` | CPU from `/proc/stat`; idle includes iowait. This is the guest's view |
+| `cpu_split` | the whole guest, from the same `/proc/stat` delta as `busy_pct`, each a percent of all ticks: `user` is user plus nice, `sys` is system plus irq plus softirq plus steal, and `iowait`. `user` plus `sys` is `busy_pct`, within rounding, and `iowait` is outside busy. Each is `null` when no ticks passed |
+| `load` | three numbers from `/proc/loadavg`, the 1, 5 and 15 minute averages; `null` when it cannot be read |
 | `steal_pct` | from `/proc/stat`; zero does not prove the host took nothing |
 | `memory` | bytes from `/proc/meminfo`: `total`, `available`, `cached`, `swap_used` |
 | `pressure` | PSI `some avg10` for `cpu`, `memory`, `io`; `null` when absent |
 | `process_count` | every process seen |
-| `processes` | the top 30 by cores then RSS, plus every `/dev/dxg` holder. `pid`, `name`, `cores`, `rss`, `state`, and `on_gpu`, which means it holds `/dev/dxg`, not that it uses the GPU |
+| `processes` | the top 30 by cores then RSS, plus every `/dev/dxg` holder. `pid`, `name`, `cores`, `rss`, `state`, `threads` (`num_threads` from `/proc/pid/stat`, `null` when it cannot be read), and `on_gpu`, which means it holds `/dev/dxg`, not that it uses the GPU |
 | `dxg_pids` | PIDs with `/dev/dxg` open: identity, not usage |
 | `dxg_denied` | processes whose fds could not be read, usually root's |
 | `cost_ms` | time this sample took |
+
+A reader takes a key it does not know as nothing, and a new key that is absent or `null` as unknown, never
+0, so an older collector still reads. A value that cannot be measured is `null`: `NaN` is not JSON, and
+the strict reader refuses the whole line for it.
 
 Replacing the collector, in Rust for example, needs only this format.

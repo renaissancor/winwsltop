@@ -1,6 +1,6 @@
 """Linux half of winwsltop. Sent over stdin to the bootstrap in PROTOCOL.md; never installed.
 Reads /proc and prints one JSON line a second. Stdlib only, Python 3.8+. See PROTOCOL.md."""
-import json, os, sys, threading, time
+import json, math, os, sys, threading, time
 
 sys.dont_write_bytecode = True
 HZ = os.sysconf("SC_CLK_TCK")
@@ -20,8 +20,27 @@ def cpu_times():
         if not line.startswith("cpu"):
             break
         v = [int(x) for x in line.split()[1:9]]
-        out.append((v[3] + v[4], sum(v), v[7]))  # idle + iowait, total, steal
+        # idle + iowait, total, steal, then cpu_split's user + nice, system + irq + softirq + steal, iowait
+        out.append((v[3] + v[4], sum(v), v[7], v[0] + v[1], v[2] + v[5] + v[6] + v[7], v[4]))
     return out
+
+
+def cpu_split(old, new):
+    """Ledger: "`/proc/stat` fields move". Two `cpu` total lines, over busy_pct's own delta and denominator."""
+    ticks = new[1] - old[1]
+    keys = ("user", "sys", "iowait")
+    if ticks <= 0:
+        return dict.fromkeys(keys)
+    return {k: round(100.0 * max(0, new[i] - old[i]) / ticks, 2) for k, i in zip(keys, (3, 4, 5))}  # iowait can fall
+
+
+def load_average():
+    """Ledger: "`/proc/loadavg`". None, not NaN: the strict reader refuses a whole line for NaN."""
+    try:
+        v = [float(x) for x in read("/proc/loadavg").split()[:3]]
+    except (OSError, ValueError):
+        return None
+    return v if len(v) == 3 and all(math.isfinite(x) for x in v) else None
 
 
 def memory():
@@ -54,7 +73,8 @@ def processes():
             continue
         end = text.rfind(")")
         f = text[end + 2:].split()
-        rows[(int(name), int(f[19]))] = (text[text.find("(") + 1:end], f[0], int(f[11]) + int(f[12]), int(f[21]) * PAGE)
+        # f[17] is num_threads, ledger "A process's `/proc/pid/stat` `processor` is where it works". Last: main reads old[2].
+        rows[(int(name), int(f[19]))] = (text[text.find("(") + 1:end], f[0], int(f[11]) + int(f[12]), int(f[21]) * PAGE, int(f[17]))
     return rows
 
 
@@ -114,14 +134,14 @@ def main():
         now_cpu, now_proc = cpu_times(), processes()
         dt = start - prev_t
         pct, steal = [], 0.0
-        for (i0, t0, s0), (i1, t1, s1) in zip(prev_cpu, now_cpu):
+        for (i0, t0, *_), (i1, t1, *_) in zip(prev_cpu, now_cpu):
             pct.append(round(100.0 * (1 - (i1 - i0) / (t1 - t0)), 2) if t1 > t0 else 0.0)
         if now_cpu[0][1] > prev_cpu[0][1]:
             steal = round(100.0 * (now_cpu[0][2] - prev_cpu[0][2]) / (now_cpu[0][1] - prev_cpu[0][1]), 2)
         rows = []
-        for key, (comm, state, ticks, rss) in now_proc.items():
+        for key, (comm, state, ticks, rss, threads) in now_proc.items():
             old = prev_proc.get(key)
-            rows.append({"pid": key[0], "name": comm, "state": state, "rss": rss,
+            rows.append({"pid": key[0], "name": comm, "state": state, "rss": rss, "threads": threads,
                          "cores": round((ticks - old[2]) / HZ / dt, 3) if old else 0.0})
         holders, denied = dxg_holders()
         rows.sort(key=lambda r: (r["cores"], r["rss"]), reverse=True)
@@ -130,7 +150,8 @@ def main():
             r["on_gpu"] = r["pid"] in holders
         emit(json.dumps({"schema": 1, "distro": distro, "unix_s": round(time.time(), 3),
                           "mono_s": round(start, 3), "kernel": os.uname().release, "busy_pct": pct[0],
-                          "core_pct": pct[1:], "steal_pct": steal, "memory": memory(), "pressure": pressure(),
+                          "core_pct": pct[1:], "cpu_split": cpu_split(prev_cpu[0], now_cpu[0]),
+                          "load": load_average(), "steal_pct": steal, "memory": memory(), "pressure": pressure(),
                           "process_count": len(rows), "processes": keep, "dxg_pids": holders,
                           "dxg_denied": denied, "cost_ms": round((time.monotonic() - start) * 1000, 2)},
                          separators=(",", ":")))

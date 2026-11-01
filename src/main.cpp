@@ -122,6 +122,7 @@ int main(int argc, char** argv) {
   wsl.wait_first_line(6.0);
 
   wwt::snapshot s;
+  wwt::read_cpu_layout(s.cpu_layout);  // Once: the samples below never touch it
   double last = wwt::seconds_now();
   double next = last;
   wwt::console* screen = run == mode::live ? new wwt::console : nullptr;  // restores the terminal when deleted
@@ -167,7 +168,7 @@ int main(int argc, char** argv) {
     s.unix_ms = unix_ms();
     s.cost.cpu_ms = timed([&] { cpu.sample(s.cpu); });
     s.cost.memory_ms = timed([&] { wwt::sample_memory(s.memory); });
-    s.cost.processes_ms = timed([&] { procs.sample(s.processes, s.vm); });
+    s.cost.processes_ms = timed([&] { procs.sample(s.processes, s.vm, s.ready_threads, s.vm_ready_threads); });
     s.cost.disk_ms = timed([&] { disks.sample(s.disks); });
     s.cost.net_ms = timed([&] { nets.sample(s.nets); });
     s.cost.gpu_ms = timed([&] { s.gpu_engines_known = gpu.sample(s.gpu_engines); });

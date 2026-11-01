@@ -28,6 +28,7 @@ template <class T> void key(std::string& o, const char* k, const T& v) {
   if constexpr (std::is_same_v<T, double>) num(o, v);
   else if constexpr (std::is_same_v<T, std::string>) str(o, v);
   else if constexpr (std::is_same_v<T, bool>) o += v ? "true" : "false";
+  else if constexpr (std::is_same_v<T, std::optional<uint32_t>>) o += v ? std::to_string(*v) : "null";
   else o += std::to_string(v);
   o += ',';
 }
@@ -52,9 +53,16 @@ std::string to_json_line(const snapshot& s) {
   key(o, "unix_ms", s.unix_ms);
   key(o, "interval_s", s.interval_s);
 
-  o += "\"cpu\":{"; key(o, "busy_pct", s.cpu.busy_pct); o += "\"core_pct\":[";
+  o += "\"cpu\":{"; key(o, "busy_pct", s.cpu.busy_pct);
+  key(o, "user_pct", s.cpu.user_pct); key(o, "kernel_pct", s.cpu.kernel_pct);
+  o += "\"core_pct\":[";
   for (const double v : s.cpu.core_pct) { num(o, v); o += ','; }
   close(o, ']'); o += "},";
+
+  key(o, "cpu_layout_known", s.cpu_layout.known);
+  list(o, "cpu_layout", s.cpu_layout.rows, [&](const cpu_layout_row& r) {
+    key(o, "core", r.core); key(o, "thread", r.thread); key(o, "efficiency", r.efficiency);
+  });
 
   o += "\"memory\":{";
   key(o, "total", s.memory.total); key(o, "available", s.memory.available); key(o, "cache", s.memory.cache);
@@ -64,6 +72,7 @@ std::string to_json_line(const snapshot& s) {
   o += "\"vm\":{";
   key(o, "vmmem_pid", s.vm.vmmem_pid); key(o, "vmwp_pid", s.vm.vmwp_pid);
   key(o, "vmmem_working_set", s.vm.vmmem_working_set); key(o, "vmmem_cores", s.vm.vmmem_cores);
+  key(o, "vmmem_cores_known", s.vm.vmmem_cores_known);  // A 0 is measured only when this is true
   close(o, '}'); o += ',';
 
   list(o, "processes", s.processes, [&](const process_row& r) {
@@ -71,6 +80,7 @@ std::string to_json_line(const snapshot& s) {
     key(o, "working_set", r.working_set); key(o, "private", r.private_bytes);
     key(o, "threads", r.threads); key(o, "handles", r.handles);
   });
+  key(o, "ready_threads", s.ready_threads); key(o, "vm_ready_threads", s.vm_ready_threads);  // null when unknown
   list(o, "disks", s.disks, [&](const disk_row& r) {
     key(o, "name", r.name); key(o, "read_bytes_s", r.read_bytes_s);
     key(o, "write_bytes_s", r.write_bytes_s); key(o, "busy_pct", r.busy_pct);
