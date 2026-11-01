@@ -9,7 +9,7 @@ if not exist "%~2" mkdir "%~2"
 set CL_FLAGS=/nologo /std:c++20 /EHsc /W4 /WX /O2 /Zi /utf-8 /Isrc /Fo"%~2\\" /Fd"%~2\\"
 rem No /Zi and no /DEBUG: a debug build embeds the absolute .pdb path, which holds the builder's user name.
 set REL_FLAGS=/nologo /std:c++20 /EHsc /W4 /WX /O2 /MT /DWWT_RELEASE /utf-8 /Isrc /Fo"%~2\\"
-set SOURCES=src\main.cpp src\host\*.cpp src\gpu\*.cpp src\record\*.cpp src\wsl\*.cpp src\analysis\*.cpp src\ui\render.cpp src\ui\console.cpp src\ui\wsl_view.cpp
+set SOURCES=src\main.cpp src\core\*.cpp src\host\*.cpp src\gpu\*.cpp src\record\*.cpp src\wsl\*.cpp src\analysis\*.cpp src\ui\render.cpp src\ui\console.cpp
 if "%~1"=="release" (
   cl %REL_FLAGS% /Fe"%~2\winwsltop.exe" %SOURCES% /link /DEBUG:NONE /Brepro /MANIFEST:EMBED /DELAYLOAD:pdh.dll /DELAYLOAD:iphlpapi.dll delayimp.lib
 ) else if "%~1"=="all" (

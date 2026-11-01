@@ -1,5 +1,6 @@
 // The shared model. Collectors write it; the recorder and any screen only read it.
-// Everything here is measured. Inference about Windows vs WSL belongs in a later layer.
+// Measured, except the three fields src/analysis writes: gpu_split and cpu_derived are derived, and
+// lost is inferred. docs/contracts/core.md rule 2 says what the two words mean.
 #pragma once
 #include <cstdint>
 #include <limits>
@@ -8,6 +9,10 @@
 #include <vector>
 
 namespace wwt {
+
+// When a sample stops being usable. The screen and src/analysis both read these, so they agree.
+constexpr double kStaleS = 5;    // A collector line this old or older is out of date
+constexpr double kGapMs = 1500;  // Samples further apart have a gap between them: a skipped second is 2 s
 
 struct cpu_view {
   double busy_pct = 0;
@@ -96,6 +101,36 @@ struct gpu_split_view {
   uint64_t vm_local = 0, windows_local = 0;
 };
 
+// Why lost.vcpus is or is not a number. Only known has a figure, and no other state means 0 lost.
+enum class lost_state {
+  collecting,        // Fewer than 5 usable samples since the last reset
+  no_data,           // This sample cannot count, so it reset: no fresh guest line, a second repeat in a row, or the VM or Windows unread
+  guest_under_99,    // 5 samples, and at least one guest busy under 99%: outside the evidence
+  windows_under_95,  // 5 samples, and the newest Windows busy under 95%: a load has stopped
+  known,
+};
+
+// INFERRED by src/analysis/lost.cpp, never by a collector, and the only arithmetic across the two sides:
+// no counter reads this. Guest busy times guest threads, less vm.vmmem_cores, each a 5-sample mean, clamped
+// at 0. vCPUs, NaN unless state is known. docs/measurable.md, "Guest busy times threads less `Hv VP` `% Total
+// Run Time` tracks lost work"; subtracting them adds nothing that overlaps: core.md decision log.
+struct lost_view {
+  lost_state state = lost_state::collecting;
+  double vcpus = std::numeric_limits<double>::quiet_NaN();
+};
+
+// DERIVED by src/analysis/lost.cpp from Windows' own figures, never by a collector. No value crosses to
+// the guest. Each is NaN when unknown, never 0.
+struct cpu_derived_view {
+  // vm.vmmem_cores as percent of the logical CPUs, and cpu.kernel_pct less that, clamped at 0: docs/measurable.md,
+  // "The VM's time is Windows kernel time". Both read this sample, and vmmem_cores_known must be true.
+  double vm_cpu_pct = std::numeric_limits<double>::quiet_NaN();
+  double own_kernel_pct = std::numeric_limits<double>::quiet_NaN();
+  // 5-sample means of ready_threads and vm_ready_threads, each from its own unbroken run of 5 known samples.
+  double ready_threads_mean = std::numeric_limits<double>::quiet_NaN();
+  double vm_ready_threads_mean = std::numeric_limits<double>::quiet_NaN();
+};
+
 struct collect_cost {
   double cpu_ms = 0, memory_ms = 0, processes_ms = 0, disk_ms = 0, net_ms = 0, gpu_ms = 0, gpu_device_ms = 0, gpu_memory_ms = 0;
 };
@@ -119,6 +154,8 @@ struct snapshot {
   gpu_device_view gpu_device;
   std::vector<gpu_memory_row> gpu_memory;
   gpu_split_view gpu_split;
+  lost_view lost;
+  cpu_derived_view cpu_derived;
   collect_cost cost;
   std::string wsl_json;  // the collector's line as received, or empty
   double wsl_age_s = -1;

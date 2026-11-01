@@ -2,6 +2,7 @@
 // prints N JSON lines, one a second.
 #include "core/collectors.h"
 #include "analysis/attribution.h"
+#include "analysis/lost.h"
 #include "record/jsonl.h"
 #include "ui/console.h"
 #include "ui/history.h"
@@ -120,6 +121,7 @@ int main(int argc, char** argv) {
 
   wwt::wsl_bridge wsl(collector_path(), distro);
   wsl.wait_first_line(6.0);
+  wwt::lost_tracker lost;
 
   wwt::snapshot s;
   wwt::read_cpu_layout(s.cpu_layout);  // Once: the samples below never touch it
@@ -177,6 +179,7 @@ int main(int argc, char** argv) {
     s.gpu_split = wwt::split_gpu(s);
     s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
     s.wsl_clock_known = wsl.clock_offset(s.wsl_clock_offset_s);
+    lost.update(s);  // On the priming pass too, so it has seen the line the first real sample may repeat
     if (!i) continue;
     if (screen && screen->is_terminal()) hist.push(s);  // only the live screen draws it
     have_frame = true;

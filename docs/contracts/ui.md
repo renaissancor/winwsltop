@@ -5,16 +5,14 @@ Owner: the `ui` role. Paths: `src/ui/` (the `ui` row of [`../ARCHITECTURE.md`](.
 ## Purpose
 
 Turn snapshots into a terminal screen that never claims more than was measured. `render()` is a pure
-function of one snapshot and an optional in-memory `history`; with no history it is one snapshot to lines; `console.cpp` puts lines on a Windows console; `wsl_view.cpp`
-reads schema 1 of the collector's line.
+function of one snapshot and an optional in-memory `history`; with no history it is one snapshot to lines; `console.cpp` puts lines on a Windows console; `wsl_view.h`,
+which core owns, reads schema 1 of the collector's line.
 
 ## What belongs here
 
 - `render.h`, `render.cpp`: layout, colour tones, number formatting, UTF-8 width, sanitising names,
-  and `history::push`, so `wsl_view.h` stays private to `src/ui`.
-- `wsl_view.h`, `wsl_view.cpp`: a strict parser for the collector's line. Private to `src/ui`.
-- `history.h`: the last 60 s of screen values, in memory. It lives here because WSL CPU comes through
-  `wsl_view`.
+  and `history::push`.
+- `history.h`: the last 60 s of screen values, in memory.
 - `console.h`, `console.cpp`: VT mode, alternate screen, Ctrl+C, key polling from `CONIN$` with echo
   off, plain text when redirected.
 - `render_check.cpp`: the renderer's checks, built on hand-made snapshots.
@@ -27,6 +25,7 @@ reads schema 1 of the collector's line.
   is never written to disk. Summing engines, adding Windows to WSL, or guessing
   a per-process GPU share are all forbidden.
 - Changing what the collector sends. Request it from core.
+- The strict parser for the collector's line, `src/core/wsl_view.h` and `.cpp`, which `src/analysis` reads too.
 
 ## Rules
 
@@ -40,7 +39,8 @@ reads schema 1 of the collector's line.
 5. Over 100 percent is printed as measured; bars clamp, numbers do not.
 6. A line with a schema other than 1, or one that does not parse to the end, is reported as
    unreadable, not guessed at.
-7. Thresholds for amber and red are judgement calls and live in one block at the top of `render.cpp`.
+7. Thresholds for amber and red are judgement calls and live in one block at the top of `render.cpp`,
+   except `kStaleS`, in `snapshot.h` because `lost` stops on it too.
 8. Graphs use a fixed 0-100 scale with time on the x axis. A missing sample or a stall is a blank gap,
    never a zero. Panels are never stacked or summed, and each graph title names its source.
 
@@ -57,7 +57,7 @@ reads schema 1 of the collector's line.
 
 | item | value |
 |---|---|
-| source | `src/ui` 3117 lines, of which `render_check.cpp` 1242 |
+| source | `src/ui` 2859 lines, of which `render_check.cpp` 1256 |
 | checks | 102504, 0 failed, run on Windows 2026-11-01. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
 | sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66 |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
@@ -112,6 +112,9 @@ reads schema 1 of the collector's line.
   `on_gpu` field stays in the data. The WSL list head has three wordings chosen by room, and the distro
   gives way before the label. The overall row carries the label even when WSL is unavailable, in a short form
   when narrow.
+- 2026-11-01. `wsl_view` moved to `src/core/`, so `src/analysis/lost.cpp` can read the guest line, and
+  `kStaleS` and `kGapMs` moved to `snapshot.h`, with the line-repeat test to `wsl_line_repeats`, so the screen
+  and `lost` stop trusting a sample at the same point. Nothing drawn changed (core decision log).
 - 2026-11-01. `console::write_failed()` is set when a write fails in the plain branch, including with no
   stdout at all, and never for a console. A reader that stays open but stops reading still blocks the
   write; that is not covered.

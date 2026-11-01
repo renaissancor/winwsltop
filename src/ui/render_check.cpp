@@ -4,7 +4,7 @@
 // Build: scripts/build.sh src/ui/render_check.cpp   (it includes the sources it tests)
 #include "ui/render.cpp"
 #include "ui/history.h"
-#include "ui/wsl_view.cpp"
+#include "core/wsl_view.cpp"
 #ifdef _WIN32
 #include "ui/console.cpp"
 #endif

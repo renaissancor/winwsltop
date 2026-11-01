@@ -31,6 +31,11 @@ answer. A stopped distro gets started, which can take longer, and the run may th
   identity, not usage.
 - **The split is not an exact share.** `vm_pct` and `windows_pct` have summed to 88% and peaked at 112%
   here, and they can differ from `gpu_device.util_pct`. The difference is unexplained.
+- **`lost_cpu_inferred` is an inference, not a measurement.** No counter on either side reads it. It is
+  guest busy times guest threads, less `vm.vmmem_cores`, each a mean of 5 samples, clamped at 0: what the guest
+  counted, less what Windows charged the VM. The answer is in vCPUs, which are not Windows cores. Use `vcpus`
+  only when `state` is `known`. It is `null` otherwise, and `null` says nothing about whether WSL lost CPU.
+  See "The lost CPU figure" below for the gate, the lag and what it was not tested on.
 - **A zero can be a failed read.** Disk fields, CPU busy, `memory` fields, network rates after a counter
   reset, and `vm_local` and `windows_local` can read 0 instead of being absent, even with `valid` true.
   `vmmem_cores` reads 0 when it was not measured, so use it only when `vmmem_cores_known` is true;
@@ -38,7 +43,42 @@ answer. A stopped distro gets started, which can take longer, and the run may th
 
 `schema` is 1. A change of meaning raises it, and new keys can appear without raising it, so ignore keys
 you don't know. Sizes are bytes, and `cores` of 1.0 is one logical CPU busy for the whole interval.
-Percentages are 0 to 100, except `pct`, `vm_pct` and `windows_pct`, which can pass 100.
+Percentages are 0 to 100, except `pct`, `vm_pct` and `windows_pct`, which can pass 100, and `vm_cpu_pct`, which
+is not clamped.
+
+## The lost CPU figure
+
+When Windows and WSL both want the CPU the guest cannot see what it lost: it keeps reading busy, and `steal`
+stays 0. `lost_cpu_inferred` subtracts across the two sides to show it, on purpose, and only inside what
+[`measurable.md`](measurable.md) shows, "Guest busy times threads less `Hv VP` `% Total Run Time` tracks lost
+work". That is one trial per case.
+
+`state` says why `vcpus` is or isn't a number:
+
+| state | `vcpus` | meaning |
+|---|---|---|
+| `known` | a figure, 0 or more | Every clause of the gate holds |
+| `collecting` | `null` | Fewer than 5 usable samples since the last reset. `--once` takes one sample, so it is never `known` |
+| `guest_under_99` | `null` | 5 samples, and at least one guest busy under 99%. This is the usual state of a machine that isn't saturated |
+| `windows_under_95` | `null` | 5 samples, and the newest Windows busy under 95% |
+| `no_data` | `null` | This sample can't count, and the count restarts: no guest line under 5 s old that parses, the same line a second time in a row, or `vm.vmmem_cores` or Windows CPU unread |
+
+The gate, all of it on every sample: 5 finite samples since the last reset, all 5 guest busy at 99% or more,
+the newest Windows busy at 95% or more, `vmmem_cores_known` true on all 5, a guest line under 5 s old, and no
+more than one repeated guest line in a row. A repeated line counts as a sample carrying the guest's last
+value, because under contention the two 1 Hz loops slip. A reset is a gap of more than 1.5 s between samples, a new
+`vmmem_pid`, a stale or unreadable line, or anything else `no_data` lists.
+
+**It lags.** A 5-sample mean takes about 5 s to rise and as long to fall. A Windows load that stops
+while WSL stays at 100% still reads as lost for several seconds, because Windows stays busy with the VM and the
+gate holds.
+
+**Below 1 is noise.** A full guest with nothing competing reads above 0: Windows' own work shares the same
+processors.
+
+**Outside the evidence**, so don't read a `known` figure as proven here or take its absence as no loss: a
+partly busy guest, which the gate refuses, `.wslconfig` limits on vCPUs, and memory, disk or GPU load. Each
+contended case had WSL at full load on a machine with no such limit, under CPU load alone.
 
 ## Fields
 
@@ -59,6 +99,8 @@ Percentages are 0 to 100, except `pct`, `vm_pct` and `windows_pct`, which can pa
 | `gpu_device` | NVML: `present`, `name`, `mem_used`, `mem_total`, `util_pct`, `power_w`, `power_limit_w`, `temp_c`, `sm_mhz` |
 | `gpu_memory` | Per-process WDDM accounting: `pid`, `dedicated`, `shared`, `local`. `local` is the closest per-process figure, and `dedicated` is not VRAM in use |
 | `gpu_split` | Derived from the engine counters: `valid`, `vm_pct`, `windows_pct`, `vm_local`, `windows_local`, `source` |
+| `lost_cpu_inferred` | Inferred, see "The lost CPU figure": `state`, `vcpus`, `source`. `source` is always `inferred` |
+| `cpu_derived` | Worked out from Windows' own figures, `source` always `derived`, each value `null` when unknown. `vm_cpu_pct` is `vmmem_cores` as percent of the logical CPUs. `own_kernel_pct` is `cpu.kernel_pct` less that, clamped at 0, so `user_pct`, `own_kernel_pct` and `vm_cpu_pct` add to `busy_pct` unless the clamp acts. `ready_threads_mean` and `vm_ready_threads_mean` are means of the last 5 samples, `null` until 5 known samples in a row exist, and after a gap of more than 1.5 s. `vm_ready_threads_mean` also starts again for a new `vmmem_pid` |
 | `wsl` | `age_s`, `restarts`, `clock_known`, `clock_offset_s` (Windows unix time minus WSL's), and `data` |
 | `wsl.data` | The collector's line, or `null`. Its fields are in [`PROTOCOL.md`](../wsl-collector/PROTOCOL.md) |
 | `cost_ms` | Time each collector took this sample: `cpu`, `memory`, `processes`, `disk`, `net`, `gpu`, `gpu_device`, `gpu_memory` |

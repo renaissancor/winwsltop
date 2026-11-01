@@ -1,6 +1,6 @@
 #include "ui/render.h"
 #include "ui/history.h"
-#include "ui/wsl_view.h"
+#include "core/wsl_view.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -19,7 +19,6 @@ constexpr double kMemActPct = 4;
 constexpr double kGpuTempWatch = 83;     // The value sshvllmtop's spec uses
 constexpr double kGpuTempAct = 90;
 constexpr double kPressureWatch = 20;    // PSI some avg10
-constexpr double kStaleS = 5;            // Data older than this is called out; the WSL graph gaps on it
 
 constexpr double kGiB = 1024.0 * 1024.0 * 1024.0;
 constexpr int kLabel = 6;  // Width of "CPU", "MEM", ... at the start of a row
@@ -792,7 +791,6 @@ constexpr int kPanelGap = 2;
 constexpr int kTitleLines = 3;
 constexpr int kMaxGpuList = 14;  // Rows of the GPU panel's lists; height beyond this goes to the graphs
 constexpr int kSideBySideGpu = 64;  // Those lists are short and stay side by side down to here
-constexpr double kGapMs = 1500;  // Samples further apart have a gap between them: a skipped second is 2 s
 
 // One value per dot column, oldest on the left, 0-100; NaN where nothing was measured. Columns from the
 // end of the previous sample up to this one take its value, if the previous one is close enough to
@@ -1292,12 +1290,10 @@ void history::push(const snapshot& s) {
   n.vm_pct = s.gpu_split.valid ? s.gpu_split.vm_pct : missing;
   n.windows_pct = s.gpu_split.valid ? s.gpu_split.windows_pct : missing;
   n.windows_cpu = s.cpu.core_pct.empty() ? missing : s.cpu.busy_pct;  // A failed read leaves no cores
-  // The bridge hands over its latest line, so the same line twice measured nothing new: a silent
-  // collector is a gap at once, not a flat line until the line turns stale. The line carries mono_s,
-  // so a new line always differs; wsl_view has no mono_s and this needs none.
+  // The same line twice measured nothing new: a silent collector is a gap at once, not a flat line
+  // until the line turns stale.
   const wsl_view w = read_wsl(s.wsl_json);
-  const bool repeated = s.wsl_json == last_wsl_;
-  last_wsl_ = s.wsl_json;
+  const bool repeated = wsl_line_repeats(s.wsl_json, last_wsl_);
   n.wsl_cpu = w.ok && !repeated && s.wsl_age_s < kStaleS ? w.busy_pct : missing;
   samples_.push_back(n);
 

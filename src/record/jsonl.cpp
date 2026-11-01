@@ -45,6 +45,17 @@ template <class R, class F> void list(std::string& o, const char* k, const R& ro
   o += ',';
 }
 
+std::string state_name(lost_state v) {
+  switch (v) {
+    case lost_state::collecting: return "collecting";
+    case lost_state::guest_under_99: return "guest_under_99";
+    case lost_state::windows_under_95: return "windows_under_95";
+    case lost_state::known: return "known";
+    case lost_state::no_data: break;
+  }
+  return "no_data";
+}
+
 }  // namespace
 
 std::string to_json_line(const snapshot& s) {
@@ -112,6 +123,19 @@ std::string to_json_line(const snapshot& s) {
   o += "\"gpu_split\":{";
   key(o, "valid", s.gpu_split.valid); key(o, "vm_pct", s.gpu_split.vm_pct); key(o, "windows_pct", s.gpu_split.windows_pct);
   key(o, "vm_local", s.gpu_split.vm_local); key(o, "windows_local", s.gpu_split.windows_local);
+  key(o, "source", std::string("derived"));
+  close(o, '}'); o += ',';
+
+  // The name says inferred as well as source, so a reader who picks one key out cannot take it for a counter.
+  o += "\"lost_cpu_inferred\":{";
+  key(o, "state", state_name(s.lost.state)); key(o, "vcpus", s.lost.vcpus);
+  key(o, "source", std::string("inferred"));
+  close(o, '}'); o += ',';
+
+  o += "\"cpu_derived\":{";
+  key(o, "vm_cpu_pct", s.cpu_derived.vm_cpu_pct); key(o, "own_kernel_pct", s.cpu_derived.own_kernel_pct);
+  key(o, "ready_threads_mean", s.cpu_derived.ready_threads_mean);
+  key(o, "vm_ready_threads_mean", s.cpu_derived.vm_ready_threads_mean);
   key(o, "source", std::string("derived"));
   close(o, '}'); o += ',';
 

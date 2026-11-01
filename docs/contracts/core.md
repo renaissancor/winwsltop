@@ -6,15 +6,17 @@ Owner: the orchestrator, or a fresh agent given the `core` role. Paths: see the 
 ## Purpose
 
 Hold the two seams, `src/core/snapshot.h` and `wsl-collector/PROTOCOL.md`, so that collectors and
-readers never need to know about each other. Run the one-second loop, write the JSON record, derive
-the one inferred value, and keep the build, the checks and the ownership documents true.
+readers never need to know about each other. Run the one-second loop, write the JSON record, work out
+the derived values and the one inferred value, and keep the build, the checks and the ownership
+documents true.
 
 ## What belongs here
 
-- The snapshot model and the collector interfaces (`src/core/`).
+- The snapshot model, the collector interfaces and the parser of the collector's line (`src/core/`).
 - The loop and the command line (`src/main.cpp`).
 - The JSONL recorder (`src/record/`): one line per snapshot, every value with its source.
-- The Windows-versus-WSL GPU split (`src/analysis/`). It is the only place inference happens.
+- The Windows-versus-WSL GPU split, `lost` and the CPU figures derived beside it (`src/analysis/`). It is the
+  only place inference happens.
 - The protocol document, the build and check scripts, and every document about ownership.
 
 ## What does not belong here
@@ -28,9 +30,13 @@ the one inferred value, and keep the build, the checks and the ownership documen
 
 1. A seam changes only here, and only when a request names the field, its unit, its source and the
    ledger row that proves it is measured.
-2. The snapshot holds measured values and `gpu_split`. Nothing else in it is derived. A derived value
-   is marked `derived` in the record, as `gpu_split.source` is today.
-3. The record never adds a Windows figure to a WSL figure. The two describe overlapping resources.
+2. The snapshot holds measured values and what `src/analysis` writes, and nothing else. `derived` is
+   arithmetic on one side's own figures, so it says nothing that side did not: `gpu_split`, `cpu_derived`.
+   `inferred` is a quantity no counter on either side reads, reached across the two: `lost`, the only one.
+   The record gives each its word as `source`, and an inferred value also carries it in the key,
+   `lost_cpu_inferred`, so a reader who takes one key cannot mistake it for a measurement.
+3. The record never adds a Windows figure to a WSL figure. The two describe overlapping resources. `lost`
+   subtracts one from the other on purpose: see the decision log.
 4. A change of meaning in the collector's line raises `schema` in `PROTOCOL.md`, in `collector.py`
    and in `wsl_view.cpp`, in one commit.
 5. `scripts/check.sh` passes before every commit. `scripts/check.sh --windows` passes before a commit
@@ -46,15 +52,19 @@ the one inferred value, and keep the build, the checks and the ownership documen
   `render_check` reports zero failures.
 - `winwsltop --once` prints one line that a JSON parser accepts, and every key is in
   `docs/json-output.md` (`scripts/check.sh --windows`).
+- `scripts/lost_check.cpp`, built and run by `scripts/check.sh --windows`: each clause of the `lost` gate by
+  hand, `cpu_derived`, the record's labels, and a replay through `lost_tracker` of the fixture
+  `experiments/05-cpu-contention/results/run1-record-2026-11-01.txt`, with
+  `experiments/05-cpu-contention/results/run1-marks-2026-11-01.txt` to place each case. It starts no load.
 
 ## Current state (2026-11-01)
 
 | item | value |
 |---|---|
-| source under core | `src/core` 275 lines, `src/main.cpp` 198, `src/record` 140, `src/analysis` 33 |
+| source under core | `src/core` 619 lines, `src/main.cpp` 201, `src/record` 164, `src/analysis` 169, `scripts/lost_check.cpp` 448 |
 | JSON schema | 1 |
 | collection cost per sample | about 9 ms on this machine, ledger "Windows collector checked" |
-| checks that exist | the two `check.sh` modes above, and `scripts/release.sh` |
+| checks that exist | the two `check.sh` modes above, `scripts/lost_check.cpp` under the second, and `scripts/release.sh` |
 | checks that are targets | CI, recorded fixtures (`ARCHITECTURE.md`, Targets) |
 
 ## Open questions
@@ -125,3 +135,40 @@ the one inferred value, and keep the build, the checks and the ownership documen
   in every record line, so each line can still be read alone. `ready_threads` and `vm_ready_threads` are
   `std::optional`, so an unknown cannot be read as a count. New `double` figures default to NaN, so a reset
   view gives `null` in the record.
+- 2026-11-01. `lost` subtracts `vm.vmmem_cores` from guest busy times guest threads. That is arithmetic across the
+  two sides, and it is deliberate: decided by the orchestrator under the design the user approved,
+  `docs/design/cpu-panel.md` section 4. It adds no overlapping resources together, so rule 3 stands, and it
+  is labelled `inferred` wherever it appears. Guest busy is what the guest wanted, not what it got, which is
+  why the gap means something. It is the only figure that crosses, and a second needs its own decision here.
+- 2026-11-01. Rule 2 and the design used `derived` and `inferred` for the same thing. They now differ: `derived` is
+  arithmetic on one side's own figures, `inferred` a quantity no counter reads. `gpu_split` is Windows' engine
+  counters grouped by pid, so it is derived, which is what its `source` already says, and `ARCHITECTURE.md` no longer
+  calls it the only inference.
+- 2026-11-01. CPU panel analysis seam, `docs/design/cpu-panel.md` commit 3, additive, schema stays 1. All from
+  `src/analysis/lost.cpp`. `snapshot.lost` and the record's `lost_cpu_inferred`: `state`, and `vcpus` in vCPUs, source
+  guest busy, `core_pct` count and `vm.vmmem_cores`, ledger "Guest busy times threads less `Hv VP` `% Total Run Time`
+  tracks lost work", and "`vm.vmmem_cores` is linear with the guest up to saturation". `snapshot.cpu_derived` and
+  the record's `cpu_derived`: `vm_cpu_pct` and `own_kernel_pct`, percent of the machine, source `vm.vmmem_cores`
+  and `cpu.kernel_pct`, ledger "The VM's time is Windows kernel time"; `ready_threads_mean` and
+  `vm_ready_threads_mean`, threads, ledger "A Windows `Ready` count is a free "short of CPU" figure" and "The
+  count of `vmmemWSL` threads in `Ready` tracks lost work". Two structs, not one, so each comment can
+  say exactly which word applies.
+- 2026-11-01. `wsl_view` moved from `src/ui/` to `src/core/` so analysis can read the guest line. `kStaleS` and `kGapMs`
+  moved from `render.cpp` to `snapshot.h`, and the repeat test to `wsl_line_repeats`, so there is one source of each.
+- 2026-11-01. Gate details the design left open. The window holds consecutive usable samples only, so a failed
+  Windows read or an unknown `vmmem_cores` empties it too, and shows as `no_data`. The sample after a gap is the first of
+  the new run, since a gap lies between samples, as on the graph. A repeat with nothing to carry, right after a reset, is not a
+  sample. Under 5 samples reads `collecting` whatever the guest is doing, as the design's states say. The tracker runs on
+  the priming pass too, so a first real sample can be known to repeat. `ready_threads_mean` does not wait on the VM's
+  count, because the machine's figure stands without it; each mean needs its own 5 samples in a row.
+- 2026-11-01. `lost_check` is `scripts/lost_check.cpp`, not a `src/analysis/` file, because `msvc.cmd` builds that folder into
+  the program. The slim record has no `vmmem_cores_known`, `schema`, `memory`, `kernel_pct` or ready counts: the first
+  is rebuilt from the pid, the next two put back empty, and the rest are checked by hand-built cases only. The
+  10 s rule is asserted for the stops of `wsl-20`, `win-20` and `both-after`; `both-win-20`'s stop is pinned, see open questions.
+- 2026-11-01. `lost` after a Windows load stops while the guest stays full fades over about 7 samples:
+  13.534, 11.066, 8.708, 5.870, 3.219, 1.502, 1.211, 0.874 in `both-after`. Accepted as the lag of a 5-sample
+  mean, stated in the README, with no further clause: the guest really is full there, and a clause tuned to
+  one trial would not be evidence. `lost_check` pins these values.
+- 2026-11-01. `lost` tolerates an interval up to 2500 ms, wider than the graph's `kGapMs`. A loop short of CPU
+  runs late in exactly the case the figure exists for: the 1.503 s interval in `both-win-20` cost 4 samples
+  mid-contention.

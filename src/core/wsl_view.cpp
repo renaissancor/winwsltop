@@ -1,4 +1,4 @@
-#include "ui/wsl_view.h"
+#include "core/wsl_view.h"
 #include <charconv>
 #include <cmath>
 #include <limits>

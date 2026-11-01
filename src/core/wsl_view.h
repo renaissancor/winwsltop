@@ -1,5 +1,5 @@
-// The fields of the collector's line that the screen shows, wsl-collector/PROTOCOL.md schema 1.
-// Private to src/ui: snapshot.wsl_json stays a raw string for everything else.
+// The fields of the collector's line that its readers use, wsl-collector/PROTOCOL.md schema 1. The screen
+// and src/analysis read it; snapshot.wsl_json stays a raw string for everything else.
 #pragma once
 #include <array>
 #include <cstdint>
@@ -35,5 +35,14 @@ struct wsl_view {
 };
 
 wsl_view read_wsl(std::string_view json);
+
+// True when line is the one last seen, and makes it the last seen. The bridge hands over its latest line,
+// so the same line twice measured nothing new. The line carries mono_s, so a new line always differs,
+// which is why this compares the raw line: wsl_view has no mono_s, and needs none.
+inline bool wsl_line_repeats(const std::string& line, std::string& last) {
+  const bool repeated = line == last;
+  last = line;
+  return repeated;
+}
 
 }  // namespace wwt

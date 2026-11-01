@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Repository checks. Without arguments, the Linux-side checks only; with --windows, also builds
-# winwsltop.exe and render_check.exe through scripts/build.sh and runs the render checks.
+# winwsltop.exe, render_check.exe and lost_check.exe through scripts/build.sh and runs both checks.
 # Each rule here is one that a document states; the document names this script as its check.
 set -uo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -125,7 +125,18 @@ if [ "${1:-}" = "--windows" ]; then
     case "$out" in *", 0 failed") pass "render_check: $out" ;; *) fail "render_check: $out" ;; esac
   fi
 
-  # 9. What scripts and agents rely on: exit codes, one JSON line, and every key documented.
+  # 9. The gate on `lost`, clause by clause and over experiment 05's record (contracts/core.md).
+  if lost=$(scripts/build.sh scripts/lost_check.cpp 2>&1 | tail -1); then
+    if out=$("$(wslpath -u "$lost")" "$(wslpath -w experiments/05-cpu-contention/results)" 2>&1 | tr -d '\r' | tail -1) && [[ "$out" == *", 0 failed" ]]; then
+      pass "lost_check: $out"
+    else
+      fail "lost_check: $out"
+    fi
+  else
+    fail "lost_check.exe did not build: $lost"
+  fi
+
+  # 10. What scripts and agents rely on: exit codes, one JSON line, and every key documented.
   if [ -n "${exe:-}" ]; then
     w=$(wslpath -u "$exe")
     "$w" --help | grep -q 'usage: winwsltop' && pass "--help prints usage, exit 0" || fail "--help"

@@ -13,11 +13,13 @@ import sys
 OBJECTS = {
     "": {"schema", "unix_ms", "interval_s", "cpu", "cpu_layout_known", "cpu_layout", "memory", "vm", "processes",
          "ready_threads", "vm_ready_threads", "disks", "nets", "gpu_engines_known", "gpu_engines", "gpu_device",
-         "gpu_memory", "gpu_split", "wsl", "cost_ms"},
+         "gpu_memory", "gpu_split", "lost_cpu_inferred", "cpu_derived", "wsl", "cost_ms"},
     "cpu": {"busy_pct", "user_pct", "kernel_pct", "core_pct"},
     "memory": {"total", "available", "cache", "commit_used", "commit_limit"},
     "vm": {"vmmem_pid", "vmwp_pid", "vmmem_working_set", "vmmem_cores", "vmmem_cores_known"},
     "gpu_split": {"valid", "vm_pct", "windows_pct", "vm_local", "windows_local", "source"},
+    "lost_cpu_inferred": {"state", "vcpus", "source"},
+    "cpu_derived": {"vm_cpu_pct", "own_kernel_pct", "ready_threads_mean", "vm_ready_threads_mean", "source"},
     "wsl": {"age_s", "restarts", "clock_known", "clock_offset_s", "data"},
     "cost_ms": {"cpu", "memory", "processes", "disk", "net", "gpu", "gpu_device", "gpu_memory"},
 }
@@ -35,6 +37,7 @@ WSL_DATA = {"schema", "distro", "kernel", "unix_s", "mono_s", "busy_pct", "core_
             "steal_pct", "memory", "pressure", "process_count", "processes", "dxg_pids", "dxg_denied", "cost_ms"}
 WSL_SPLIT = {"user", "sys", "iowait"}
 WSL_PROCESS = {"pid", "name", "state", "rss", "cores", "threads", "on_gpu"}
+LOST_STATES = {"collecting", "no_data", "guest_under_99", "windows_under_95", "known"}
 
 
 def fail(why):
@@ -89,6 +92,21 @@ if not isinstance(vm["vmmem_cores_known"], bool) or not isinstance(snapshot["cpu
     fail("vmmem_cores_known and cpu_layout_known are booleans")
 if snapshot["cpu_layout_known"] != bool(layout) or not all(count(v) for row in layout for v in row.values()):
     fail(f"cpu_layout_known is {snapshot['cpu_layout_known']} with {len(layout)} rows, or a row is not counts")
+lost, derived = snapshot["lost_cpu_inferred"], snapshot["cpu_derived"]
+if lost["source"] != "inferred" or derived["source"] != "derived":
+    fail(f"lost_cpu_inferred.source is {lost['source']}, cpu_derived.source is {derived['source']}")
+if lost["state"] not in LOST_STATES:
+    fail(f"lost_cpu_inferred.state is {lost['state']}")
+# Unknown is null: a 0 here outside `known` would read as nothing lost.
+if lost["state"] == "known" and not (number(lost["vcpus"]) and lost["vcpus"] >= 0):
+    fail(f"lost_cpu_inferred is known with vcpus {lost['vcpus']}")
+if lost["state"] != "known" and lost["vcpus"] is not None:
+    fail(f"lost_cpu_inferred is {lost['state']} with vcpus {lost['vcpus']}, not null")
+for name in OBJECTS["cpu_derived"] - {"source"}:
+    if derived[name] is not None and not (number(derived[name]) and derived[name] >= 0):
+        fail(f"cpu_derived.{name} is {derived[name]}: a figure or null")
+if vm["vmmem_cores_known"] != (derived["vm_cpu_pct"] is not None):
+    fail(f"vmmem_cores_known is {vm['vmmem_cores_known']} with cpu_derived.vm_cpu_pct {derived['vm_cpu_pct']}")
 device = snapshot["gpu_device"]
 if not DEVICE_ALWAYS <= set(device) <= DEVICE_ALWAYS | DEVICE_OPTIONAL:
     fail(f"gpu_device keys: {sorted(device)}")
@@ -134,6 +152,11 @@ if "--full" in sys.argv:
         fail("two cpu_layout rows name the same thread of the same core")
     if not vm["vmmem_pid"] or not vm["vmmem_cores_known"]:
         fail("vmmem_cores_known is false: the VM is running and was seen last sample")
+    # Printed to 3 places, so the sum is checked to two of them.
+    if abs(derived["vm_cpu_pct"] - 100 * vm["vmmem_cores"] / len(cpu["core_pct"])) > 0.01:
+        fail(f"cpu_derived.vm_cpu_pct {derived['vm_cpu_pct']} is not vmmem_cores {vm['vmmem_cores']} over {len(cpu['core_pct'])} logical CPUs")
+    if not number(derived["own_kernel_pct"]) or abs(derived["own_kernel_pct"] - max(0, cpu["kernel_pct"] - derived["vm_cpu_pct"])) > 0.01:
+        fail(f"cpu_derived.own_kernel_pct {derived['own_kernel_pct']} is not kernel_pct {cpu['kernel_pct']} less vm_cpu_pct, clamped")
     if not device["present"] or "util_pct" not in device or "mem_total" not in device:
         fail("no GPU device readings: NVML did not load")
     if not snapshot["gpu_engines_known"] or not snapshot["gpu_split"]["valid"]:
@@ -145,7 +168,7 @@ def named_in(path):
     return set(re.findall(r"`([a-z_0-9]+)`", open(path, encoding="utf-8").read()))
 
 
-every = set().union(*OBJECTS.values(), *ROWS.values(), DEVICE_ALWAYS, DEVICE_OPTIONAL)
+every = set().union(*OBJECTS.values(), *ROWS.values(), DEVICE_ALWAYS, DEVICE_OPTIONAL, LOST_STATES)
 missing = sorted(every - named_in(sys.argv[1])) + sorted((WSL_DATA | WSL_SPLIT | WSL_PROCESS) - named_in("wsl-collector/PROTOCOL.md"))
 if missing:
     fail("not in the docs: " + ", ".join(missing))

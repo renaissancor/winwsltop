@@ -163,14 +163,17 @@ the panel 2 VRAM grammar: `41.2/63.7 GiB  free 22.5 GiB`, and `left_tone`.
   labelled `inferred`. Guest busy is what the guest wanted, not what it got, which is why the gap means
   something. Case means: 5.521, 10.372, 14.244 cores against 5.359, 9.787, 14.288 lost.
 - **Valid only inside the evidence:** all 5 guest samples at 99% or more, because every contended case had
-  WSL at 20 threads and a partly busy guest is `Not checked`; newest Windows busy at 95% or more, because
-  without it every all-core load that stops fires falsely (replay: 3.22 cores short with Windows 20.35%
-  busy, and 3.65 at 30.80%); a guest line under `kStaleS` old with at most one consecutive repeat; 5
-  finite samples since the last gap or `vmmem` pid change. Otherwise `n/a`, drawn as a gap, never 0.
+  WSL at 20 threads and a partly busy guest is `Not checked`, and this also stops the false fires when a
+  guest load ends (replay: 3.22 and 3.65 vCPUs short on a quiet Windows under a looser gate); newest Windows
+  busy at 95% or more, for the case replay does not reach; a guest line under `kStaleS` old with at most one
+  consecutive repeat; 5 finite samples since the last reset. Intervals up to 2500 ms are kept, wider than
+  `kGapMs`, because the loop itself runs late under contention. Otherwise `n/a`, drawn as a gap, never 0.
 - **Outside the evidence:** `.wslconfig` vCPU limits, and memory, disk or GPU load. Named in the README, and
   the reason a gated `n/a` is common. A real game beside a build may read `n/a`, which is honest.
-- **Floor:** under 1 vCPU it prints `<1` and draws quiet. `wsl-20` alone read 0.57 with nothing competing.
-- **Lag:** a 5-sample mean, so the figure lags by a few seconds. Stated in the README.
+- **Floor:** under 1 vCPU it prints `<1` and draws quiet. `wsl-20` alone read 0.354 to 0.767 with nothing
+  competing. It is a judgement, not a clean noise floor: the tail below passes it with nothing competing.
+- **Lag:** a 5-sample mean, so the figure lags. After a Windows load stops under a full guest it fades over
+  about 7 samples (`lost_check` pins them). Stated in the README.
 - **Tone:** `watch` from 1 vCPU in the head, amber in the lane, because the row the panel exists for must
   not look calmer than a healthy busy machine.
 - **Always labelled `inferred`** in the head and in JSON; in the lane the gutter's `│` becomes `≈`.

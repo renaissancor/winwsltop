@@ -14,15 +14,17 @@ experiments/  ──measured facts──▶  docs/measurable.md  (the evidence l
                ▼               ▼
          src/core/snapshot.h  ◀──  src/main.cpp samples once a second
                │
-               ├──▶ src/analysis/attribution.cpp   derives gpu_split (the only inference)
+               ├──▶ src/analysis/attribution.cpp   derives gpu_split
+               ├──▶ src/analysis/lost.cpp          infers lost, the only inference and the only figure across the two sides; derives cpu_derived
                ├──▶ src/record/jsonl.cpp           --once, --record N: one JSON line per snapshot
                └──▶ src/ui/render.cpp              live screen and --text; reads the snapshot and its own history of earlier ones
-                        └── src/ui/wsl_view.cpp    parses the collector's line (PROTOCOL schema 1)
+
+ src/core/wsl_view.cpp parses the collector's line (PROTOCOL schema 1) for lost.cpp and render.cpp
 ```
 
 Two seams carry everything: `src/core/snapshot.h` between collectors and readers, and
-`wsl-collector/PROTOCOL.md` between the Linux collector and both its readers (the bridge and the
-screen). Only core changes a seam.
+`wsl-collector/PROTOCOL.md` between the Linux collector and its readers (the bridge, the screen and
+`src/analysis/lost.cpp`). Only core changes a seam.
 
 ## Areas
 
@@ -32,9 +34,9 @@ orchestrator, not made.
 
 | area | owns | reads | writes | contract |
 |---|---|---|---|---|
-| core | `LICENSE`, `src/core/`, `src/main.cpp`, `src/record/`, `src/analysis/`, `wsl-collector/PROTOCOL.md`, `scripts/`, `docs/design/`, `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/TODO.md`, `docs/contracts/`, `docs/releases/`, `docs/json-output.md`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `.claude/`, `.gitignore`, `.gitattributes` | everything | the seams, the loop, the recorder, the split, the build and check scripts, all ownership docs | [contracts/core.md](contracts/core.md) |
+| core | `LICENSE`, `src/core/`, `src/main.cpp`, `src/record/`, `src/analysis/`, `wsl-collector/PROTOCOL.md`, `scripts/`, `docs/design/`, `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/TODO.md`, `docs/contracts/`, `docs/releases/`, `docs/json-output.md`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `.claude/`, `.gitignore`, `.gitattributes` | everything | the seams, the line parser, the loop, the recorder, the split, `lost`, the build and check scripts, all ownership docs | [contracts/core.md](contracts/core.md) |
 | collect | `src/host/`, `src/gpu/`, `src/wsl/`, `wsl-collector/collector.py`, `wsl-collector/embed.py`, `wsl-collector/clock_probe.cpp` | `snapshot.h`, `collectors.h`, `PROTOCOL.md`, `measurable.md` | snapshot fields, the collector and its embedded copy | [contracts/collect.md](contracts/collect.md) |
-| ui | `src/ui/` | `snapshot.h`, `PROTOCOL.md`, `measurable.md` | screen, console, the line parser, `render_check.cpp` | [contracts/ui.md](contracts/ui.md) |
+| ui | `src/ui/` | `snapshot.h`, `wsl_view.h`, `PROTOCOL.md`, `measurable.md` | screen, console, `render_check.cpp` | [contracts/ui.md](contracts/ui.md) |
 | evidence | `experiments/`, `docs/measurable.md` | anything | probes, loads, raw results, ledger rows | [contracts/evidence.md](contracts/evidence.md) |
 
 The `core` row is the orchestrator's. A fresh agent given the `core` role acts for the
@@ -62,6 +64,7 @@ A target is a check that does not exist yet. Nothing may assume it runs.
 | `scripts/check.sh` passes on the Linux side: embedded collector in sync, ownership complete, docs indexed, links resolve | **exists**, run before every commit |
 | `scripts/check.sh --windows` builds `winwsltop.exe` and `render_check.exe` and runs the render checks | **exists**, needs the Windows toolchain |
 | `scripts/check.sh --windows` also runs `--help`, `--version` and bad arguments, and fails unless `--once` is one JSON line with exactly the keys `scripts/check_json.py` lists, all named in `docs/json-output.md` | **exists**, needs the Windows host |
+| `scripts/check.sh --windows` also builds `lost_check.exe`, which checks each clause of the `lost` gate and replays `experiments/05-cpu-contention/results/run1-record-2026-11-01.txt` through `lost_tracker` | **exists**, needs the Windows toolchain; no load, no live machine |
 | `scripts/release.sh vX.Y.Z` builds `dist/winwsltop.exe` from a clean tree after `check.sh --windows`, and refuses a binary that imports a DLL outside its list, holds a private string or debug path in ASCII or UTF-16, lets a planted `wsl.exe`, `json.py`, collector, DLL or manifest take effect, or does not end 8 samples with real GPU, disk, network and live WSL data | **exists**, needs the Windows host; publishes nothing |
 | CI runs `scripts/check.sh` on push | TARGET: no `.github/` exists |
 | Recorded JSONL fixtures under `tests/` that the screen is rendered from | TARGET: `render_check.cpp` builds its snapshots by hand |

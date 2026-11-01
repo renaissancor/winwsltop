@@ -87,7 +87,6 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - A reset network counter (`TODO.md` item 6) leaves that rate at 0 for the sample, not absent, because
   `net_row` has no `has_rate`. Rule 2 says absent; a flag would need a snapshot field: request to core
   if the distinction matters on the screen. Added 2026-11-01.
-  `user` plus `sys` is unaffected. Not seen in 21 samples. Added 2026-11-01.
 
 ## Decision log
 
