@@ -32,7 +32,7 @@ orchestrator, not made.
 
 | area | owns | reads | writes | contract |
 |---|---|---|---|---|
-| core | `LICENSE`, `src/core/`, `src/main.cpp`, `src/record/`, `src/analysis/`, `wsl-collector/PROTOCOL.md`, `scripts/`, `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/TODO.md`, `docs/contracts/`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `.claude/`, `.gitignore`, `.gitattributes` | everything | the seams, the loop, the recorder, the split, the build and check scripts, all ownership docs | [contracts/core.md](contracts/core.md) |
+| core | `LICENSE`, `src/core/`, `src/main.cpp`, `src/record/`, `src/analysis/`, `wsl-collector/PROTOCOL.md`, `scripts/`, `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/TODO.md`, `docs/contracts/`, `docs/releases/`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `.claude/`, `.gitignore`, `.gitattributes` | everything | the seams, the loop, the recorder, the split, the build and check scripts, all ownership docs | [contracts/core.md](contracts/core.md) |
 | collect | `src/host/`, `src/gpu/`, `src/wsl/`, `wsl-collector/collector.py`, `wsl-collector/embed.py`, `wsl-collector/clock_probe.cpp` | `snapshot.h`, `collectors.h`, `PROTOCOL.md`, `measurable.md` | snapshot fields, the collector and its embedded copy | [contracts/collect.md](contracts/collect.md) |
 | ui | `src/ui/` | `snapshot.h`, `PROTOCOL.md`, `measurable.md` | screen, console, the line parser, `render_check.cpp` | [contracts/ui.md](contracts/ui.md) |
 | evidence | `experiments/`, `docs/measurable.md` | anything | probes, loads, raw results, ledger rows | [contracts/evidence.md](contracts/evidence.md) |
@@ -60,6 +60,7 @@ A target is a check that does not exist yet. Nothing may assume it runs.
 |---|---|
 | `scripts/check.sh` passes on the Linux side: embedded collector in sync, ownership complete, docs indexed, links resolve | **exists**, run before every commit |
 | `scripts/check.sh --windows` builds `winwsltop.exe` and `render_check.exe` and runs the render checks | **exists**, needs the Windows toolchain |
+| `scripts/release.sh vX.Y.Z` builds `dist/winwsltop.exe` from a clean tree after `check.sh --windows`, and refuses a binary that imports a DLL outside its list, holds a private string or debug path, or fails `--once` from an empty folder | **exists**, needs the Windows host; publishes nothing |
 | CI runs `scripts/check.sh` on push | TARGET: no `.github/` exists |
 | Recorded JSONL fixtures under `tests/` that the screen is rendered from | TARGET: `render_check.cpp` builds its snapshots by hand |
 | Collector checks replayable without a live machine | TARGET: `clock_probe.cpp` and the ledger checks are manual |

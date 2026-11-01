@@ -88,3 +88,6 @@ the one inferred value, and keep the build, the checks and the ownership documen
 - 2026-11-01. Item 20 closed on 622f874, 74a5c32, 36ed08b and 0cd336d, audited by a fresh auditor against the
   raw files. It closes as a partial check, not a full one: the task's independent source was met
   only for disk 0 bytes and `vEthernet` octets, and what remains is in `contracts/evidence.md`.
+- 2026-11-01. Releases are built by `scripts/release.sh`, never from the normal build: `/Zi` embeds the
+  absolute `.pdb` path, which holds the builder's user name, so the release build has no debug
+  information. The script publishes nothing. A person merges, then runs `gh release create`.
