@@ -56,7 +56,7 @@ all, even under load. winwsltop reads both sides at once and keeps them apart:
 - **CPU, memory, disk and network** for Windows, and CPU and processes for WSL.
 - **A one-minute history** for each graph, and a JSON record you can save.
 
-The GPU panel names the source of each figure. Windows and WSL figures are never added together, because they
+Each graph names its source. Windows and WSL figures are never added together, because they
 describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero.
 
 ## Get it
@@ -72,7 +72,7 @@ The binary isn't code-signed, so Windows SmartScreen may warn you the first time
 | key | panel |
 |---|---|
 | `1` | Overall |
-| `2` | GPU: graphs of device, WSL VM, Windows, memory and power, then who is using it |
+| `2` | GPU: graphs of device, WSL VM, Windows, memory and power, then Windows GPU users and WSL `/dev/dxg` holders |
 | `3` | CPU: Windows and WSL side by side, per-core rows, both process lists |
 | `q` | Quit (Ctrl+C works too) |
 

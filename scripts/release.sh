@@ -56,6 +56,8 @@ json=$(cd "$tmp/bin" && ./winwsltop.exe --record 8 | tr -d '\r') || fail "the bi
 case "$json" in *PLANTED*) fail "the on-disk collector ran" ;; esac
 printf '%s\n' "$json" | tail -1 | python3 scripts/check_json.py docs/json-output.md --full \
   || fail "the last sample from a salted folder is not a full snapshot with live data"
+# Any one sample can be idle, but eight with no engine row at all mean a reader that found nothing.
+case "$json" in *'"gpu_engines":[{'*) ;; *) fail "no GPU engine rows in eight samples" ;; esac
 
 mkdir -p dist
 cp "$exe" dist/winwsltop.exe

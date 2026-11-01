@@ -41,7 +41,7 @@ starting with `{"pong":` are consumed by the bridge and never reach the snapshot
 | `memory` | bytes from `/proc/meminfo`: `total`, `available`, `cached`, `swap_used` |
 | `pressure` | PSI `some avg10` for `cpu`, `memory`, `io`; `null` when absent |
 | `process_count` | every process seen |
-| `processes` | the top 30 by cores then RSS, plus every `/dev/dxg` holder. `pid`, `name`, `cores`, `rss`, `state`, `on_gpu` |
+| `processes` | the top 30 by cores then RSS, plus every `/dev/dxg` holder. `pid`, `name`, `cores`, `rss`, `state`, and `on_gpu`, which means it holds `/dev/dxg`, not that it uses the GPU |
 | `dxg_pids` | PIDs with `/dev/dxg` open: identity, not usage |
 | `dxg_denied` | processes whose fds could not be read, usually root's |
 | `cost_ms` | time this sample took |
