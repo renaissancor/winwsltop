@@ -4,6 +4,7 @@
 #include "analysis/attribution.h"
 #include "record/jsonl.h"
 #include "ui/console.h"
+#include "ui/history.h"
 #include "wsl/bridge.h"
 #include <cstdio>
 #include <cstdlib>
@@ -74,6 +75,26 @@ int main(int argc, char** argv) {
   double last = wwt::seconds_now();
   double next = last;
   wwt::console* screen = run == mode::live ? new wwt::console : nullptr;  // restores the terminal when deleted
+  wwt::history hist;
+  wwt::view panel = wwt::view::overall;
+  bool have_frame = false, quit = false;  // nothing to draw until the first sample after priming
+  const auto draw = [&] {
+    int w = 131, h = 40;
+    screen->size(w, h);
+    screen->draw(wwt::render(s, w, h, unix_ms(), &hist, panel));
+  };
+  // Called inside the wait, so a switch redraws the last snapshot at once instead of up to a second later.
+  const auto handle_keys = [&] {
+    if (!screen) return;
+    const wwt::view was = panel;
+    for (char key = screen->poll_key(); key != 0; key = screen->poll_key()) {
+      if (key == '1') panel = wwt::view::overall;
+      else if (key == '2') panel = wwt::view::gpu;
+      else if (key == '3') panel = wwt::view::cpu;
+      else if (key == 'q' || key == 'Q') quit = true;
+    }
+    if (panel != was && have_frame && !quit) draw();
+  };
   for (int i = 0; run == mode::live || i <= lines; ++i) {  // The first pass only primes the deltas.
     if (i) {
       // A fixed deadline: adding up short sleeps drifts, because Windows timers overshoot. After a
@@ -81,10 +102,11 @@ int main(int argc, char** argv) {
       // of being caught up with back-to-back samples (docs/TODO.md item 2).
       next += 1.0;
       if (const double t = wwt::seconds_now(); next < t) next = t;
-      for (double left = next - wwt::seconds_now(); left > 0 && !wwt::console::stop_requested(); left = next - wwt::seconds_now()) {
+      for (double left = next - wwt::seconds_now(); left > 0 && !quit && !wwt::console::stop_requested(); left = next - wwt::seconds_now()) {
         Sleep(left < 0.05 ? static_cast<DWORD>(left * 1000) + 1 : 50);
+        handle_keys();
       }
-      if (wwt::console::stop_requested()) break;
+      if (quit || wwt::console::stop_requested()) break;
     }
     const double now = wwt::seconds_now();
     s.interval_s = now - last;
@@ -102,6 +124,8 @@ int main(int argc, char** argv) {
     s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
     s.wsl_clock_known = wsl.clock_offset(s.wsl_clock_offset_s);
     if (!i) continue;
+    hist.push(s);
+    have_frame = true;
     if (run == mode::json) {
       const std::string line = wwt::to_json_line(s);
       fwrite(line.data(), 1, line.size(), stdout);
@@ -112,9 +136,7 @@ int main(int argc, char** argv) {
       fwrite(frame.data(), 1, frame.size(), stdout);
       fflush(stdout);
     } else {
-      int w = 131, h = 40;
-      screen->size(w, h);
-      screen->draw(wwt::render(s, w, h, unix_ms()));
+      draw();
     }
   }
   delete screen;
