@@ -75,6 +75,9 @@ void print_help(FILE* to) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  // Before anything can load a DLL. A release build delay-loads pdh and iphlpapi, because static imports
+  // of an .exe are resolved from its own folder first, and a download's folder is not to be trusted.
+  SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
   enum class mode { live, json, text } run = mode::live;
   int lines = 1, modes = 0;
   std::wstring distro;

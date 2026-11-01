@@ -11,7 +11,7 @@ rem No /Zi and no /DEBUG: a debug build embeds the absolute .pdb path, which hol
 set REL_FLAGS=/nologo /std:c++20 /EHsc /W4 /WX /O2 /MT /DWWT_RELEASE /utf-8 /Isrc /Fo"%~2\\"
 set SOURCES=src\main.cpp src\host\*.cpp src\gpu\*.cpp src\record\*.cpp src\wsl\*.cpp src\analysis\*.cpp src\ui\render.cpp src\ui\console.cpp src\ui\wsl_view.cpp
 if "%~1"=="release" (
-  cl %REL_FLAGS% /Fe"%~2\winwsltop.exe" %SOURCES% /link /DEBUG:NONE /Brepro /DEPENDENTLOAD:SYSTEM32
+  cl %REL_FLAGS% /Fe"%~2\winwsltop.exe" %SOURCES% /link /DEBUG:NONE /Brepro /DELAYLOAD:pdh.dll /DELAYLOAD:iphlpapi.dll delayimp.lib
 ) else if "%~1"=="all" (
   cl %CL_FLAGS% /Fe"%~2\winwsltop.exe" %SOURCES%
 ) else (
