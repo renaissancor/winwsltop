@@ -10,7 +10,8 @@ reads schema 1 of the collector's line.
 
 ## What belongs here
 
-- `render.h`, `render.cpp`: layout, colour tones, number formatting, UTF-8 width, sanitising names.
+- `render.h`, `render.cpp`: layout, colour tones, number formatting, UTF-8 width, sanitising names,
+  and `history::push`, so `wsl_view.h` stays private to `src/ui`.
 - `wsl_view.h`, `wsl_view.cpp`: a strict parser for the collector's line. Private to `src/ui`.
 - `history.h`: the last 60 s of screen values, in memory. It lives here because WSL CPU comes through
   `wsl_view`.
@@ -56,8 +57,8 @@ reads schema 1 of the collector's line.
 
 | item | value |
 |---|---|
-| source | `src/ui` 2825 lines, of which `render_check.cpp` 982 |
-| checks | 93526, 0 failed, run on Windows 2026-11-01; 44 mutants of the new behaviour, 41 caught, the 3 survivors cannot change the output |
+| source | `src/ui` 2878 lines, of which `render_check.cpp` 1033 |
+| checks | 93701, 0 failed, run on Windows 2026-11-01. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
 | sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66 |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once; conhost not checked |
@@ -85,7 +86,8 @@ reads schema 1 of the collector's line.
   because `build.sh` renames the running exe.
 - 2026-11-01. The user chose panels switched by key (`1` overall, `2` GPU, `3` CPU, `q` quit) with
   btop-sized graphs of the last minute, over graphs taking rows from one screen. The overall panel
-  is the old screen plus a key footer. `--text` passes no history, so it is byte-identical.
+  is the old screen plus a key footer. `--text` passes no history, so it is byte-identical, except a
+  failed CPU read (below).
 - 2026-11-01. Panels keep at least 36 columns: three to a row from 112 columns, two from 74. On a short
   window the lists go first, then the device line, then a panel's plot, keeping its value and label;
   the footer says when something is hidden, and a cut holder list counts itself (`top N of M`).
@@ -93,7 +95,7 @@ reads schema 1 of the collector's line.
 - 2026-11-01. Samples more than 1.5 s apart are a gap. Where several samples share a column the highest
   is drawn, and a measured 0 draws its bottom dot, so it differs from a gap. A WSL line 5 s or older
   and an empty `core_pct` are gaps, and so is a repeated line, which also happens with a healthy
-  collector when the two 1 Hz loops slip (1 of 90 samples in one run). A WSL value is plotted at the
+  collector when the two 1 Hz loops slip, and blanks about 2 s. A WSL value is plotted at the
   Windows sample time. A backward clock step shifts the stored samples using `interval_s`, and clears
   them at a stall of 60 s or more; a forward step reads as a stall.
 - 2026-11-01. Keys are decided on the virtual key code, so Delete does nothing and `q` should work

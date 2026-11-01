@@ -93,9 +93,9 @@ int main(int argc, char** argv) {
       if (key == '1') panel = wwt::view::overall;
       else if (key == '2') panel = wwt::view::gpu;
       else if (key == '3') panel = wwt::view::cpu;
-      else if (key == 'q' || key == 'Q') quit = true;
+      else if (key == 'q') quit = true;
     }
-    if (panel != was && have_frame && !quit) draw();
+    if (panel != was && have_frame && !quit && screen->is_terminal()) draw();
   };
   for (int i = 0; run == mode::live || i <= lines; ++i) {  // The first pass only primes the deltas.
     if (i) {
@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
     s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
     s.wsl_clock_known = wsl.clock_offset(s.wsl_clock_offset_s);
     if (!i) continue;
-    if (screen) hist.push(s);  // only the live screen draws it
+    if (screen && screen->is_terminal()) hist.push(s);  // only the live screen draws it
     have_frame = true;
     if (run == mode::json) {
       const std::string line = wwt::to_json_line(s);
