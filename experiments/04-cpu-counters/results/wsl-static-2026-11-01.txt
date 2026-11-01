@@ -1,0 +1,176 @@
+kernel	6.6.114.1-microsoft-standard-WSL2
+nproc	20
+nproc_all	20
+getconf_online	20
+--- /sys/devices/system/cpu/online
+0-19
+--- /sys/devices/system/cpu/possible
+0-19
+--- /sys/devices/system/cpu/present
+0-19
+--- /sys/devices/system/cpu/offline
+
+--- /sys/devices/system/cpu/isolated
+
+--- /sys/devices/system/cpu/smt/active
+1
+--- /sys/devices/system/cpu/smt/control
+on
+=== /proc/cpuinfo, processors 0 and 19, flags cut
+processor	: 0
+vendor_id	: GenuineIntel
+cpu family	: 6
+model		: 183
+model name	: 13th Gen Intel(R) Core(TM) i5-13600K
+stepping	: 1
+microcode	: 0xffffffff
+cpu MHz		: 3494.272
+cache size	: 24576 KB
+physical id	: 0
+siblings	: 20
+core id		: 0
+cpu cores	: 10
+apicid		: 0
+initial apicid	: 0
+fpu		: yes
+fpu_exception	: yes
+cpuid level	: 28
+wp		: yes
+flags : (cut)
+vmx flags : (cut)
+bugs : (cut)
+bogomips	: 6988.54
+clflush size	: 64
+cache_alignment	: 64
+address sizes	: 46 bits physical, 48 bits virtual
+power management:
+processor	: 19
+vendor_id	: GenuineIntel
+cpu family	: 6
+model		: 183
+model name	: 13th Gen Intel(R) Core(TM) i5-13600K
+stepping	: 1
+microcode	: 0xffffffff
+cpu MHz		: 3494.272
+cache size	: 24576 KB
+physical id	: 0
+siblings	: 20
+core id		: 9
+cpu cores	: 10
+apicid		: 19
+initial apicid	: 19
+fpu		: yes
+fpu_exception	: yes
+cpuid level	: 28
+wp		: yes
+flags : (cut)
+vmx flags : (cut)
+bugs : (cut)
+bogomips	: 6988.54
+clflush size	: 64
+cache_alignment	: 64
+address sizes	: 46 bits physical, 48 bits virtual
+power management:
+flags_has_hypervisor	1
+=== cpufreq and cpuidle
+/sys/devices/system/cpu/cpu0/cpufreq: absent
+/sys/devices/system/cpu/cpufreq: directory, entries: 0
+/sys/devices/system/cpu/cpuidle: directory, entries: 4
+available_governors
+current_driver
+current_governor
+current_governor_ro
+/sys/devices/system/cpu/cpu0/cpuidle: absent
+--- /sys/devices/system/cpu/cpuidle/current_driver
+none
+=== topology: cpu core_id thread_siblings package die l1d l1i l2 l3 max_freq
+topo	0	0	0-1	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	1	0	0-1	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	2	1	2-3	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	3	1	2-3	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	4	2	4-5	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	5	2	4-5	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	6	3	6-7	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	7	3	6-7	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	8	4	8-9	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	9	4	8-9	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	10	5	10-11	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	11	5	10-11	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	12	6	12-13	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	13	6	12-13	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	14	7	14-15	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	15	7	14-15	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	16	8	16-17	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	17	8	16-17	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	18	9	18-19	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+topo	19	9	18-19	0	0	1D:48K	1I:32K	2U:2048K	3U:24576K
+=== /sys/class/thermal
+thermal_zones	0
+cooling_devices	20
+cooling_device0	Processor	0	0
+cooling_device1	Processor	0	0
+cooling_device2	Processor	0	0
+cooling_device3	Processor	0	0
+cooling_device4	Processor	0	0
+cooling_device5	Processor	0	0
+cooling_device6	Processor	0	0
+cooling_device7	Processor	0	0
+cooling_device8	Processor	0	0
+cooling_device9	Processor	0	0
+cooling_device10	Processor	0	0
+cooling_device11	Processor	0	0
+cooling_device12	Processor	0	0
+cooling_device13	Processor	0	0
+cooling_device14	Processor	0	0
+cooling_device15	Processor	0	0
+cooling_device16	Processor	0	0
+cooling_device17	Processor	0	0
+cooling_device18	Processor	0	0
+cooling_device19	Processor	0	0
+hwmon	0
+=== cgroup
+--- /proc/self/cgroup
+0::/init.scope
+--- /sys/fs/cgroup/cgroup.controllers
+cpuset cpu io memory hugetlb pids rdma
+--- /sys/fs/cgroup/cpu.max
+absent
+--- /sys/fs/cgroup/cpu.stat
+usage_usec 17039992000
+user_usec 12420900000
+system_usec 4619092000
+nr_periods 0
+nr_throttled 0
+throttled_usec 0
+nr_bursts 0
+burst_usec 0
+--- /sys/fs/cgroup/cpu.pressure
+some avg10=0.00 avg60=0.00 avg300=0.00 total=94479089
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+--- /sys/fs/cgroup/cpuset.cpus.effective
+0-19
+cpu.max files found below the root:
+sys-fs-fuse-connections.mount/cpu.max	max 100000
+sys-kernel-config.mount/cpu.max	max 100000
+sys-kernel-debug.mount/cpu.max	max 100000
+dev-mqueue.mount/cpu.max	max 100000
+user.slice/cpu.max	max 100000
+user.slice/user-1000.slice/user@1000.service/session.slice/cpu.max	max 100000
+user.slice/user-1000.slice/user@1000.service/app.slice/cpu.max	max 100000
+user.slice/user-1000.slice/user@1000.service/init.scope/cpu.max	max 100000
+user.slice/user-1000.slice/user@1000.service/cpu.max	max 100000
+user.slice/user-1000.slice/cpu.max	max 100000
+user.slice/user-1000.slice/session-1.scope/cpu.max	max 100000
+sys-kernel-tracing.mount/cpu.max	max 100000
+init.scope/cpu.max	max 100000
+system.slice/cpu.max	max 100000
+dev-hugepages.mount/cpu.max	max 100000
+=== settings
+wslconfig_present_in_any_windows_profile	0
+--- /proc/pressure/cpu
+some avg10=0.00 avg60=0.00 avg300=0.00 total=94479134
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+--- /proc/loadavg
+0.08 0.14 0.12 2/651 1194192
+=== GPU line for the ledger
+NVIDIA GeForce RTX 4070, 610.88, 12282 MiB, 200.00 W

@@ -1,0 +1,566 @@
+=== Processor Information: counters
+Actual Frequency
+Performance Limit Flags
+% Performance Limit
+% Privileged Utility
+% Processor Utility
+% Processor Performance
+Idle Break Events/sec
+Average Idle Time
+Clock Interrupts/sec
+Processor State Flags
+% of Maximum Frequency
+Processor Frequency
+Parking Status
+% Priority Time
+C3 Transitions/sec
+C2 Transitions/sec
+C1 Transitions/sec
+% C3 Time
+% C2 Time
+% C1 Time
+% Idle Time
+DPC Rate
+DPCs Queued/sec
+% Interrupt Time
+% DPC Time
+Interrupts/sec
+% Privileged Time
+% User Time
+% Processor Time
+=== Processor Information: instances
+0,0
+0,1
+0,10
+0,11
+0,12
+0,13
+0,14
+0,15
+0,16
+0,17
+0,18
+0,19
+0,2
+0,3
+0,4
+0,5
+0,6
+0,7
+0,8
+0,9
+0,_Total
+_Total
+=== System: counters
+File Read Operations/sec
+File Write Operations/sec
+File Control Operations/sec
+File Read Bytes/sec
+File Write Bytes/sec
+File Control Bytes/sec
+Context Switches/sec
+System Calls/sec
+File Data Operations/sec
+System Up Time
+Processor Queue Length
+Processes
+Threads
+Alignment Fixups/sec
+Exception Dispatches/sec
+Floating Emulations/sec
+% Registry Quota In Use
+=== System: instances
+=== Thermal Zone Information: counters
+High Precision Temperature
+Throttle Reasons
+% Passive Limit
+Temperature
+=== Thermal Zone Information: instances
+\_TZ.TZ00
+=== Hyper-V Hypervisor Virtual Processor: counters
+Total Virtualization Instructions Emulation Cost
+Total Virtualization Instructions Emulated/sec
+% VTL2 Run Time
+% VTL1 Run Time
+% Remote Run Time
+Total Intercepts Cost
+Total Intercepts/sec
+Total Messages/sec
+% Total Core Run Time
+% Guest-Relative Utilization
+% Guest Run Time
+% Hypervisor Run Time
+% Total Run Time
+Bus Lock Acquisitions/sec
+SVM Hypercalls/sec
+Deposit Hypercalls/sec
+Device Domain Hypercalls/sec
+Event Log Hypercalls/sec
+VSM Hypercalls/sec
+CPU Group Hypercalls/sec
+IOMMU Hypercalls/sec
+VTL2 Average Run Time
+VTL1 Average Run Time
+VTL2 Dispatches/sec
+VTL1 Dispatches/sec
+Performance Monitoring Interrupts/sec
+Performance Monitoring IPT MSR Accesses/sec
+Performance Monitoring LBR MSR Accesses/sec
+Performance Monitoring vPMU MSR Accesses/sec
+RDPMC Instructions Cost
+RDPMC Instructions/sec
+Scheduling Priority
+CPU Wake Up Time Per Dispatch
+CPU Contention Time Per Dispatch
+GIF Instruction Emulation Cost
+GIF Instruction Emulation Intercepts/sec
+VMSAVE Instruction Emulation Cost
+VMSAVE Emulation Intercepts/sec
+VMLOAD Instruction Emulation Cost
+VMLOAD Emulation Intercepts/sec
+CPPC Request Context Switches/sec
+Posted Interrupt Scans/sec
+Posted Interrupt Notifications/sec
+Flush Physical Address List Hypercalls/sec
+Flush Physical Address Space Hypercalls/sec
+Nested TLB Page Table Evictions/sec
+Nested TLB Page Table Reclamations/sec
+InvVpid Single Address Instruction Emulation Cost
+InvVpid Single Address Emulation Intercepts/sec
+InvVpid Single Context Instruction Emulation Cost
+InvVpid Single Context Emulation Intercepts/sec
+InvVpid All Context Instruction Emulation Cost
+InvVpid All Context Emulation Intercepts/sec
+InvEpt Single Context Instruction Emulation Cost
+InvEpt Single Context Emulation Intercepts/sec
+InvEpt All Context Instruction Emulation Cost
+InvEpt All Context Emulation Intercepts/sec
+Nested SLAT Hard Page Faults Cost
+Nested SLAT Hard Page Faults/sec
+Nested SLAT Soft Page Faults Cost
+Nested SLAT Soft Page Faults/sec
+Nested VM Entries Cost
+Nested VM Entries/sec
+VMXON Instruction Emulation Cost
+VMXON Emulation Intercepts/sec
+VMXOFF Instruction Emulation Cost
+VMXOFF Emulation Intercepts/sec
+VMWRITE Instruction Emulation Cost
+VMWRITE Emulation Intercepts/sec
+VMREAD Instruction Emulation Cost
+VMREAD Emulation Intercepts/sec
+VMPTRST Instruction Emulation Cost
+VMPTRST Emulation Intercepts/sec
+VMPTRLD Instruction Emulation Cost
+VMPTRLD Emulation Intercepts/sec
+VMCLEAR Instruction Emulation Cost
+VMCLEAR Emulation Intercepts/sec
+Page Fault Intercepts Forwarding Cost
+Page Fault Intercepts Forwarded/sec
+Debug Register Accesses Forwarding Cost
+Debug Register Accesses Forwarded/sec
+Emulated Instructions Forwarding Cost
+Emulated Instructions Forwarded/sec
+Pending Interrupts Forwarding Cost
+Pending Interrupts Forwarded/sec
+External Interrupts Forwarded/sec
+Other Intercepts Forwarding Cost
+Other Intercepts Forwarded/sec
+MSR Accesses Forwarding Cost
+MSR Accesses Forwarded/sec
+CPUID Instructions Forwarding Cost
+CPUID Instructions Forwarded/sec
+MWAIT Instructions Forwarding Cost
+MWAIT Instructions Forwarded/sec
+HLT Instructions Forwarding Cost
+HLT Instructions Forwarded/sec
+IO Instructions Forwarding Cost
+IO Instructions Forwarded/sec
+Control Register Accesses Forwarding Cost
+Control Register Accesses Forwarded/sec
+Page Invalidations Forwarding Cost
+Page Invalidations Forwarded/sec
+Hypercalls Forwarding Cost
+Hypercalls Forwarded/sec
+Local I/O TLB Flush Cost
+Local I/O TLB Flushes/sec
+Global I/O TLB Flush Cost
+Global I/O TLB Flushes/sec
+Other Reflected Guest Exceptions/sec
+MBEC Nested Page Table Switches/sec
+Extended Hypercall Intercept Messages/sec
+Extended Hypercalls/sec
+CPU Wait Time Per Dispatch
+Logical Processor Dispatches/sec
+Page Scans/sec
+Nested Page Fault Intercepts Cost
+Nested Page Fault Intercepts/sec
+Hardware Interrupts/sec
+Virtual Processor Hypercalls/sec
+Virtual MMU Hypercalls/sec
+Virtual Interrupt Hypercalls/sec
+Synthetic Interrupt Hypercalls/sec
+Other Hypercalls/sec
+Long Spin Wait Hypercalls/sec
+Logical Processor Hypercalls/sec
+GPA Space Hypercalls/sec
+APIC Self IPIs Sent/sec
+APIC IPIs Sent/sec
+Virtual Interrupts/sec
+Synthetic Interrupts/sec
+Page Table Write Intercepts/sec
+APIC TPR Accesses/sec
+Page Table Validations/sec
+Page Table Resets/sec
+Page Table Reclamations/sec
+Page Table Evictions/sec
+Local Flushed GVA Ranges/sec
+Global GVA Range Flushes/sec
+Address Space Flushes/sec
+Address Domain Flushes/sec
+Address Space Switches/sec
+Address Space Evictions/sec
+Logical Processor Migrations/sec
+Page Table Allocations/sec
+Other Messages/sec
+APIC EOI Accesses/sec
+Memory Intercept Messages/sec
+IO Intercept Messages/sec
+APIC MMIO Accesses/sec
+Reflected Guest Page Faults/sec
+Small Page TLB Fills/sec
+Large Page TLB Fills/sec
+Guest Page Table Maps/sec
+Page Fault Intercepts Cost
+Page Fault Intercepts/sec
+Debug Register Accesses Cost
+Debug Register Accesses/sec
+Emulated Instructions Cost
+Emulated Instructions/sec
+Pending Interrupts Cost
+Pending Interrupts/sec
+External Interrupts Cost
+External Interrupts/sec
+Other Intercepts Cost
+Other Intercepts/sec
+MSR Accesses Cost
+MSR Accesses/sec
+CPUID Instructions Cost
+CPUID Instructions/sec
+MWAIT Instructions Cost
+MWAIT Instructions/sec
+HLT Instructions Cost
+HLT Instructions/sec
+IO Instructions Cost
+IO Instructions/sec
+Control Register Accesses Cost
+Control Register Accesses/sec
+Page Invalidations Cost
+Page Invalidations/sec
+Hypercalls Cost
+Hypercalls/sec
+=== Hyper-V Hypervisor Virtual Processor: instances
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 0
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 1
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 10
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 11
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 12
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 13
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 14
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 15
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 16
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 17
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 18
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 19
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 2
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 3
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 4
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 5
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 6
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 7
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 8
+62F778E6-CADF-402E-837D-656E7C84B74D:Hv VP 9
+_Total
+=== Hyper-V Hypervisor Logical Processor: counters
+Total Interrupts/sec
+% Idle Time
+% Guest Run Time
+% Hypervisor Run Time
+% Total Run Time
+Performance Monitoring Interrupts/sec
+Running Priority
+Reserve Group Id
+Scheduler Local Run List Size
+CPPC Request Context Switches/sec
+Hypervisor Microarchitectural Buffer Flushes/sec
+Hypervisor Immediate L1 Data Cache Flushes/sec
+Hypervisor L1 Data Cache Flushes/sec
+Hypervisor Branch Predictor Flushes/sec
+Posted Interrupt Notifications/sec
+Root Vp Index
+% C3 Time
+C3 Transitions/sec
+% C2 Time
+C2 Transitions/sec
+% C1 Time
+C1 Transitions/sec
+Monitor Transition Cost
+Inter-Processor Interrupts Sent/sec
+Timer Interrupts/sec
+Scheduler Interrupts/sec
+Inter-Processor Interrupts/sec
+Context Switches/sec
+Hardware Interrupts/sec
+=== Hyper-V Hypervisor Logical Processor: instances
+Hv LP 0
+Hv LP 1
+Hv LP 10
+Hv LP 11
+Hv LP 12
+Hv LP 13
+Hv LP 14
+Hv LP 15
+Hv LP 16
+Hv LP 17
+Hv LP 18
+Hv LP 19
+Hv LP 2
+Hv LP 3
+Hv LP 4
+Hv LP 5
+Hv LP 6
+Hv LP 7
+Hv LP 8
+Hv LP 9
+_Total
+=== Hyper-V Hypervisor Root Virtual Processor: counters
+Total Virtualization Instructions Emulation Cost
+Total Virtualization Instructions Emulated/sec
+% VTL2 Run Time
+% VTL1 Run Time
+% Remote Run Time
+Total Intercepts Cost
+Total Intercepts/sec
+Total Messages/sec
+% Total Core Run Time
+% Guest-Relative Utilization
+% Guest Run Time
+% Hypervisor Run Time
+% Total Run Time
+Bus Lock Acquisitions/sec
+SVM Hypercalls/sec
+Deposit Hypercalls/sec
+Device Domain Hypercalls/sec
+Event Log Hypercalls/sec
+VSM Hypercalls/sec
+CPU Group Hypercalls/sec
+IOMMU Hypercalls/sec
+VTL2 Average Run Time
+VTL1 Average Run Time
+VTL2 Dispatches/sec
+VTL1 Dispatches/sec
+Performance Monitoring Interrupts/sec
+Performance Monitoring IPT MSR Accesses/sec
+Performance Monitoring LBR MSR Accesses/sec
+Performance Monitoring vPMU MSR Accesses/sec
+RDPMC Instructions Cost
+RDPMC Instructions/sec
+Scheduling Priority
+CPU Wake Up Time Per Dispatch
+CPU Contention Time Per Dispatch
+GIF Instruction Emulation Cost
+GIF Instruction Emulation Intercepts/sec
+VMSAVE Instruction Emulation Cost
+VMSAVE Emulation Intercepts/sec
+VMLOAD Instruction Emulation Cost
+VMLOAD Emulation Intercepts/sec
+CPPC Request Context Switches/sec
+Posted Interrupt Scans/sec
+Posted Interrupt Notifications/sec
+Flush Physical Address List Hypercalls/sec
+Flush Physical Address Space Hypercalls/sec
+Nested TLB Page Table Evictions/sec
+Nested TLB Page Table Reclamations/sec
+InvVpid Single Address Instruction Emulation Cost
+InvVpid Single Address Emulation Intercepts/sec
+InvVpid Single Context Instruction Emulation Cost
+InvVpid Single Context Emulation Intercepts/sec
+InvVpid All Context Instruction Emulation Cost
+InvVpid All Context Emulation Intercepts/sec
+InvEpt Single Context Instruction Emulation Cost
+InvEpt Single Context Emulation Intercepts/sec
+InvEpt All Context Instruction Emulation Cost
+InvEpt All Context Emulation Intercepts/sec
+Nested SLAT Hard Page Faults Cost
+Nested SLAT Hard Page Faults/sec
+Nested SLAT Soft Page Faults Cost
+Nested SLAT Soft Page Faults/sec
+Nested VM Entries Cost
+Nested VM Entries/sec
+VMXON Instruction Emulation Cost
+VMXON Emulation Intercepts/sec
+VMXOFF Instruction Emulation Cost
+VMXOFF Emulation Intercepts/sec
+VMWRITE Instruction Emulation Cost
+VMWRITE Emulation Intercepts/sec
+VMREAD Instruction Emulation Cost
+VMREAD Emulation Intercepts/sec
+VMPTRST Instruction Emulation Cost
+VMPTRST Emulation Intercepts/sec
+VMPTRLD Instruction Emulation Cost
+VMPTRLD Emulation Intercepts/sec
+VMCLEAR Instruction Emulation Cost
+VMCLEAR Emulation Intercepts/sec
+Page Fault Intercepts Forwarding Cost
+Page Fault Intercepts Forwarded/sec
+Debug Register Accesses Forwarding Cost
+Debug Register Accesses Forwarded/sec
+Emulated Instructions Forwarding Cost
+Emulated Instructions Forwarded/sec
+Pending Interrupts Forwarding Cost
+Pending Interrupts Forwarded/sec
+External Interrupts Forwarded/sec
+Other Intercepts Forwarding Cost
+Other Intercepts Forwarded/sec
+MSR Accesses Forwarding Cost
+MSR Accesses Forwarded/sec
+CPUID Instructions Forwarding Cost
+CPUID Instructions Forwarded/sec
+MWAIT Instructions Forwarding Cost
+MWAIT Instructions Forwarded/sec
+HLT Instructions Forwarding Cost
+HLT Instructions Forwarded/sec
+IO Instructions Forwarding Cost
+IO Instructions Forwarded/sec
+Control Register Accesses Forwarding Cost
+Control Register Accesses Forwarded/sec
+Page Invalidations Forwarding Cost
+Page Invalidations Forwarded/sec
+Hypercalls Forwarding Cost
+Hypercalls Forwarded/sec
+Local I/O TLB Flush Cost
+Local I/O TLB Flushes/sec
+Global I/O TLB Flush Cost
+Global I/O TLB Flushes/sec
+Other Reflected Guest Exceptions/sec
+MBEC Nested Page Table Switches/sec
+Extended Hypercall Intercept Messages/sec
+Extended Hypercalls/sec
+CPU Wait Time Per Dispatch
+Logical Processor Dispatches/sec
+Page Scans/sec
+Nested Page Fault Intercepts Cost
+Nested Page Fault Intercepts/sec
+Hardware Interrupts/sec
+Virtual Processor Hypercalls/sec
+Virtual MMU Hypercalls/sec
+Virtual Interrupt Hypercalls/sec
+Synthetic Interrupt Hypercalls/sec
+Other Hypercalls/sec
+Long Spin Wait Hypercalls/sec
+Logical Processor Hypercalls/sec
+GPA Space Hypercalls/sec
+APIC Self IPIs Sent/sec
+APIC IPIs Sent/sec
+Virtual Interrupts/sec
+Synthetic Interrupts/sec
+Page Table Write Intercepts/sec
+APIC TPR Accesses/sec
+Page Table Validations/sec
+Page Table Resets/sec
+Page Table Reclamations/sec
+Page Table Evictions/sec
+Local Flushed GVA Ranges/sec
+Global GVA Range Flushes/sec
+Address Space Flushes/sec
+Address Domain Flushes/sec
+Address Space Switches/sec
+Address Space Evictions/sec
+Logical Processor Migrations/sec
+Page Table Allocations/sec
+Other Messages/sec
+APIC EOI Accesses/sec
+Memory Intercept Messages/sec
+IO Intercept Messages/sec
+APIC MMIO Accesses/sec
+Reflected Guest Page Faults/sec
+Small Page TLB Fills/sec
+Large Page TLB Fills/sec
+Guest Page Table Maps/sec
+Page Fault Intercepts Cost
+Page Fault Intercepts/sec
+Debug Register Accesses Cost
+Debug Register Accesses/sec
+Emulated Instructions Cost
+Emulated Instructions/sec
+Pending Interrupts Cost
+Pending Interrupts/sec
+External Interrupts Cost
+External Interrupts/sec
+Other Intercepts Cost
+Other Intercepts/sec
+MSR Accesses Cost
+MSR Accesses/sec
+CPUID Instructions Cost
+CPUID Instructions/sec
+MWAIT Instructions Cost
+MWAIT Instructions/sec
+HLT Instructions Cost
+HLT Instructions/sec
+IO Instructions Cost
+IO Instructions/sec
+Control Register Accesses Cost
+Control Register Accesses/sec
+Page Invalidations Cost
+Page Invalidations/sec
+Hypercalls Cost
+Hypercalls/sec
+=== Hyper-V Hypervisor Root Virtual Processor: instances
+Root VP 0
+Root VP 1
+Root VP 10
+Root VP 11
+Root VP 12
+Root VP 13
+Root VP 14
+Root VP 15
+Root VP 16
+Root VP 17
+Root VP 18
+Root VP 19
+Root VP 2
+Root VP 3
+Root VP 4
+Root VP 5
+Root VP 6
+Root VP 7
+Root VP 8
+Root VP 9
+_Total
+=== Hyper-V Worker Virtual Processor: counters
+MPIDR
+Target Subnode
+Initial APIC ID
+Intercepts Delayed
+Intercept Delay Time (ms)
+=== Hyper-V Worker Virtual Processor: instances
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 0
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 1
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 10
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 11
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 12
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 13
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 14
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 15
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 16
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 17
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 18
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 19
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 2
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 3
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 4
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 5
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 6
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 7
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 8
+62F778E6-CADF-402E-837D-656E7C84B74D:WP VP 9

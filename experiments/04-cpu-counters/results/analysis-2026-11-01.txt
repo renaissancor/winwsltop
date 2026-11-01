@@ -1,0 +1,499 @@
+# analysis of experiment 04, 2026-11-01, computed by analyze.py from the other files in results/
+
+## Coverage
+
+window 1: probe rounds 70, guest rounds 70, record lines 60, failed reads 2, instance-list changes after the first 0, counters read 34, wsl.data null in 0 lines
+window 1: wsl.age_s min 0.004 mean 0.606 max 0.998 n 60; record interval_s min 0.988 mean 1.000 max 1.013 n 60
+window 2: probe rounds 70, guest rounds 70, record lines 60, failed reads 2, instance-list changes after the first 0, counters read 34, wsl.data null in 0 lines
+window 2: wsl.age_s min 0.016 mean 0.655 max 1.010 n 60; record interval_s min 0.987 mean 1.000 max 1.016 n 60
+window 3: probe rounds 70, guest rounds 70, record lines 60, failed reads 0, instance-list changes after the first 0, counters read 34, wsl.data null in 0 lines
+window 3: wsl.age_s min 0.002 mean 0.708 max 0.998 n 60; record interval_s min 0.988 mean 1.000 max 1.012 n 60
+
+## Reads that returned no value
+
+window 1: whole counter arrays that failed, by round: [('43', '% Processor Utility'), ('43', '% Privileged Utility')]; the probe did not print their status
+window 1: instance status 0xc0000bba on % Processor Time: 3 of 1518 instance readings
+window 2: whole counter arrays that failed, by round: [('5', '% Processor Performance'), ('5', 'Actual Frequency')]; the probe did not print their status
+window 2: instance status 0xc0000bba on % Processor Time: 1 of 1518 instance readings
+window 3: whole counter arrays that failed, by round: []; the probe did not print their status
+window 3: instance status 0xc0000bba on % Processor Time: 4 of 1518 instance readings
+
+## Processor Information: every counter, every window
+
+total is the _Total instance over the window; lps is every LP instance over the window.
+% Processor Time, window 1: total min 2.609 mean 10.732 max 81.450 n 69; lps min 0.000 mean 10.991 max 90.686 n 1377; distinct lp values 650; 0,_Total differs from _Total in 0 rounds
+% Processor Time, window 2: total min 0.800 mean 9.037 max 85.323 n 69; lps min 0.000 mean 9.349 max 96.910 n 1379; distinct lp values 588; 0,_Total differs from _Total in 0 rounds
+% Processor Time, window 3: total min 2.061 mean 6.623 max 15.935 n 69; lps min 0.000 mean 6.832 max 47.104 n 1376; distinct lp values 610; 0,_Total differs from _Total in 0 rounds
+% User Time, window 1: total min 0.617 mean 2.789 max 24.448 n 69; lps min 0.000 mean 2.789 max 38.807 n 1380; distinct lp values 301; 0,_Total differs from _Total in 0 rounds
+% User Time, window 2: total min 0.077 mean 2.421 max 28.195 n 69; lps min 0.000 mean 2.421 max 43.258 n 1380; distinct lp values 255; 0,_Total differs from _Total in 0 rounds
+% User Time, window 3: total min 0.540 mean 1.854 max 7.973 n 69; lps min 0.000 mean 1.854 max 20.172 n 1380; distinct lp values 288; 0,_Total differs from _Total in 0 rounds
+% Privileged Time, window 1: total min 2.707 mean 7.953 max 58.288 n 69; lps min 0.000 mean 7.953 max 72.957 n 1380; distinct lp values 551; 0,_Total differs from _Total in 0 rounds
+% Privileged Time, window 2: total min 1.243 mean 6.611 max 57.549 n 69; lps min 0.000 mean 6.611 max 71.067 n 1380; distinct lp values 495; 0,_Total differs from _Total in 0 rounds
+% Privileged Time, window 3: total min 2.161 mean 4.760 max 10.406 n 69; lps min 0.000 mean 4.760 max 43.562 n 1380; distinct lp values 497; 0,_Total differs from _Total in 0 rounds
+% Interrupt Time, window 1: total min 0.000 mean 0.439 max 1.475 n 69; lps min 0.000 mean 0.439 max 6.209 n 1380; distinct lp values 118; 0,_Total differs from _Total in 0 rounds
+% Interrupt Time, window 2: total min 0.000 mean 0.438 max 1.703 n 69; lps min 0.000 mean 0.438 max 7.729 n 1380; distinct lp values 113; 0,_Total differs from _Total in 0 rounds
+% Interrupt Time, window 3: total min 0.000 mean 0.329 max 1.236 n 69; lps min 0.000 mean 0.329 max 4.671 n 1380; distinct lp values 99; 0,_Total differs from _Total in 0 rounds
+% DPC Time, window 1: total min 0.000 mean 0.264 max 0.777 n 69; lps min 0.000 mean 0.264 max 6.204 n 1380; distinct lp values 102; 0,_Total differs from _Total in 0 rounds
+% DPC Time, window 2: total min 0.000 mean 0.215 max 0.622 n 69; lps min 0.000 mean 0.215 max 6.216 n 1380; distinct lp values 102; 0,_Total differs from _Total in 0 rounds
+% DPC Time, window 3: total min 0.000 mean 0.219 max 1.006 n 69; lps min 0.000 mean 0.219 max 6.193 n 1380; distinct lp values 89; 0,_Total differs from _Total in 0 rounds
+% Idle Time, window 1: total min 18.550 mean 89.268 max 97.391 n 69; lps min 9.314 mean 89.268 max 115.060 n 1380; distinct lp values 743; 0,_Total differs from _Total in 0 rounds
+% Idle Time, window 2: total min 14.677 mean 90.963 max 99.223 n 69; lps min 3.090 mean 90.963 max 118.702 n 1380; distinct lp values 691; 0,_Total differs from _Total in 0 rounds
+% Idle Time, window 3: total min 84.065 mean 93.377 max 97.862 n 69; lps min 52.896 mean 93.377 max 111.268 n 1380; distinct lp values 689; 0,_Total differs from _Total in 0 rounds
+% Processor Performance, window 1: total min 44.626 mean 85.250 max 131.644 n 69; lps min 26.453 mean 77.114 max 145.747 n 1380; distinct lp values 1380; 0,_Total differs from _Total in 0 rounds
+% Processor Performance, window 2: total min 36.538 mean 70.702 max 131.368 n 68; lps min 24.041 mean 64.356 max 145.717 n 1360; distinct lp values 1360; 0,_Total differs from _Total in 0 rounds
+% Processor Performance, window 3: total min 40.781 mean 74.981 max 135.952 n 69; lps min 25.196 mean 67.525 max 145.724 n 1380; distinct lp values 1380; 0,_Total differs from _Total in 0 rounds
+% Processor Utility, window 1: total min 2.595 mean 11.951 max 110.090 n 68; lps min 0.206 mean 11.951 max 131.681 n 1360; distinct lp values 1360; 0,_Total differs from _Total in 0 rounds
+% Processor Utility, window 2: total min 1.788 mean 9.615 max 116.438 n 69; lps min 0.214 mean 9.615 max 134.394 n 1380; distinct lp values 1380; 0,_Total differs from _Total in 0 rounds
+% Processor Utility, window 3: total min 2.181 mean 6.099 max 17.313 n 69; lps min 0.215 mean 6.099 max 71.906 n 1380; distinct lp values 1380; 0,_Total differs from _Total in 0 rounds
+Processor Frequency, window 1: total min 3500.000 mean 3500.000 max 3500.000 n 69; lps min 3500.000 mean 3500.000 max 3500.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+Processor Frequency, window 2: total min 3500.000 mean 3500.000 max 3500.000 n 69; lps min 3500.000 mean 3500.000 max 3500.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+Processor Frequency, window 3: total min 3500.000 mean 3500.000 max 3500.000 n 69; lps min 3500.000 mean 3500.000 max 3500.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+Parking Status, window 1: total min 0.000 mean 0.000 max 0.000 n 69; lps min 0.000 mean 0.739 max 1.000 n 1380; distinct lp values 2; 0,_Total differs from _Total in 0 rounds
+Parking Status, window 2: total min 0.000 mean 0.000 max 0.000 n 69; lps min 0.000 mean 0.743 max 1.000 n 1380; distinct lp values 2; 0,_Total differs from _Total in 0 rounds
+Parking Status, window 3: total min 0.000 mean 0.000 max 0.000 n 69; lps min 0.000 mean 0.736 max 1.000 n 1380; distinct lp values 2; 0,_Total differs from _Total in 0 rounds
+Actual Frequency, window 1: total min 1562.447 mean 2983.569 max 4607.505 n 69; lps min 925.855 mean 2698.851 max 5101.056 n 1380; distinct lp values 1380; 0,_Total differs from _Total in 0 rounds
+Actual Frequency, window 2: total min 1278.526 mean 2474.578 max 4597.469 n 68; lps min 841.422 mean 2252.472 max 5100.131 n 1360; distinct lp values 1360; 0,_Total differs from _Total in 0 rounds
+Actual Frequency, window 3: total min 1424.382 mean 2624.330 max 4758.214 n 69; lps min 881.857 mean 2363.396 max 5100.334 n 1380; distinct lp values 1380; 0,_Total differs from _Total in 0 rounds
+% of Maximum Frequency, window 1: total min 22.000 mean 58.014 max 100.000 n 69; lps min 22.000 mean 58.433 max 100.000 n 1380; distinct lp values 79; 0,_Total differs from _Total in 0 rounds
+% of Maximum Frequency, window 2: total min 22.000 mean 51.362 max 100.000 n 69; lps min 22.000 mean 51.828 max 100.000 n 1380; distinct lp values 79; 0,_Total differs from _Total in 0 rounds
+% of Maximum Frequency, window 3: total min 22.000 mean 56.855 max 100.000 n 69; lps min 22.000 mean 57.289 max 100.000 n 1380; distinct lp values 79; 0,_Total differs from _Total in 0 rounds
+% Privileged Utility, window 1: total min 2.453 mean 8.606 max 62.380 n 68; lps min 0.205 mean 8.606 max 83.177 n 1360; distinct lp values 1360; 0,_Total differs from _Total in 0 rounds
+% Privileged Utility, window 2: total min 1.693 mean 6.745 max 63.178 n 69; lps min 0.206 mean 6.745 max 83.930 n 1380; distinct lp values 1379; 0,_Total differs from _Total in 0 rounds
+% Privileged Utility, window 3: total min 2.064 mean 5.135 max 13.058 n 69; lps min 0.213 mean 5.135 max 64.663 n 1380; distinct lp values 1379; 0,_Total differs from _Total in 0 rounds
+% Performance Limit, window 1: total min 100.000 mean 100.000 max 100.000 n 69; lps min 100.000 mean 100.000 max 100.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+% Performance Limit, window 2: total min 100.000 mean 100.000 max 100.000 n 69; lps min 100.000 mean 100.000 max 100.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+% Performance Limit, window 3: total min 100.000 mean 100.000 max 100.000 n 69; lps min 100.000 mean 100.000 max 100.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+Performance Limit Flags, window 1: total min 0.000 mean 0.000 max 0.000 n 69; lps min 0.000 mean 0.000 max 0.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+Performance Limit Flags, window 2: total min 0.000 mean 0.000 max 0.000 n 69; lps min 0.000 mean 0.000 max 0.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+Performance Limit Flags, window 3: total min 0.000 mean 0.000 max 0.000 n 69; lps min 0.000 mean 0.000 max 0.000 n 1380; distinct lp values 1; 0,_Total differs from _Total in 0 rounds
+instances: 22, array order: 0,0 0,1 0,10 0,11 0,12 0,13 0,14 0,15 0,16 0,17 0,18 0,19 0,2 0,3 0,4 0,5 0,6 0,7 0,8 0,9 0,_Total _Total
+
+## Tick size of the times behind busy, user and kernel
+
+NT idle: gcd of every per-LP round delta, all windows: 156250 (100 ns units), that is 15.6250 ms
+NT kernel: gcd of every per-LP round delta, all windows: 156250 (100 ns units), that is 15.6250 ms
+NT user: gcd of every per-LP round delta, all windows: 156250 (100 ns units), that is 15.6250 ms
+NT dpc: gcd of every per-LP round delta, all windows: 156250 (100 ns units), that is 15.6250 ms
+NT interrupt: gcd of every per-LP round delta, all windows: 156250 (100 ns units), that is 15.6250 ms
+vmmemWSL process times: gcd of round deltas 156250 (100 ns units)
+vmwp process times: gcd of round deltas 156250 (100 ns units)
+vmmemWSL CycleTime: gcd of round deltas 1, distinct deltas 207 of 207, smallest 276363516
+probe round length, s: min 0.9994 mean 1.0087 max 1.0152 n 207
+one 156250 tick in a 1.0 s interval is 1.5625 points on one LP and 0.078125 points on the 20 LP total
+
+## cpu.cpp's formula against PDH, on the _Total of each round
+
+nt_busy is 100*(1-idle/(kernel+user)) as src/host/cpu.cpp computes it, from the same NT call, summed over LPs.
+nt_user is 100*user/(kernel+user); nt_kernel is 100*(kernel-idle)/(kernel+user). KernelTime includes idle.
+window 1: nt_busy min 3.298 mean 10.715 max 81.498 n 69
+window 1: nt_user min 0.613 mean 2.781 max 24.083 n 69
+window 1: nt_kernel min 2.684 mean 7.934 max 57.416 n 69
+window 1: nt_user+nt_kernel-nt_busy largest 0.000000000
+window 1: (kernel+user) as percent of 20 LPs times the round length min 97.767 mean 100.004 max 102.707 n 69
+window 1: nt_busy-%ProcessorTime min -2.502 mean -0.017 max 2.488 n 69
+window 1: nt_user-%UserTime min -0.366 mean -0.008 max 0.128 n 69
+window 1: nt_kernel-%PrivilegedTime min -0.872 mean -0.020 max 0.337 n 69
+window 1: nt dpc-%DPCTime min -0.077 mean 0.000 max 0.077 n 69
+window 1: nt interrupt-%InterruptTime min -0.077 mean -0.000 max 0.088 n 69
+window 1: nt_kernel minus nt dpc and interrupt, against %PrivilegedTime min -2.707 mean -0.723 max -0.120 n 69
+window 1: %UserTime+%PrivilegedTime-%ProcessorTime min -2.695 mean 0.011 max 2.631 n 69
+window 1: %ProcessorTime+%IdleTime min 99.223 mean 100.000 max 100.777 n 69
+window 1: LP %IdleTime above 100 in 195 of 1380, largest 115.060
+window 1: LP %ProcessorTime at exactly 0 in 192 of 1377
+window 1: winwsltop cpu.busy_pct min 3.359 mean 9.959 max 91.797 n 60; cost_ms.cpu min 0.049 mean 0.390 max 3.537 n 60
+window 1: sum of Windows process cores min 0.594 mean 1.402 max 8.636 n 60; busy_pct times 20/100 min 0.672 mean 1.992 max 18.359 n 60
+window 2: nt_busy min 1.846 mean 9.037 max 85.385 n 69
+window 2: nt_user min 0.078 mean 2.420 max 28.077 n 69
+window 2: nt_kernel min 1.231 mean 6.617 max 57.308 n 69
+window 2: nt_user+nt_kernel-nt_busy largest 0.000000000
+window 2: (kernel+user) as percent of 20 LPs times the round length min 96.880 mean 99.976 max 102.504 n 69
+window 2: nt_busy-%ProcessorTime min -2.869 mean -0.000 max 2.504 n 69
+window 2: nt_user-%UserTime min -0.342 mean -0.001 max 0.206 n 69
+window 2: nt_kernel-%PrivilegedTime min -0.749 mean 0.005 max 0.414 n 69
+window 2: nt dpc-%DPCTime min -0.009 mean 0.000 max 0.010 n 69
+window 2: nt interrupt-%InterruptTime min -0.072 mean 0.002 max 0.077 n 69
+window 2: nt_kernel minus nt dpc and interrupt, against %PrivilegedTime min -1.695 mean -0.649 max 0.176 n 69
+window 2: %UserTime+%PrivilegedTime-%ProcessorTime min -3.081 mean -0.004 max 2.679 n 69
+window 2: %ProcessorTime+%IdleTime min 98.761 mean 100.000 max 101.237 n 69
+window 2: LP %IdleTime above 100 in 247 of 1380, largest 118.702
+window 2: LP %ProcessorTime at exactly 0 in 248 of 1379
+window 2: winwsltop cpu.busy_pct min 2.736 mean 8.842 max 84.762 n 60; cost_ms.cpu min 0.073 mean 0.417 max 2.500 n 60
+window 2: sum of Windows process cores min 0.485 mean 1.202 max 7.729 n 60; busy_pct times 20/100 min 0.547 mean 1.768 max 16.952 n 60
+window 3: nt_busy min 2.682 mean 6.615 max 15.373 n 69
+window 3: nt_user min 0.536 mean 1.854 max 7.997 n 69
+window 3: nt_kernel min 2.146 mean 4.761 max 10.518 n 69
+window 3: nt_user+nt_kernel-nt_busy largest 0.000000000
+window 3: (kernel+user) as percent of 20 LPs times the round length min 98.142 mean 99.983 max 102.756 n 69
+window 3: nt_busy-%ProcessorTime min -1.430 mean -0.008 max 2.157 n 69
+window 3: nt_user-%UserTime min -0.073 mean -0.000 max 0.085 n 69
+window 3: nt_kernel-%PrivilegedTime min -0.332 mean 0.001 max 0.383 n 69
+window 3: nt dpc-%DPCTime min -0.008 mean 0.000 max 0.009 n 69
+window 3: nt interrupt-%InterruptTime min -0.010 mean 0.000 max 0.007 n 69
+window 3: nt_kernel minus nt dpc and interrupt, against %PrivilegedTime min -1.889 mean -0.547 max -0.003 n 69
+window 3: %UserTime+%PrivilegedTime-%ProcessorTime min -1.551 mean -0.009 max 2.370 n 69
+window 3: %ProcessorTime+%IdleTime min 98.289 mean 100.000 max 101.700 n 69
+window 3: LP %IdleTime above 100 in 221 of 1380, largest 111.268
+window 3: LP %ProcessorTime at exactly 0 in 214 of 1376
+window 3: winwsltop cpu.busy_pct min 3.033 mean 6.553 max 15.618 n 60; cost_ms.cpu min 0.070 mean 0.316 max 0.783 n 60
+window 3: sum of Windows process cores min 0.519 mean 1.106 max 2.671 n 60; busy_pct times 20/100 min 0.607 mean 1.311 max 3.124 n 60
+
+## % Processor Utility and % Processor Performance
+
+window 1: _Total utility over _Total processor time min 0.329 mean 0.982 max 2.626 n 68
+window 1: _Total utility minus time times performance/100 min -3.889 mean 0.719 max 4.610 n 68
+window 1: LP utility above 100 in 27 of 1360, largest 131.681; _Total largest 110.090
+window 1: utility on LP rounds whose processor time is exactly 0: min 0.234 mean 0.953 max 3.801 n 188
+window 1: % Processor Utility: above 100 uncapped 31, values changed by leaving out PDH_FMT_NOCAP100 0, largest capped 131.681
+window 1: % Processor Performance: above 100 uncapped 326, values changed by leaving out PDH_FMT_NOCAP100 0, largest capped 145.747
+window 2: _Total utility over _Total processor time min 0.333 mean 0.955 max 2.833 n 68
+window 2: _Total utility minus time times performance/100 min -2.760 mean 0.743 max 4.350 n 68
+window 2: LP utility above 100 in 26 of 1380, largest 134.394; _Total largest 116.438
+window 2: utility on LP rounds whose processor time is exactly 0: min 0.238 mean 0.842 max 5.508 n 248
+window 2: % Processor Utility: above 100 uncapped 28, values changed by leaving out PDH_FMT_NOCAP100 0, largest capped 134.394
+window 2: % Processor Performance: above 100 uncapped 173, values changed by leaving out PDH_FMT_NOCAP100 0, largest capped 145.717
+window 3: _Total utility over _Total processor time min 0.453 mean 0.909 max 1.698 n 69
+window 3: _Total utility minus time times performance/100 min -1.466 mean 0.698 max 3.370 n 69
+window 3: LP utility above 100 in 0 of 1380, largest 71.906; _Total largest 17.313
+window 3: utility on LP rounds whose processor time is exactly 0: min 0.218 mean 0.815 max 4.162 n 214
+window 3: % Processor Utility: above 100 uncapped 0, values changed by leaving out PDH_FMT_NOCAP100 0, largest capped 71.906
+window 3: % Processor Performance: above 100 uncapped 166, values changed by leaving out PDH_FMT_NOCAP100 0, largest capped 145.724
+
+## Frequency
+
+window 1: Processor Frequency distinct values [3500.0]
+window 1: largest |Actual Frequency - Processor Frequency*Performance/100| 61.228
+window 1: P LPs 0-11: Actual Frequency min 1145.2 mean 2941.6 max 5101.1 n 828
+window 1: P LPs 0-11: % Processor Performance min 32.7 mean 84.0 max 145.7 n 828
+window 1: P LPs 0-11: % of Maximum Frequency min 22.0 mean 67.9 max 100.0 n 828
+window 1: E LPs 12-19: Actual Frequency min 925.9 mean 2334.8 max 3900.9 n 552
+window 1: E LPs 12-19: % Processor Performance min 26.5 mean 66.7 max 111.5 n 552
+window 1: E LPs 12-19: % of Maximum Frequency min 22.0 mean 44.2 max 100.0 n 552
+window 1: r of % Processor Performance with % of Maximum Frequency, pooled over LP rounds +0.466
+window 1: CallNtPowerInformation max_mhz distinct values [3500]
+window 1: CallNtPowerInformation current_mhz distinct values [3500]
+window 1: CallNtPowerInformation limit_mhz distinct values [3500]
+window 2: Processor Frequency distinct values [3500.0]
+window 2: largest |Actual Frequency - Processor Frequency*Performance/100| 96.595
+window 2: P LPs 0-11: Actual Frequency min 1034.6 mean 2348.7 max 5100.1 n 816
+window 2: P LPs 0-11: % Processor Performance min 29.6 mean 67.1 max 145.7 n 816
+window 2: P LPs 0-11: % of Maximum Frequency min 22.0 mean 57.0 max 100.0 n 828
+window 2: E LPs 12-19: Actual Frequency min 841.4 mean 2108.1 max 3899.9 n 544
+window 2: E LPs 12-19: % Processor Performance min 24.0 mean 60.2 max 111.4 n 544
+window 2: E LPs 12-19: % of Maximum Frequency min 22.0 mean 44.0 max 100.0 n 552
+window 2: r of % Processor Performance with % of Maximum Frequency, pooled over LP rounds +0.455
+window 2: CallNtPowerInformation max_mhz distinct values [3500]
+window 2: CallNtPowerInformation current_mhz distinct values [3500]
+window 2: CallNtPowerInformation limit_mhz distinct values [3500]
+window 3: Processor Frequency distinct values [3500.0]
+window 3: largest |Actual Frequency - Processor Frequency*Performance/100| 103.688
+window 3: P LPs 0-11: Actual Frequency min 1064.8 mean 2528.2 max 5100.3 n 828
+window 3: P LPs 0-11: % Processor Performance min 30.4 mean 72.2 max 145.7 n 828
+window 3: P LPs 0-11: % of Maximum Frequency min 22.0 mean 62.0 max 100.0 n 828
+window 3: E LPs 12-19: Actual Frequency min 881.9 mean 2116.2 max 3550.5 n 552
+window 3: E LPs 12-19: % Processor Performance min 25.2 mean 60.5 max 101.4 n 552
+window 3: E LPs 12-19: % of Maximum Frequency min 22.0 mean 50.3 max 100.0 n 552
+window 3: r of % Processor Performance with % of Maximum Frequency, pooled over LP rounds +0.401
+window 3: CallNtPowerInformation max_mhz distinct values [3500]
+window 3: CallNtPowerInformation current_mhz distinct values [3500]
+window 3: CallNtPowerInformation limit_mhz distinct values [3500]
+
+## Parking
+
+topology file, CPU set Parked flag: parked LPs [1, 3, 5, 7, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19], unparked [0, 2, 4, 6, 8, 10]
+window 1: percent of rounds parked by LP 0:29 1:67 2:2 3:95 4:17 5:97 6:39 7:97 8:68 9:97 10:79 11:71 12:83 13:94 14:94 15:91 16:89 17:85 18:88 19:91
+window 1: parking state changes between rounds, all LPs: 201; distinct values [0.0, 1.0]
+window 1: parked LP rounds: processor time min 0.000 mean 5.329 max 81.307 n 972
+window 1: unparked LP rounds: processor time min 0.740 mean 27.424 max 90.686 n 348
+window 1: parked LP rounds with processor time above 0: 792 of 972
+window 2: percent of rounds parked by LP 0:79 1:87 2:41 3:54 4:0 5:96 6:6 7:96 8:26 9:96 10:59 11:96 12:91 13:94 14:94 15:94 16:94 17:96 18:96 19:91
+window 2: parking state changes between rounds, all LPs: 120; distinct values [0.0, 1.0]
+window 2: parked LP rounds: processor time min 0.000 mean 4.688 max 59.572 n 1010
+window 2: unparked LP rounds: processor time min 0.000 mean 23.077 max 96.910 n 350
+window 2: parked LP rounds with processor time above 0: 779 of 1010
+window 3: percent of rounds parked by LP 0:39 1:100 2:69 3:100 4:54 5:57 6:0 7:100 8:0 9:100 10:15 11:100 12:81 13:87 14:91 15:97 16:85 17:99 18:99 19:99
+window 3: parking state changes between rounds, all LPs: 127; distinct values [0.0, 1.0]
+window 3: parked LP rounds: processor time min 0.000 mean 3.808 max 30.324 n 984
+window 3: unparked LP rounds: processor time min 0.000 mean 15.234 max 37.933 n 356
+window 3: parked LP rounds with processor time above 0: 781 of 984
+
+## System
+
+Processor Queue Length, window 1: min 0.000 mean 0.406 max 18.000 n 69; distinct 3
+Processor Queue Length, window 2: min 0.000 mean 0.435 max 10.000 n 69; distinct 5
+Processor Queue Length, window 3: min 0.000 mean 0.217 max 6.000 n 69; distinct 5
+Context Switches/sec, window 1: min 14716.360 mean 41886.252 max 325447.617 n 69; distinct 69
+Context Switches/sec, window 2: min 11355.373 mean 33898.279 max 314017.861 n 69; distinct 69
+Context Switches/sec, window 3: min 12277.225 mean 25499.924 max 64280.502 n 69; distinct 69
+System Calls/sec, window 1: min 23560.254 mean 137924.758 max 1199615.313 n 69; distinct 69
+System Calls/sec, window 2: min 17400.550 mean 110764.521 max 1172613.095 n 69; distinct 69
+System Calls/sec, window 3: min 19114.481 mean 297748.040 max 9452541.628 n 69; distinct 69
+window 1: largest System Calls/sec rounds: round 68 1199615.3 with %ProcessorTime 81.450, context switches 304378.2; round 47 1134369.3 with %ProcessorTime 80.294, context switches 325447.6
+window 1: Processor Queue Length above 0 in 2 of 69 rounds; r with _Total %ProcessorTime +0.491
+window 2: largest System Calls/sec rounds: round 6 1172613.1 with %ProcessorTime 85.323, context switches 314017.9; round 5 1028222.5 with %ProcessorTime 69.417, context switches 261325.0
+window 2: Processor Queue Length above 0 in 11 of 69 rounds; r with _Total %ProcessorTime +0.390
+window 3: largest System Calls/sec rounds: round 11 9452541.6 with %ProcessorTime 10.314, context switches 53530.0; round 65 1250129.1 with %ProcessorTime 5.968, context switches 22464.6
+window 3: Processor Queue Length above 0 in 7 of 69 rounds; r with _Total %ProcessorTime -0.121
+
+## Thermal zone
+
+Temperature: instances ['\\_TZ.TZ00']; distinct values over 207 rounds in 3 windows: [301.0]
+High Precision Temperature: instances ['\\_TZ.TZ00']; distinct values over 207 rounds in 3 windows: [3010.0]
+% Passive Limit: instances ['\\_TZ.TZ00']; distinct values over 207 rounds in 3 windows: [100.0]
+Throttle Reasons: instances ['\\_TZ.TZ00']; distinct values over 207 rounds in 3 windows: [0.0]
+Temperature in Celsius if the unit is Kelvin: [27.85]
+
+## Hyper-V counters
+
+VP % Guest Run Time, window 1: _Total min 0.412 mean 1.147 max 6.097 n 69; instances 20; largest |_Total - mean of instances| 0.001575; largest instance 16.478
+VP % Hypervisor Run Time, window 1: _Total min 0.037 mean 0.120 max 0.596 n 69; instances 20; largest |_Total - mean of instances| 0.000301; largest instance 2.943
+VP % Total Run Time, window 1: _Total min 0.450 mean 1.267 max 6.693 n 69; instances 20; largest |_Total - mean of instances| 0.001876; largest instance 16.881
+LP % Guest Run Time, window 1: _Total min 4.733 mean 10.696 max 79.672 n 69; instances 20; largest |_Total - mean of instances| 0.098440; largest instance 87.308
+LP % Hypervisor Run Time, window 1: _Total min 0.425 mean 0.784 max 3.939 n 69; instances 20; largest |_Total - mean of instances| 0.015355; largest instance 5.883
+LP % Total Run Time, window 1: _Total min 5.260 mean 11.481 max 83.612 n 69; instances 20; largest |_Total - mean of instances| 0.113795; largest instance 90.308
+LP % Idle Time, window 1: _Total min 16.234 mean 88.516 max 95.711 n 69; instances 20; largest |_Total - mean of instances| 0.221413; largest instance 108.086
+root VP % Guest Run Time, window 1: _Total min 3.599 mean 9.561 max 74.766 n 69; instances 20; largest |_Total - mean of instances| 0.003498; largest instance 83.224
+root VP % Total Run Time, window 1: _Total min 3.995 mean 10.140 max 77.761 n 69; instances 20; largest |_Total - mean of instances| 0.003678; largest instance 85.292
+window 1: migrations/s summed over VPs min 616.6 mean 3597.4 max 23036.3 n 69; dispatches/s summed min 1739.9 mean 6698.0 max 38785.4 n 69; migrations over dispatches 0.537
+window 1: VPs with no migration in the window 0 of 20; per-VP mean migrations/s min 74.4 mean 179.9 max 594.5 n 20
+window 1: LP guest minus (root VP guest + VP guest), points of 20 LPs min -0.611 mean -0.012 max 0.184 n 69
+window 1: %ProcessorTime minus root VP guest min -2.386 mean 1.189 max 6.710 n 68
+window 1: %ProcessorTime minus LP guest min -3.933 mean 0.055 max 4.557 n 68
+window 1: % Processor Utility minus root VP guest min -2.011 mean 2.317 max 36.502 n 68
+window 1: VP guest _Total for scale min 0.412 mean 1.147 max 6.097 n 69
+window 1: %ProcessorTime minus root VP guest against VP guest: slope 1.061, r +0.596, rank r +0.310, n 68
+VP % Guest Run Time, window 2: _Total min 0.411 mean 0.904 max 5.822 n 69; instances 20; largest |_Total - mean of instances| 0.000904; largest instance 17.271
+VP % Hypervisor Run Time, window 2: _Total min 0.044 mean 0.109 max 0.765 n 69; instances 20; largest |_Total - mean of instances| 0.000116; largest instance 3.781
+VP % Total Run Time, window 2: _Total min 0.455 mean 1.013 max 6.587 n 69; instances 20; largest |_Total - mean of instances| 0.000917; largest instance 18.957
+LP % Guest Run Time, window 2: _Total min 4.226 mean 9.370 max 84.468 n 69; instances 20; largest |_Total - mean of instances| 0.078090; largest instance 90.313
+LP % Hypervisor Run Time, window 2: _Total min 0.403 mean 0.774 max 4.145 n 69; instances 20; largest |_Total - mean of instances| 0.004642; largest instance 6.289
+LP % Total Run Time, window 2: _Total min 4.858 mean 10.143 max 88.613 n 69; instances 20; largest |_Total - mean of instances| 0.082732; largest instance 94.258
+LP % Idle Time, window 2: _Total min 11.464 mean 89.884 max 95.580 n 69; instances 20; largest |_Total - mean of instances| 0.230529; largest instance 108.711
+root VP % Guest Run Time, window 2: _Total min 3.304 mean 8.468 max 78.747 n 69; instances 20; largest |_Total - mean of instances| 0.019882; largest instance 87.169
+root VP % Total Run Time, window 2: _Total min 3.745 mean 9.043 max 81.968 n 69; instances 20; largest |_Total - mean of instances| 0.019320; largest instance 90.346
+window 2: migrations/s summed over VPs min 664.1 mean 2712.8 max 29043.9 n 69; dispatches/s summed min 1559.3 mean 5097.0 max 44727.1 n 69; migrations over dispatches 0.532
+window 2: VPs with no migration in the window 0 of 20; per-VP mean migrations/s min 43.8 mean 135.6 max 401.4 n 20
+window 2: LP guest minus (root VP guest + VP guest), points of 20 LPs min -0.381 mean -0.003 max 0.380 n 69
+window 2: %ProcessorTime minus root VP guest min -3.142 mean 0.568 max 7.051 n 69
+window 2: %ProcessorTime minus LP guest min -3.699 mean -0.333 max 4.325 n 69
+window 2: % Processor Utility minus root VP guest min -1.892 mean 1.147 max 37.691 n 69
+window 2: VP guest _Total for scale min 0.411 mean 0.904 max 5.822 n 69
+window 2: %ProcessorTime minus root VP guest against VP guest: slope 1.394, r +0.598, rank r +0.320, n 69
+VP % Guest Run Time, window 3: _Total min 0.340 mean 0.747 max 2.603 n 69; instances 20; largest |_Total - mean of instances| 0.000359; largest instance 25.091
+VP % Hypervisor Run Time, window 3: _Total min 0.032 mean 0.076 max 0.139 n 69; instances 20; largest |_Total - mean of instances| 0.000033; largest instance 0.580
+VP % Total Run Time, window 3: _Total min 0.373 mean 0.824 max 2.714 n 69; instances 20; largest |_Total - mean of instances| 0.000374; largest instance 25.435
+LP % Guest Run Time, window 3: _Total min 4.415 mean 7.009 max 14.003 n 69; instances 20; largest |_Total - mean of instances| 0.102549; largest instance 51.551
+LP % Hypervisor Run Time, window 3: _Total min 0.466 mean 0.626 max 0.826 n 69; instances 20; largest |_Total - mean of instances| 0.009170; largest instance 3.086
+LP % Total Run Time, window 3: _Total min 5.123 mean 7.635 max 14.689 n 69; instances 20; largest |_Total - mean of instances| 0.111719; largest instance 52.669
+LP % Idle Time, window 3: _Total min 85.239 mean 92.362 max 95.644 n 69; instances 20; largest |_Total - mean of instances| 0.225816; largest instance 107.142
+root VP % Guest Run Time, window 3: _Total min 3.497 mean 6.263 max 13.498 n 69; instances 20; largest |_Total - mean of instances| 0.003100; largest instance 50.315
+root VP % Total Run Time, window 3: _Total min 3.925 mean 6.725 max 14.050 n 69; instances 20; largest |_Total - mean of instances| 0.003265; largest instance 51.113
+window 3: migrations/s summed over VPs min 570.9 mean 1681.0 max 5593.9 n 69; dispatches/s summed min 1412.5 mean 3473.2 max 9453.9 n 69; migrations over dispatches 0.484
+window 3: VPs with no migration in the window 0 of 20; per-VP mean migrations/s min 40.1 mean 84.0 max 224.3 n 20
+window 3: LP guest minus (root VP guest + VP guest), points of 20 LPs min -0.195 mean -0.001 max 0.197 n 69
+window 3: %ProcessorTime minus root VP guest min -2.807 mean 0.360 max 2.701 n 69
+window 3: %ProcessorTime minus LP guest min -3.263 mean -0.386 max 2.019 n 69
+window 3: % Processor Utility minus root VP guest min -2.916 mean -0.165 max 5.913 n 69
+window 3: VP guest _Total for scale min 0.340 mean 0.747 max 2.603 n 69
+window 3: %ProcessorTime minus root VP guest against VP guest: slope 1.432, r +0.451, rank r +0.473, n 69
+
+## Does Hv LP n line up with Windows LP n?
+
+r of % Processor Time on Windows LP n against % Total Run Time on Hv LP m, pooled over the three windows.
+Windows LP n against Hv LP n: diagonal min 0.948 mean 0.975 max 0.986 n 20; off-diagonal min 0.537 mean 0.824 max 0.980 n 380; rows whose largest r is on the diagonal 20 of 20
+Windows LP n against Root VP n: diagonal min 0.939 mean 0.973 max 0.985 n 20; off-diagonal min 0.579 mean 0.833 max 0.979 n 380; rows whose largest r is on the diagonal 20 of 20
+
+## The VM question, from winwsltop --record
+
+guest_cores is wsl.data.busy_pct*20/100. vmmem is vm.vmmem_cores. vmwp is the cores of the process row vm.vmwp_pid.
+Lag is in records: r of vmmem[t] with guest_cores[t+lag]. Chance is the largest |r| at lags 5 to 15 either way, in the same series.
+window 1: n 60; vmmem_cores min 0.0930 mean 0.2981 max 2.2320 n 60; zero in 0
+window 1: vmwp cores min 0.0000 mean 0.0016 max 0.0160 n 60; zero in 54
+window 1: guest_cores min 0.0600 mean 0.2448 max 1.8620 n 60; range 1.8020 cores, 9.010 points of 20; guest process cores sum min 0.0700 mean 0.1882 max 0.8860 n 60
+window 1: vmmem core-seconds 17.891; vmwp 0.094; guest 14.702; Windows busy 119.556
+window 1: r vmmem-guest by lag -2:-0.095 -1:-0.063 +0:+0.475 +1:+0.820 +2:+0.194
+window 1: r vmwp-guest by lag -2:-0.022 -1:-0.082 +0:+0.080 +1:+0.284 +2:-0.074
+window 1: rank r vmmem-guest by lag -2:-0.087 -1:-0.025 +0:+0.393 +1:+0.483 +2:+0.088
+window 1: chance level for vmmem-guest, largest |r| at lags 5 to 15 either way 0.236
+window 2: n 60; vmmem_cores min 0.0310 mean 0.2027 max 1.4100 n 60; zero in 0
+window 2: vmwp cores min 0.0000 mean 0.0045 max 0.0160 n 60; zero in 43
+window 2: guest_cores min 0.0700 mean 0.1842 max 1.4760 n 60; range 1.4060 cores, 7.030 points of 20; guest process cores sum min 0.0700 mean 0.1323 max 0.6460 n 60
+window 2: vmmem core-seconds 12.170; vmwp 0.269; guest 11.061; Windows busy 106.196
+window 2: r vmmem-guest by lag -2:+0.209 -1:+0.641 +0:+0.936 +1:+0.846 +2:+0.439
+window 2: r vmwp-guest by lag -2:-0.160 -1:-0.006 +0:+0.210 +1:+0.301 +2:+0.194
+window 2: rank r vmmem-guest by lag -2:-0.279 -1:+0.116 +0:+0.438 +1:+0.474 +2:-0.010
+window 2: chance level for vmmem-guest, largest |r| at lags 5 to 15 either way 0.411
+window 3: n 60; vmmem_cores min 0.0310 mean 0.1991 max 0.5370 n 60; zero in 0
+window 3: vmwp cores min 0.0000 mean 0.0016 max 0.0160 n 60; zero in 54
+window 3: guest_cores min 0.0600 mean 0.1478 max 0.4960 n 60; range 0.4360 cores, 2.180 points of 20; guest process cores sum min 0.0600 mean 0.1272 max 0.4370 n 60
+window 3: vmmem core-seconds 11.941; vmwp 0.096; guest 8.868; Windows busy 78.601
+window 3: r vmmem-guest by lag -2:-0.212 -1:-0.111 +0:+0.369 +1:+0.748 +2:+0.328
+window 3: r vmwp-guest by lag -2:-0.166 -1:-0.117 +0:+0.124 +1:+0.056 +2:-0.101
+window 3: rank r vmmem-guest by lag -2:-0.149 -1:-0.011 +0:+0.381 +1:+0.665 +2:+0.463
+window 3: chance level for vmmem-guest, largest |r| at lags 5 to 15 either way 0.221
+pooled, n 180: r vmmem-guest lag 0 +0.639; r vmwp-guest lag 0 +0.126
+
+## The VM question, from the raw counters in the probe and guest files
+
+vp is the sum over VPs of % Guest Run Time/100, cores on the hypervisor's own account. vmmem is delta (kernel+user)/round length.
+cycles is the delta of the process CycleTime field per second, in units of 1e9. guest is the jiffy busy share of /proc/stat times 20,
+from the guest round whose midpoint is nearest in Windows time, using the median clock_offset_s of that window's records.
+window 1: median clock_offset_s 0.027, spread min -0.026 mean 0.018 max 0.045 n 60
+window 1: n 68, round pairing distance s min 0.013 mean 0.270 max 0.567 n 68
+window 1: vp min 0.0825 mean 0.2311 max 1.2193 n 68; vmmem min 0.0620 mean 0.2957 max 1.6650 n 68; vmwp min 0.0000 mean 0.0020 max 0.0155 n 68; cycles min 0.3171 mean 0.9627 max 4.9091 n 68; guest min 0.0700 mean 0.2502 max 2.1831 n 68
+window 1: means over guest: vp 0.924, vmmem 1.182; vmmem over vp 1.279; cycles over vp 4.165
+window 1: r vp-guest by lag -2:-0.101 -1:+0.220 +0:+0.823 +1:+0.522 +2:-0.064
+window 1: r vmmem-guest by lag -2:-0.088 -1:+0.224 +0:+0.769 +1:+0.533 +2:-0.041
+window 1: r cycles-guest by lag -2:-0.099 -1:+0.216 +0:+0.811 +1:+0.554 +2:-0.055
+window 1: r vmmem-vp by lag -2:-0.087 -1:+0.308 +0:+0.967 +1:+0.314 +2:-0.084
+window 1: r cycles-vp by lag -2:-0.115 -1:+0.295 +0:+0.998 +1:+0.343 +2:-0.113
+window 1: r vmwp-guest by lag -2:-0.074 -1:+0.010 +0:+0.161 +1:+0.308 +2:+0.117
+window 1: rank r at lag 0: vp-guest +0.825, vmmem-guest +0.612, cycles-guest +0.831, cycles-vp +0.987
+window 1: rounds with guest under 0.5 cores 62: r vp-guest +0.648, r vmmem-guest +0.555, r cycles-vp +0.996
+window 2: median clock_offset_s -0.015, spread min -0.052 mean -0.010 max 0.053 n 60
+window 2: n 68, round pairing distance s min 0.001 mean 0.165 max 0.396 n 68
+window 2: vp min 0.0823 mean 0.1795 max 1.1643 n 68; vmmem min 0.0309 mean 0.2077 max 1.4213 n 68; vmwp min 0.0000 mean 0.0043 max 0.0156 n 68; cycles min 0.3643 mean 0.7686 max 5.0815 n 68; guest min 0.0500 mean 0.1906 max 1.6667 n 68
+window 2: means over guest: vp 0.941, vmmem 1.089; vmmem over vp 1.157; cycles over vp 4.282
+window 2: r vp-guest by lag -2:+0.443 -1:+0.767 +0:+0.964 +1:+0.590 +2:+0.289
+window 2: r vmmem-guest by lag -2:+0.389 -1:+0.702 +0:+0.951 +1:+0.582 +2:+0.292
+window 2: r cycles-guest by lag -2:+0.444 -1:+0.764 +0:+0.967 +1:+0.594 +2:+0.301
+window 2: r vmmem-vp by lag -2:+0.316 -1:+0.644 +0:+0.972 +1:+0.695 +2:+0.366
+window 2: r cycles-vp by lag -2:+0.366 -1:+0.705 +0:+0.999 +1:+0.713 +2:+0.376
+window 2: r vmwp-guest by lag -2:-0.043 -1:+0.135 +0:+0.188 +1:+0.091 +2:-0.093
+window 2: rank r at lag 0: vp-guest +0.819, vmmem-guest +0.573, cycles-guest +0.838, cycles-vp +0.982
+window 2: rounds with guest under 0.5 cores 64: r vp-guest +0.812, r vmmem-guest +0.539, r cycles-vp +0.977
+window 3: median clock_offset_s 0.040, spread min -0.054 mean 0.026 max 0.056 n 60
+window 3: n 68, round pairing distance s min 0.003 mean 0.161 max 0.344 n 68
+window 3: vp min 0.0681 mean 0.1505 max 0.5206 n 68; vmmem min 0.0309 mean 0.1979 max 0.6659 n 68; vmwp min 0.0000 mean 0.0016 max 0.0156 n 68; cycles min 0.2743 mean 0.6193 max 1.9920 n 68; guest min 0.0401 mean 0.1502 max 0.6494 n 68
+window 3: means over guest: vp 1.002, vmmem 1.318; vmmem over vp 1.315; cycles over vp 4.115
+window 3: r vp-guest by lag -2:-0.084 -1:+0.363 +0:+0.928 +1:+0.312 +2:-0.030
+window 3: r vmmem-guest by lag -2:-0.136 -1:+0.294 +0:+0.783 +1:+0.371 +2:+0.034
+window 3: r cycles-guest by lag -2:-0.088 -1:+0.353 +0:+0.931 +1:+0.325 +2:-0.020
+window 3: r vmmem-vp by lag -2:-0.146 -1:+0.258 +0:+0.872 +1:+0.396 +2:-0.069
+window 3: r cycles-vp by lag -2:-0.133 -1:+0.340 +0:+0.997 +1:+0.364 +2:-0.123
+window 3: r vmwp-guest by lag -2:-0.105 -1:-0.165 +0:+0.075 +1:+0.025 +2:+0.032
+window 3: rank r at lag 0: vp-guest +0.883, vmmem-guest +0.711, cycles-guest +0.880, cycles-vp +0.989
+window 3: rounds with guest under 0.5 cores 67: r vp-guest +0.898, r vmmem-guest +0.772, r cycles-vp +0.996
+pooled, n 204: r vp-guest +0.887; r vmmem-guest +0.837; r cycles-guest +0.883; r vmmem-vp +0.960; r cycles-vp +0.997; r vmwp-guest +0.150
+pooled range: guest 2.1430 cores, vp 1.1513, vmmem 1.6342
+
+## Numbers across the partition: guest cpuN against Hv VP n
+
+Per-VP cumulative guest seconds against guest cpuN busy seconds, and r of the two series, pooled over the windows.
+guest cpuN against Hv VP n: diagonal min 0.676 mean 0.825 max 0.936 n 20; off-diagonal min -0.139 mean 0.299 max 0.685 n 380; rows whose largest r is on the diagonal 20 of 20
+vcpu  r_with_same_number  guest_busy_pct_mean  vp_guest_pct_mean
+   0    +0.839     2.260     1.021
+   1    +0.735     0.723     0.703
+   2    +0.844     1.125     1.090
+   3    +0.802     0.717     0.700
+   4    +0.822     1.557     1.545
+   5    +0.825     0.651     0.678
+   6    +0.788     1.324     1.412
+   7    +0.716     0.195     0.229
+   8    +0.898     1.551     1.599
+   9    +0.753     0.322     0.315
+  10    +0.905     1.237     1.264
+  11    +0.915     0.613     0.658
+  12    +0.896     0.951     1.035
+  13    +0.916     0.831     0.857
+  14    +0.676     0.699     0.751
+  15    +0.936     0.812     0.739
+  16    +0.808     1.173     1.240
+  17    +0.833     0.465     0.499
+  18    +0.767     1.177     1.218
+  19    +0.836     1.228     1.149
+
+## Guest vCPU against host core
+
+Hv VP n against Hv LP n, % Guest Run Time (LP figure includes the root's guest time): diagonal min 0.143 mean 0.491 max 0.779 n 20; off-diagonal min 0.053 mean 0.486 max 0.945 n 380; rows whose largest r is on the diagonal 1 of 20
+guest cpuN against Windows LP n, % Processor Time: diagonal min 0.154 mean 0.458 max 0.697 n 20; off-diagonal min 0.060 mean 0.450 max 0.869 n 380; rows whose largest r is on the diagonal 3 of 20
+five largest r of Hv VP i with Windows LP j: VP0-LP7:+0.939 VP0-LP9:+0.928 VP0-LP13:+0.899 VP0-LP19:+0.896 VP0-LP12:+0.895; n 207, pairs tried 400
+
+## vmmemWSL threads
+
+window 1: threads 57; pid 4568; threads whose time moved 21; thread time sum 204062500; process time delta 204062500; sum over process 1.0000; threads in first and last round 57
+window 2: threads 57; pid 4568; threads whose time moved 22; thread time sum 145937500; process time delta 145937500; sum over process 1.0000; threads in first and last round 57
+window 3: threads 57; pid 4568; threads whose time moved 21; thread time sum 136250000; process time delta 136250000; sum over process 1.0000; threads in first and last round 57
+threads present in window 1 and window 3: 57
+
+## WSL: /proc/stat fields, per window, ticks per second of the whole guest
+
+user, window 1: min 5.0 mean 15.2 max 93.0 n 69; total ticks 1047
+nice, window 1: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+system, window 1: min 0.0 mean 6.7 max 94.0 n 69; total ticks 466
+idle, window 1: min 1770.0 mean 1973.9 max 1991.3 n 69; total ticks 136225
+iowait, window 1: min 0.0 mean 0.6 max 10.0 n 69; total ticks 40
+irq, window 1: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+softirq, window 1: min 0.0 mean 1.8 max 30.0 n 69; total ticks 124
+steal, window 1: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+guest, window 1: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+guest_nice, window 1: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+window 1: ticks over all fields per guest second 1998.2, over 69.015 guest s
+ctxt/s, window 1: min 897.0 mean 3503.8 max 22972.0 n 69
+procs_running, window 1: min 1.00 mean 1.26 max 3.00 n 70; distinct [1, 2, 3]
+procs_blocked, window 1: min 0.00 mean 0.01 max 1.00 n 70; distinct [0, 1]
+loadavg 1 min, window 1: min 0.09 mean 0.15 max 0.24 n 70; distinct 12
+cpuinfo MHz, window 1: distinct values ['3494.272'], lines per round [20]
+psi some avg10, window 1: min 0.00 mean 0.00 max 0.00 n 70; total delta 103761 us
+psi full avg10, window 1: min 0.00 mean 0.00 max 0.00 n 70; total delta 0 us
+cgroup cpu.stat usage_usec delta, window 1: 16360000; keys ['burst_usec', 'nr_bursts', 'nr_periods', 'nr_throttled', 'system_usec', 'throttled_usec', 'usage_usec', 'user_usec']
+user, window 2: min 4.0 mean 10.7 max 50.0 n 69; total ticks 740
+nice, window 2: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+system, window 2: min 0.0 mean 6.8 max 85.0 n 69; total ticks 470
+idle, window 2: min 1837.0 mean 1979.3 max 1992.5 n 69; total ticks 136575
+iowait, window 2: min 0.0 mean 0.4 max 2.0 n 69; total ticks 25
+irq, window 2: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+softirq, window 2: min 0.0 mean 1.4 max 32.0 n 69; total ticks 95
+steal, window 2: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+guest, window 2: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+guest_nice, window 2: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+window 2: ticks over all fields per guest second 1998.6, over 69.001 guest s
+ctxt/s, window 2: min 904.5 mean 2714.5 max 25761.9 n 69
+procs_running, window 2: min 1.00 mean 1.26 max 4.00 n 70; distinct [1, 2, 3, 4]
+procs_blocked, window 2: min 0.00 mean 0.00 max 0.00 n 70; distinct [0]
+loadavg 1 min, window 2: min 0.10 mean 0.34 max 0.42 n 70; distinct 12
+cpuinfo MHz, window 2: distinct values ['3494.272'], lines per round [20]
+psi some avg10, window 2: min 0.00 mean 0.02 max 0.18 n 70; total delta 102711 us
+psi full avg10, window 2: min 0.00 mean 0.00 max 0.00 n 70; total delta 0 us
+cgroup cpu.stat usage_usec delta, window 2: 13040000; keys ['burst_usec', 'nr_bursts', 'nr_periods', 'nr_throttled', 'system_usec', 'throttled_usec', 'usage_usec', 'user_usec']
+user, window 3: min 2.0 mean 10.7 max 52.0 n 69; total ticks 741
+nice, window 3: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+system, window 3: min 0.0 mean 3.4 max 18.0 n 69; total ticks 236
+idle, window 3: min 1933.1 mean 1983.4 max 1992.1 n 69; total ticks 136857
+iowait, window 3: min 0.0 mean 0.5 max 4.0 n 69; total ticks 37
+irq, window 3: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+softirq, window 3: min 0.0 mean 0.8 max 6.0 n 69; total ticks 56
+steal, window 3: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+guest, window 3: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+guest_nice, window 3: min 0.0 mean 0.0 max 0.0 n 69; total ticks 0
+window 3: ticks over all fields per guest second 1998.9, over 69.000 guest s
+ctxt/s, window 3: min 848.3 mean 1901.5 max 8042.1 n 69
+procs_running, window 3: min 1.00 mean 1.06 max 3.00 n 70; distinct [1, 2, 3]
+procs_blocked, window 3: min 0.00 mean 0.00 max 0.00 n 70; distinct [0]
+loadavg 1 min, window 3: min 0.13 mean 0.21 max 0.28 n 70; distinct 14
+cpuinfo MHz, window 3: distinct values ['3494.272'], lines per round [20]
+psi some avg10, window 3: min 0.00 mean 0.00 max 0.00 n 70; total delta 56795 us
+psi full avg10, window 3: min 0.00 mean 0.00 max 0.00 n 70; total delta 0 us
+cgroup cpu.stat usage_usec delta, window 3: 10328000; keys ['burst_usec', 'nr_bursts', 'nr_periods', 'nr_throttled', 'system_usec', 'throttled_usec', 'usage_usec', 'user_usec']
+
+## Guest clock, as a side check on the rates above
+
+window 1: least-squares slope of wsl.data.mono_s on Windows unix time less age_s: 1.00009, over 58.3 s, n 60
+window 2: least-squares slope of wsl.data.mono_s on Windows unix time less age_s: 0.99978, over 58.3 s, n 60
+window 3: least-squares slope of wsl.data.mono_s on Windows unix time less age_s: 0.99916, over 58.3 s, n 60
+
+## Cost
+
+setup pi10: open and add 628.531 ms, first collect 0.489 ms
+setup pi3: open and add 0.019 ms, first collect 0.150 ms
+setup sys3: open and add 27.110 ms, first collect 3.544 ms
+setup thermal1: open and add 0.063 ms, first collect 0.152 ms
+setup all14: open and add 0.058 ms, first collect 3.927 ms
+setup hv_vp_guest1: open and add 0.108 ms, first collect 1.237 ms
+Group order rotates each round. first means the group ran first in its round, after a gap of about a second.
+pi10: n 60, instances [198, 220], rounds below the largest count 1, collect+format ms mean 0.505 median 0.309 p95 1.800 max 2.141; when first in its round, min 0.193 mean 1.112 max 2.141 n 9
+pi3: n 60, instances [66], rounds below the largest count 0, collect+format ms mean 0.254 median 0.160 p95 0.792 max 1.432; when first in its round, min 0.325 mean 0.700 max 1.432 n 9
+sys3: n 60, instances [3], rounds below the largest count 0, collect+format ms mean 5.512 median 4.783 p95 9.476 max 11.445; when first in its round, min 3.898 mean 5.926 max 8.852 n 9
+thermal1: n 60, instances [1], rounds below the largest count 0, collect+format ms mean 0.093 median 0.073 p95 0.251 max 0.288; when first in its round, min 0.067 mean 0.172 max 0.288 n 9
+all14: n 60, instances [202, 224], rounds below the largest count 1, collect+format ms mean 4.944 median 4.326 p95 9.951 max 10.633; when first in its round, min 4.621 mean 7.457 max 10.633 n 8
+hv_vp_guest1: n 60, instances [21], rounds below the largest count 0, collect+format ms mean 1.521 median 0.812 p95 4.654 max 6.113; when first in its round, min 1.533 mean 3.833 max 5.489 n 8
+nt_processor_times: n 60, instances [20], rounds below the largest count 0, collect+format ms mean 0.058 median 0.018 p95 0.299 max 0.486; when first in its round, min 0.108 mean 0.279 max 0.486 n 8

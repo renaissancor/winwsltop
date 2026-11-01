@@ -47,11 +47,11 @@ about this machine lives.
 
 | item | value |
 |---|---|
-| experiments | 3: 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
+| experiments | 4: 04 run 2026-11-01, no load started, i5-13600K; 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
 | raw result files | 20, 10512 lines in total |
 | run with no file | experiment 01 run 1, idle baseline (3 s probe, noted in the ledger only) |
 | trials per case | 1; experiment 03 is one session of 3 windows and 10 network brackets |
-| ledger rows | 72 table rows in 7 groups |
+| ledger rows | 123 table rows in 16 tables |
 | numbers checked against raw files, 2026-11-01 audit | three ranges and four values were off and are corrected; three sections and four rows have no raw file and now say so |
 
 ## Open questions
@@ -83,6 +83,14 @@ about this machine lives.
 - `scripts/check.sh --windows` does not compile `host_probe.cpp`. The orchestrator built the committed
   source and ran its `raw` mode on 2026-11-01, but the full run was not repeated, so that the saved
   output came from that source rests on format agreement.
+
+- Experiment 04 left five items unresolved: the status of 4 whole-array PDH read failures, the
+  9452541.6 `System Calls/sec` peak, `cpu0` reading 2.260% in the guest against 1.021% on `Hv VP 0`,
+  the gap between process cores and busy, and the clock rate slope that does not repeat 3.68 percent.
+- PROPOSED: rerun experiment 04's probe printing the whole-array PDH status, and repeat the clock-rate
+  check alone over a longer span.
+- PROPOSED: a short CPU load, which needs the user's approval, to settle what experiment 04 could not:
+  whether `vmmem_cores` stays linear above about 2 cores, and whether Windows busy includes the VM.
 
 ## Decision log
 
@@ -123,3 +131,7 @@ about this machine lives.
   holding measured output; derived analysis output is outside that claim, and
   `analysis-2026-11-01.txt` changed in 36ed08b. Commit hashes across the repo changed in the same
   rewrite, and citations were remapped.
+- 2026-11-01. Experiment 04 record files are cut down at capture, because full `--record` lines are
+  about 100 KB each and name this PC's programs in a public repo. The kept fields are unchanged.
+- 2026-11-01. Experiment 04 ledger rows cite full paths, because `analysis-` and `window1-probe-` file
+  names repeat experiment 03's.

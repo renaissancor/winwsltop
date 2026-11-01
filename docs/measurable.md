@@ -2,7 +2,8 @@
 
 One row per claim, only from observation on this machine. Unknown stays unknown.
 
-Machine: Windows build 26200, WSL2 kernel 6.6.114.1, 12 GiB NVIDIA GPU (200 W limit), 20 threads.
+Machine: Windows build 26200.9711, WSL2 kernel 6.6.114.1, RTX 4070 with 12282 MiB (200 W limit), driver 610.88,
+i5-13600K with 6 P-cores and 8 E-cores, 20 threads.
 
 | claim | status | evidence |
 |---|---|---|
@@ -147,6 +148,105 @@ Network, `src/host/network.cpp`:
 | Traffic on `vEthernet` is also counted on the NIC | `Unresolved`. `vEthernet` in never exceeded NIC out, nor `vEthernet` out NIC in, in 180 seconds. Per-second correlation of `vEthernet` in with NIC out was 0.068, 0.738, 0.355; of `vEthernet` out with NIC in 0.013, -0.049, 0.053. That fits overlap and does not show it | `analysis-2026-11-01.txt` |
 | Wi-Fi reads true | `Not checked`: `Disconnected`, dropped as not up, zero octets. It still reported 287000000 bit/s | `identity-2026-11-01.txt` |
 | A network sample is cheap | Observed: mean 1.020-1.374 ms a window, largest 12.006 ms, over 64 rows. The priming call returned false with no rows, each window | `analysis-2026-11-01.txt` |
+
+## CPU counters checked
+
+Run 2026-11-01, non-elevated, on whatever the machine was doing: this experiment started no CPU or GPU
+load. The token was not elevated and in none of Administrators, Performance Monitor Users or Hyper-V
+Administrators; it was in Performance Log Users, and reading without that group is `Not checked`
+(`experiments/04-cpu-counters/results/topology-2026-11-01.txt`). One session: 3 concurrent windows of 60 `--record` lines and 70 probe rounds, then 60 cost
+rounds, so a figure here is one session, not a range of states. A rate at round r covers rounds r-1 to
+r, about 1 s. `_Total` `% Processor Time` ran 2.609-81.450, 0.800-85.323 and 2.061-15.935 in the three
+windows, with short bursts in the first two; their source was not identified. The experiment's
+`README.md` says how independent each comparison is. Record files are cut down from the full
+`--record` lines, which were not kept.
+
+Windows, what the existing NT call already holds, `src/host/cpu.cpp`:
+
+| claim | status | evidence |
+|---|---|---|
+| User and kernel time come from the call `cpu.cpp` already makes | Observed, 3 windows: `SystemProcessorPerformanceInformation` returns `UserTime`, `KernelTime` and `IdleTime` per LP. `KernelTime` includes idle: user plus kernel less idle equalled that formula's busy, largest gap 0.000000000. Against `_Total` `% User Time` and `% Privileged Time` the mean gap was at most 0.020 points, the largest 0.872. Same kernel counts, so bindings only | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/window1-probe-2026-11-01.txt` |
+| DPC and interrupt time come from the same call | Observed, 3 windows: `Reserved1[0]` and `Reserved1[1]` of the `winternl.h` struct, largest gap 0.077 points from `% DPC Time` and 0.088 from `% Interrupt Time`. Those names rest on this agreement. `% Privileged Time` includes both: taking them out of kernel leaves a mean -0.723, -0.649, -0.547 points | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| The times have a tick | Observed, 3 windows: every round delta of idle, kernel, user, DPC and interrupt, per LP, and of `vmmemWSL` and `vmwp` process times, is a multiple of 156250 (100 ns units), 15.6250 ms. That is 1.5625 points on one LP in a 1.0 s interval and 0.078125 on the 20 LP total | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| One second of per-LP busy is coarse | Observed, 3 windows: LP `% Processor Time` was exactly 0 in 192 of 1377, 248 of 1379 and 214 of 1376 readings while `% Processor Utility` on those rounds averaged 0.953, 0.842, 0.815. LP `% Idle Time` passed 100 in 195, 247 and 221 of 1380, largest 118.702. Kernel plus user over all LPs ran 96.880 to 102.756 percent of 20 LPs times the round length, so `_Total` busy from the NT call and from PDH differed by up to 2.869 points in a round, mean gap at most 0.017 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| Per-LP `% Processor Time` always returns a value | **No.** `PDH_CSTATUS_INVALID_DATA` (0xc0000bba) on 3, 1 and 4 of 1518 instance readings. Whole-array reads also failed: 2, 2 and 0 in the windows, and in `experiments/04-cpu-counters/results/cost-2026-11-01.txt` one array short (22 instances) in one round of 60 of each group that holds all ten counters, always `\Processor Information`. Their status was not printed, so why is `Unresolved` | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/window1-probe-2026-11-01.txt` |
+
+Windows, `\Processor Information`:
+
+| claim | status | evidence |
+|---|---|---|
+| Instance naming | Observed: 22 instances, `0,0` to `0,19` as group,LP, then `0,_Total` and `_Total`. The two totals never differed. Arrays arrive in string order, `0,0 0,1 0,10 0,11`, not LP order, and the list did not change in any window | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/pdh-names-2026-11-01.txt` |
+| `% Processor Utility` can exceed 100 | Observed: an LP above 100 in 27, 26 and 0 readings, largest 134.394; `_Total` largest 116.438. It has no 15.6250 ms step: 1360 distinct LP values in 1360 readings in window 1, against 650 for `% Processor Time`. `_Total` over `_Total` `% Processor Time` averaged 0.982, 0.955, 0.909 and ran 0.329 to 2.833. Against the hardware `Not checked`: nothing outside Windows' account was available | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `PDH_FMT_NOCAP100` matters to `% Processor Utility` and `% Processor Performance` | **No**, here: leaving it out changed 0 values in any window, and capped reads still reached 134.394 and 145.747 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `% Processor Performance` is live | Changing: LP range 24.041 to 145.747, an instance above 100 in 326, 173 and 166 readings. Against the hardware `Not checked` | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `Processor Frequency` is a live clock | **False here.** 3500 on every LP, E-cores included, in every round. `CallNtPowerInformation` `current_mhz`, `max_mhz` and `limit_mhz` also read only 3500 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `Actual Frequency` is a live clock | Changing, `Not checked` as true: P LPs 1034.6 to 5101.1, E LPs 841.4 to 3900.9, within 103.688 of `Processor Frequency` times `% Processor Performance`, so it is not a second reading. No frequency outside Windows' account exists here: the guest's MHz never moves | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `% of Maximum Frequency` agrees with `% Processor Performance` | **No.** 22 to 100, with r +0.466, +0.455, +0.401 against it, pooled over LP readings. Which one reflects the clock is `Unresolved` | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `% Performance Limit` and `Performance Limit Flags` report anything | `Not checked`: 100 and 0 in every reading, so nothing here shows they can move | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `Parking Status` means an LP is unused | **False here.** 0 or 1, changing 201, 120 and 127 times a window, and parked LPs ran: above 0 in 792 of 972, 779 of 1010, 781 of 984 parked readings, mean 5.329, 4.688, 3.808, largest 81.307. `_Total` stays 0. The CPU set Parked flag exists too, read once at another moment, so the two were not compared | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/topology-2026-11-01.txt` |
+
+Windows, the rest:
+
+| claim | status | evidence |
+|---|---|---|
+| `\System` counters are readable | Observed, 3 windows. Bindings not checked, no second reading was taken. `Processor Queue Length` 0 to 18, above 0 in 2, 11 and 7 of 69 rounds, r with busy +0.491, +0.390, -0.121. `Context Switches/sec` 11355.373 to 325447.617. `System Calls/sec` 17400.550 to 9452541.628 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| The largest `System Calls/sec` reading is real | `Unresolved`: 9452541.6 in window 3, round 11, at `% Processor Time` 10.314 and 53530.0 context switches, nearly eight times the other windows' peaks of 1199615.3 and 1172613.1, which came at 81.450 and 85.323 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| A usable CPU temperature exists, non-elevated | **False here**, for every source tried. `\Thermal Zone Information(\_TZ.TZ00)\Temperature` read 301 and `High Precision Temperature` 3010 in all 207 rounds, through bursts to 85.323, with `% Passive Limit` 100 and `Throttle Reasons` 0; 27.85 C if the unit is Kelvin. It looks like a fixed ACPI value, but only a sustained load could show that it never moves. `MSAcpi_ThermalZoneTemperature` returned access denied. `Win32_TemperatureProbe` has 2 rows with no `CurrentReading`. The guest has no thermal zones | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/windows-identity-2026-11-01.txt`, `experiments/04-cpu-counters/results/wsl-static-2026-11-01.txt` |
+| CPU layout | Observed: i5-13600K, 1 package, 1 NUMA node, 1 processor group, 14 cores, 20 LPs. LPs 0-11 are 6 P-cores with two threads each, efficiency class 1, 49152 byte L1D and 2097152 byte L2 each. LPs 12-19 are 8 E-cores with one thread each, efficiency class 0, in two groups of 4 sharing 4194304 bytes of L2. L3 is 25165824 bytes. `Win32_Processor` agrees on 14 and 20 | `experiments/04-cpu-counters/results/topology-2026-11-01.txt`, `experiments/04-cpu-counters/results/windows-identity-2026-11-01.txt` |
+| Topology and identity reads run non-elevated | Observed. CPUID `hypervisor_bit` reads 1 on Windows, and leaf 16 reads 0 | `experiments/04-cpu-counters/results/topology-2026-11-01.txt` |
+
+The VM, as Windows and the hypervisor see it. Guest figures are the guest kernel's own count, so these
+comparisons are independent of Windows. All of it is VM level, or vCPU level for the hypervisor's
+counters. None of it says which Linux process used what:
+
+| claim | status | evidence |
+|---|---|---|
+| `\Hyper-V Hypervisor` per-processor counters are readable non-elevated | Observed: 20 `Hv VP` instances of one VM, 20 `Hv LP`, 20 `Root VP`, each with a `_Total`. `_Total` is the mean of its instances, not the sum: largest gap 0.001876 on `Hv VP` | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/pdh-names-2026-11-01.txt` |
+| `vm.vmmem_cores` is non-zero | Observed: zero in 0 of 60 records in each window. Range 0.0310 to 2.2320 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/window1-record-2026-11-01.txt` |
+| `vm.vmmem_cores` tracks the guest | Observed over a small natural range, 3 windows: guest busy times 20 ran 0.0600-1.8620, 0.0700-1.4760 and 0.0600-0.4960 cores, a range of 9.010, 7.030 and 2.180 points of 20. Best r +0.820, +0.936, +0.748, at lag +1, 0, +1 records, chance level 0.236, 0.411, 0.221; rank r 0.483, 0.438, 0.665. The record pairs Windows with a guest line up to about 1 s old, hence the lag: pooled at lag 0, r is only +0.639. Totals 17.891 against 14.702, 12.170 against 11.061, 11.941 against 8.868 core-seconds. Bursts drive the first two windows. Above 2 cores it is `Not checked` | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `vmwp.exe` CPU tracks the guest | **No.** Mean 0.0016-0.0045 cores, zero in 54, 43 and 54 of 60 records, best r +0.301 in the records and +0.308 from the raw counters. Experiment 01's finding about GPU work does not carry over to CPU | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `Hv VP` `% Guest Run Time` tracks the guest | Observed, 3 windows: summed over VPs against `/proc/stat` busy, r +0.823, +0.964, +0.928 at lag 0, rank r +0.825, +0.819, +0.883, and +0.648, +0.812, +0.898 with rounds at or over 0.5 guest cores left out. Mean over guest 0.924, 0.941, 1.002, closer than process time's 1.182, 1.089, 1.318. Summed range 0.0681 to 1.2193 cores | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `vmmemWSL` `CycleTime` follows `Hv VP` run time | Observed: r +0.998, +0.999, +0.997 at lag 0. Its round deltas have a gcd of 1 where process time has 156250, and it comes in the `SystemProcessInformation` call `processes.cpp` already makes. About 4.115-4.282e9 per core-second of VP time. The unit is not established, so it is not calibrated as cores | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `Hv LP` `% Guest Run Time` is WSL's share | **False here.** Windows runs as a guest too: `Hv LP` less `Root VP` less `Hv VP` guest time averaged -0.012, -0.003, -0.001 points, largest -0.611. `_Total` read 4.226 to 84.468 while `Hv VP` read 0.340 to 6.097 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| Windows busy includes the VM's time | `Unresolved`, needs a load. `% Processor Time` less `Root VP` guest time, against `Hv VP` guest time: slope 1.061, 1.394, 1.432, r +0.596, +0.598, +0.451, rank r +0.310, +0.320, +0.473. That leans towards yes on a signal of about 1 point. `vmmemWSL` is in the Windows process list either way, so Windows and WSL figures are still never added | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| Process cores account for Windows busy | **No.** Mean 1.402, 1.202, 1.106 cores over processes against 1.992, 1.768, 1.311 from busy, in the same records. The gap was not attributed | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `vmmemWSL` threads | Observed: 57 threads, 21, 22 and 21 moved in a window, and their times summed to the process time exactly. Which thread runs which vCPU is `Not checked` | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| Guest `cpuN` is `Hv VP n` | Observed, one session: r +0.825 on the same number on average, +0.299 off it, the largest in 20 of 20 rows, with per-vCPU means close. `cpu0` is the exception, 2.260 percent in the guest against 1.021 on `Hv VP 0`; why is `Unresolved`. Numbering only | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `Hv LP n` and `Root VP n` are Windows LP `n` | Observed, one session: r 0.975 and 0.973 on the same number on average, 0.824 and 0.833 off it, the largest in 20 of 20 rows of both | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| A guest vCPU maps to a Windows core | **Unproven, and the evidence is against a fixed mapping.** `Hv VP n` tops its row at `Hv LP n` in 1 of 20 rows, r 0.491 on the number against 0.486 off it, and guest `cpuN` at Windows LP `n` in 3 of 20. The counters report 0.537, 0.532 and 0.484 migrations per dispatch: per VP a mean of 40.1 to 594.5 a second, and no VP stayed put in any window. No counter read here says which LP ran a VP. A high r is no mapping: `Hv VP 0` reached +0.939 with LP 7 and +0.928 with LP 9 through shared bursts. The meaning of migrations rests on the counter's name | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+
+Cost, on one sample, wall time of collect and format. Each group has its own query, and the groups run
+back to back, so "first" is the group that led its round:
+
+| group | mean ms | median | p95 | max | mean when first |
+|---|---|---|---|---|---|
+| NT call `cpu.cpp` already makes, no new cost | 0.058 | 0.018 | 0.299 | 0.486 | 0.279 |
+| 3 of `\Processor Information`: performance, utility, frequency | 0.254 | 0.160 | 0.792 | 1.432 | 0.700 |
+| all 10 candidates of `\Processor Information` | 0.505 | 0.309 | 1.800 | 2.141 | 1.112 |
+| 3 `\System` counters | 5.512 | 4.783 | 9.476 | 11.445 | 5.926 |
+| `Temperature` | 0.093 | 0.073 | 0.251 | 0.288 | 0.172 |
+| all 14 in one query | 4.944 | 4.326 | 9.951 | 10.633 | 7.457 |
+| `Hv VP` `% Guest Run Time` | 1.521 | 0.812 | 4.654 | 6.113 | 3.833 |
+
+Evidence: `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/cost-2026-11-01.txt`. Setup: the first query in the process took 628.531 ms to open and add, and adding
+the `\System` counters took 27.110 ms. That first figure was the first query in the process; whether a process already holding a PDH query pays it again is `Not checked`.
+
+WSL guest, all from `/proc` and `/sys`, in the same session:
+
+| claim | status | evidence |
+|---|---|---|
+| `/proc/stat` fields move | Observed: `user`, `system`, `idle`, `iowait` and `softirq` moved. `nice`, `irq`, `steal`, `guest` and `guest_nice` were 0 ticks in all 3 windows, so they are `Not checked`. All fields summed to 1998.2-1998.9 ticks per guest second, for 20 vCPUs at 100 ticks each | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt`, `experiments/04-cpu-counters/results/window1-guest-2026-11-01.txt` |
+| `steal` shows the host taking CPU | `Not checked`: 0 ticks throughout, including the windows where Windows reached 81.450 and 85.323 percent busy, and the guest was nowhere near needing that CPU | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `ctxt`, `procs_running`, `procs_blocked` | Observed: `ctxt` 848.3 to 25761.9 a second. `procs_running` 1 to 4, and the sampler counts itself. `procs_blocked` 0 or 1 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `/proc/loadavg` | Observed, changing: 1 min 0.09 to 0.42 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `/proc/cpuinfo` MHz is live | **False here.** 3494.272 on all 20 vCPUs in every round of 3 windows, through the bursts | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| `cpufreq` exists | **No.** `cpu0/cpufreq` is absent and `/sys/devices/system/cpu/cpufreq` is empty. `cpuidle` driver is `none` | `experiments/04-cpu-counters/results/wsl-static-2026-11-01.txt` |
+| `/sys/class/thermal` holds a temperature | **No.** 0 thermal zones and 0 `hwmon` entries. 20 `Processor` cooling devices, all state 0 of 0 | `experiments/04-cpu-counters/results/wsl-static-2026-11-01.txt` |
+| `/proc/pressure/cpu` | Observed: `some avg10` 0.00 to 0.18, `some` total moved 56795 to 103761 us a window. `full` stayed 0 | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
+| cgroup `cpu.max` limits the guest | **No.** Absent at the root, `max 100000` on all 15 cgroups below it that have the file, and the root `cpu.stat` shows `nr_throttled` 0 | `experiments/04-cpu-counters/results/wsl-static-2026-11-01.txt` |
+| Guest thread count matches Windows | Observed: `nproc` 20 and Windows 20, with no `.wslconfig` in any profile | `experiments/04-cpu-counters/results/wsl-static-2026-11-01.txt`, `experiments/04-cpu-counters/results/topology-2026-11-01.txt` |
+| The guest shows the host's layout | **False here.** It reports 10 cores of 2 threads, every LP with 48K L1D and 2048K L2, where the host has 6 P-cores and 8 single-thread E-cores. P and E cannot be told apart from inside the guest | `experiments/04-cpu-counters/results/wsl-static-2026-11-01.txt`, `experiments/04-cpu-counters/results/topology-2026-11-01.txt` |
+| WSL `CLOCK_MONOTONIC` against Windows in this session | Slope of `mono_s` on Windows time 1.00009, 0.99978, 0.99916 over 58.3 s, 3 windows. This does not repeat the 3.68% of the section below, and it stands beside it, not in place of it. Why they differ is `Unresolved` | `experiments/04-cpu-counters/results/analysis-2026-11-01.txt` |
 
 ## WSL clock rate (2026-10-31)
 

@@ -1,0 +1,92 @@
+token	elevated	0
+token	administrators_enabled	0
+token	performance_monitor_users	0
+token	performance_log_users	1
+token	hyper_v_administrators	0
+os	version	10.0.26200
+os	ubr	9711
+cpuid	brand	13th Gen Intel(R) Core(TM) i5-13600K
+cpuid	leaf1_eax	0x000b0671
+cpuid	hypervisor_bit	1
+cpuid	leaf16_base_max_bus_mhz	0	0	0
+active	groups	1
+active	processors	20
+core-head	core	efficiency_class	smt_flag	group	logical_processors
+package	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19
+core	0	1	1	0	0,1
+cache	L1	type2	49152	0,1
+cache	L1	type1	32768	0,1
+cache	L2	type0	2097152	0,1
+cache	L3	type0	25165824	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19
+core	1	1	1	0	2,3
+cache	L1	type2	49152	2,3
+cache	L1	type1	32768	2,3
+cache	L2	type0	2097152	2,3
+core	2	1	1	0	4,5
+cache	L1	type2	49152	4,5
+cache	L1	type1	32768	4,5
+cache	L2	type0	2097152	4,5
+core	3	1	1	0	6,7
+cache	L1	type2	49152	6,7
+cache	L1	type1	32768	6,7
+cache	L2	type0	2097152	6,7
+core	4	1	1	0	8,9
+cache	L1	type2	49152	8,9
+cache	L1	type1	32768	8,9
+cache	L2	type0	2097152	8,9
+core	5	1	1	0	10,11
+cache	L1	type2	49152	10,11
+cache	L1	type1	32768	10,11
+cache	L2	type0	2097152	10,11
+core	6	0	0	0	12
+cache	L1	type2	32768	12
+cache	L1	type1	65536	12
+cache	L2	type0	4194304	12,13,14,15
+core	7	0	0	0	13
+cache	L1	type2	32768	13
+cache	L1	type1	65536	13
+core	8	0	0	0	14
+cache	L1	type2	32768	14
+cache	L1	type1	65536	14
+core	9	0	0	0	15
+cache	L1	type2	32768	15
+cache	L1	type1	65536	15
+core	10	0	0	0	16
+cache	L1	type2	32768	16
+cache	L1	type1	65536	16
+cache	L2	type0	4194304	16,17,18,19
+core	11	0	0	0	17
+cache	L1	type2	32768	17
+cache	L1	type1	65536	17
+core	12	0	0	0	18
+cache	L1	type2	32768	18
+cache	L1	type1	65536	18
+core	13	0	0	0	19
+cache	L1	type2	32768	19
+cache	L1	type1	65536	19
+numa	0	0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19
+group	1	20	20
+cpuset-head	id	group	lp	core_index	llc	numa	efficiency_class	scheduling_class	flags
+cpuset	256	0	0	0	0	0	1	1	0x00
+cpuset	257	0	1	0	0	0	1	1	0x01
+cpuset	258	0	2	2	0	0	1	1	0x00
+cpuset	259	0	3	2	0	0	1	1	0x01
+cpuset	260	0	4	4	0	0	1	1	0x00
+cpuset	261	0	5	4	0	0	1	1	0x01
+cpuset	262	0	6	6	0	0	1	1	0x00
+cpuset	263	0	7	6	0	0	1	1	0x01
+cpuset	264	0	8	8	0	0	1	1	0x00
+cpuset	265	0	9	8	0	0	1	1	0x01
+cpuset	266	0	10	10	0	0	1	1	0x00
+cpuset	267	0	11	10	0	0	1	1	0x01
+cpuset	268	0	12	12	0	0	0	0	0x01
+cpuset	269	0	13	13	0	0	0	0	0x01
+cpuset	270	0	14	14	0	0	0	0	0x01
+cpuset	271	0	15	15	0	0	0	0	0x01
+cpuset	272	0	16	16	0	0	0	0	0x01
+cpuset	273	0	17	17	0	0	0	0	0x01
+cpuset	274	0	18	18	0	0	0	0	0x01
+cpuset	275	0	19	19	0	0	0	0	0x01
+power	0	max_mhz	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500
+power	0	current_mhz	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500
+power	0	limit_mhz	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500	3500

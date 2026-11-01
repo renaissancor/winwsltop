@@ -1,0 +1,60 @@
+=== Win32_OperatingSystem
+
+
+BuildNumber : 26200
+Version     : 10.0.26200
+
+
+
+
+=== Win32_Processor
+
+
+Name                      : 13th Gen Intel(R) Core(TM) i5-13600K
+NumberOfCores             : 14
+NumberOfLogicalProcessors : 20
+MaxClockSpeed             : 3500
+CurrentClockSpeed         : 3500
+L2CacheSize               : 20480
+L3CacheSize               : 24576
+
+
+
+
+=== root/wmi MSAcpi_ThermalZoneTemperature
+error: CimException hresult 0x80131500: 액세스가 거부되었습니다. 
+=== Win32_PerfFormattedData_Counters_ThermalZoneInformation
+
+
+Name                     : \_TZ.TZ00
+Temperature              : 301
+HighPrecisionTemperature : 3010
+PercentPassiveLimit      : 100
+ThrottleReasons          : 0
+
+
+
+
+=== Win32_TemperatureProbe
+
+
+Name           : Numeric Sensor
+CurrentReading : 
+Status         : OK
+
+Name           : Numeric Sensor
+CurrentReading : 
+Status         : OK
+
+
+
+
+count Win32_TemperatureProbe: 2
+=== root/cimv2 Win32_Fan count
+
+
+Count : 3
+
+
+
+
