@@ -4,21 +4,25 @@ Owner: the `ui` role. Paths: `src/ui/` (the `ui` row of [`../ARCHITECTURE.md`](.
 
 ## Purpose
 
-Turn one snapshot into a terminal screen that never claims more than was measured. `render()` is a
-pure function from snapshot to lines; `console.cpp` puts lines on a Windows console; `wsl_view.cpp`
+Turn snapshots into a terminal screen that never claims more than was measured. `render()` is a pure
+function of one snapshot and an optional in-memory `history`; with no history it is one snapshot to lines; `console.cpp` puts lines on a Windows console; `wsl_view.cpp`
 reads schema 1 of the collector's line.
 
 ## What belongs here
 
 - `render.h`, `render.cpp`: layout, colour tones, number formatting, UTF-8 width, sanitising names.
 - `wsl_view.h`, `wsl_view.cpp`: a strict parser for the collector's line. Private to `src/ui`.
-- `console.h`, `console.cpp`: VT mode, alternate screen, Ctrl+C, plain text when redirected.
+- `history.h`: the last 60 s of screen values, in memory. It lives here because WSL CPU comes through
+  `wsl_view`.
+- `console.h`, `console.cpp`: VT mode, alternate screen, Ctrl+C, key polling from `CONIN$` with echo
+  off, plain text when redirected.
 - `render_check.cpp`: the renderer's checks, built on hand-made snapshots.
 
 ## What does not belong here
 
 - Reading a counter, a file or a process. The screen reads the snapshot and nothing else.
-- Deriving a number that is not in the snapshot. Summing engines, adding Windows to WSL, or guessing
+- Deriving a number that is not in the snapshot. The history holds only earlier snapshots' values and
+  is never written to disk. Summing engines, adding Windows to WSL, or guessing
   a per-process GPU share are all forbidden.
 - Changing what the collector sends. Request it from core.
 
@@ -35,11 +39,15 @@ reads schema 1 of the collector's line.
 6. A line with a schema other than 1, or one that does not parse to the end, is reported as
    unreadable, not guessed at.
 7. Thresholds for amber and red are judgement calls and live in one block at the top of `render.cpp`.
+8. Graphs use a fixed 0-100 scale with time on the x axis. A missing sample or a stall is a blank gap,
+   never a zero. Panels are never stacked or summed, and each graph title names its source.
 
 ## How to validate
 
 - `scripts/check.sh --windows` builds `render_check.exe` and runs it. Zero failures is the bar.
-- `render_check busy 131 40` or `render_check bare 80 24` prints a frame to inspect by eye.
+- `render_check busy 131 40` or `render_check bare 80 24` prints a frame to inspect by eye;
+  `render_check busy W H <overall|gpu|cpu>` prints a panel, and `render_check busy live` runs the
+  panels with live keys.
 - `render_check busy` draws on the live console until Ctrl+C: colours, braille and Korean text need a
   person's eyes in Windows Terminal. Legacy conhost is unchecked.
 
@@ -47,9 +55,9 @@ reads schema 1 of the collector's line.
 
 | item | value |
 |---|---|
-| source | `src/ui` 1444 lines, of which `render_check.cpp` 280 |
-| checks | 4555, 0 failed, run on Windows 2026-10-31 |
-| sizes checked | widths 1 to 300, heights 1 to 66, two snapshots plus hostile numbers |
+| source | `src/ui` 2570 lines, of which `render_check.cpp` 775 |
+| checks | 92004, 0 failed, run on Windows 2026-11-01 |
+| sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66 |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once; conhost not checked |
 
@@ -73,3 +81,15 @@ reads schema 1 of the collector's line.
   split is invalid without it (`TODO.md` item 5). No screen change was needed.
 - 2026-10-31. The refresh is held at 1 s with a fixed deadline; the console survives a rebuild
   because `build.sh` renames the running exe.
+- 2026-11-01. The user chose panels switched by key (`1` overall, `2` GPU, `3` CPU, `q` quit) with
+  btop-sized graphs of the last minute, over graphs taking rows from one screen. The overall panel
+  is the old screen plus a key footer. `--text` passes no history, so it is byte-identical.
+- 2026-11-01. Panels keep at least 36 columns: three to a row from 112 columns, two from 74. On a short
+  window the lists go first, then the device line, then a panel's plot, keeping its value and label;
+  the footer says when something is hidden.
+- 2026-11-01. Samples more than 1.5 s apart are a gap. Where several samples share a column the highest
+  is drawn, and a measured 0 draws its bottom dot, so it differs from a gap. A WSL line 5 s or older
+  and an empty `core_pct` are gaps. A WSL value is plotted at the Windows sample time. A backward clock
+  step shifts the stored samples using `interval_s`; a forward step reads as a stall.
+- 2026-11-01. The size sweep covers every third size for four cases, because all sizes for all cases
+  took about 2 minutes on Windows; layout depends on size and number width, not on the history's shape.

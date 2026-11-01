@@ -14,7 +14,8 @@ and `docs/measurable.md` first; two items below are also open questions in `docs
   appears under `vmwp.exe`. Only with the user's go-ahead for GPU load.
 
 ## 2. What beats btop
-- **History:** an in-memory ring per GPU side, CPU, memory and process. Braille chart of WSL vs Windows
+- **History:** the 60 s graphs exist (`contracts/ui.md`). Still PROPOSED: per-process history and longer
+  windows. An in-memory ring per GPU side, CPU, memory and process. Braille chart of WSL vs Windows
   over 1, 10 and 60 minutes as the centrepiece.
 - **Contention verdict:** a plain line when both sides are busy and the GPU is near its limit, with the
   moment it began. Utilization alone hid -46% and -59% in experiment 01.

@@ -16,7 +16,7 @@ experiments/  ──measured facts──▶  docs/measurable.md  (the evidence l
                │
                ├──▶ src/analysis/attribution.cpp   derives gpu_split (the only inference)
                ├──▶ src/record/jsonl.cpp           --once, --record N: one JSON line per snapshot
-               └──▶ src/ui/render.cpp              live screen and --text; reads the snapshot
+               └──▶ src/ui/render.cpp              live screen and --text; reads the snapshot and its own history of earlier ones
                         └── src/ui/wsl_view.cpp    parses the collector's line (PROTOCOL schema 1)
 ```
 
@@ -46,7 +46,8 @@ orchestrator and reads [contracts/core.md](contracts/core.md) first.
    this machine. The collector comment cites the ledger row; it does not restate the number.
 2. **collect → core.** A new measured value needs a snapshot field. collect requests it; core adds it
    to `snapshot.h`, the recorder and, if the collector's line changes, `PROTOCOL.md` with a schema bump.
-3. **core → ui.** The screen reads the snapshot and schema 1 of the protocol and nothing else. A field
+3. **core → ui.** The screen reads the snapshot, schema 1 of the protocol, and its own in-memory history
+   of earlier snapshots (`src/ui/history.h`), and nothing else. A field
    the screen wants is requested from core.
 4. **any → evidence.** A claim about what a counter means is a request for an experiment, not a
    comment in code.

@@ -16,5 +16,6 @@ scripts/build.sh                                                  # winwsltop.ex
 scripts/build.sh experiments/01-gpu-attribution/counter_probe.cpp # one source
 ```
 
-Prints the Windows path of the `.exe`, which can be run from WSL. `winwsltop` opens the live screen;
-`--text` prints one frame, `--once` one JSON snapshot, and `--record N` N of them, one a second.
+Prints the Windows path of the `.exe`, which can be run from WSL. `winwsltop` opens the live screen,
+where `1` shows the overall panel, `2` the GPU panel, `3` the CPU panel and `q` quits; the GPU and CPU
+panels graph the last minute. `--text` prints one frame, `--once` one JSON snapshot, and `--record N` N of them, one a second.
