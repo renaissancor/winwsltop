@@ -1574,8 +1574,8 @@ int hot_threads(const std::vector<double>& pct) {
 
 // "20 of 20 ≥90%", or n/a with no figures to count.
 std::string hot_count(const std::vector<double>& pct, bool usable) {
-  if (!usable || pct.empty()) return "n/a ≥90%";
-  return fmt("%d of %d ≥90%%", hot_threads(pct), static_cast<int>(pct.size()));
+  if (!usable || pct.empty()) return "n/a ≥" + fmt("%.0f%%", kHotPct);
+  return fmt("%d of %d ≥%.0f%%", hot_threads(pct), static_cast<int>(pct.size()), kHotPct);
 }
 
 // Drops the legend before the count, and keeps the block's name and "highest of each row" to the end.
@@ -1590,7 +1590,7 @@ line heat_caption(std::string_view name, const std::string& count, bool highest,
   if (legend && r.cols() + 5 + 15 <= col) {
     r.add("     idle ", tone::dim);
     for (const int c : kSwatches) r.cell("█", c);
-    r.add(" ≥90%", tone::dim);
+    r.add(" ≥" + fmt("%.0f%%", kHotPct), tone::dim);
   }
   return r;
 }
@@ -1714,7 +1714,7 @@ std::vector<line> wsl_heads(const snapshot& s, const wsl_view& parsed, int col, 
   source.to(kHeadValue + 2).add(kSource, tone::dim);
   const int room = col - source.cols() - display_width(age) - display_width(steal) - 3;
   if (room >= kLeastDistro && !w.distro.empty()) source.add(" · " + fit(w.distro, room), tone::dim);
-  source.add(age, tone::watch, true).add(steal, tone::dim);
+  source.add(age, tone::watch, true).add_if_fits(steal, col);
 
   row third, ram;
   if (w.ok) {
@@ -1853,7 +1853,10 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   if (!plan_large_cpu(s, w, h, width, height + 1, plan, left_order, right_order)) return cpu_small_frame(s, w, h, width, height, now_ms);
 
   const int col = (width - kListGap) / 2, right_col = width - col - kListGap;
-  const int64_t end = graph_end(h, now_ms);
+  // The newest sample is the right edge unless it is late: a redraw between samples must not open an empty
+  // bucket at now, because blank means not measured.
+  const int64_t last_sample = h.samples().empty() ? 0 : h.samples().back().unix_ms;
+  const int64_t end = !h.samples().empty() && static_cast<double>(now_ms - last_sample) <= kGapMs ? last_sample : graph_end(h, now_ms);
   const time_axis axis = make_axis(h, end, span_ms, col - kCpuGutter);  // The smaller column: both plots are this wide
   const int64_t collected = h.samples().empty() ? 0 : end - h.samples().front().unix_ms;
   const auto peak = [&](float history_sample::*series) { return bucket_cells(axis, true, [series](const history_sample& p) { return static_cast<double>(p.*series); }); };

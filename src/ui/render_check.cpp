@@ -626,6 +626,12 @@ void check_history_ring() {
   check(std::isnan(h.samples().back().own_kernel) && std::isnan(h.samples().back().vm_cpu), "vmmem_cores_known false is a gap, whatever the figures say");
   check(std::isnan(h.samples().back().lost_vcpus), "only the known state has a lost figure");
   check(std::isnan(h.samples().back().wsl_iowait), "no cpu_split, no iowait");
+  snapshot old_line = lanes;
+  old_line.wsl_json.insert(old_line.wsl_json.size() - 1, R"(,"cpu_split":{"user":99,"sys":1,"iowait":3})");
+  old_line.wsl_age_s = 60;
+  h = history();
+  h.push(old_line);
+  check(std::isnan(h.samples().back().wsl_iowait), "a stale line paints no iowait");
 
   snapshot failed = base;
   failed.cpu = {};
@@ -672,6 +678,11 @@ void check_vt_colour() {
   check(ramp256(kNaN) == -1 && ramp256(kInf) == -1, "nothing measured has no colour");
   const struct { double pct; int colour; } steps[] = {{0, 236}, {4.99, 236}, {5, 60}, {29.99, 60}, {30, 67}, {59.99, 67}, {60, 110}, {89.99, 110}, {90, 179}, {100, 179}, {1000, 179}};
   for (const auto& s : steps) check(ramp256(s.pct) == s.colour, "ramp at " + std::to_string(s.pct));
+
+  // A change of tone inside one row reaches the terminal: amber must not take the colour of what is beside it.
+  const std::string toned = vt_frame({{{"a", tone::text}, {"b", tone::watch}, {"c", tone::text}}}, 1);
+  check(has(toned, "212;184;96"), "amber beside plain text keeps its colour");
+  check(toned.find("200;200;200", toned.find("212;184;96")) != std::string::npos, "and the next span gets its own back");
 
   // clip() keeps the colours, on a whole span and on a cut one.
   const line painted = {{"▀▀▀▀", tone::text, false, 179, 60}};
@@ -2142,7 +2153,12 @@ void check_large_states() {
   snapshot one_fail = failed;
   one_fail.unix_ms = base.unix_ms + 1000;
   failing.push(one_fail);
-  f = render(one_fail, 100, 34, kNow + 1000, &failing, view::cpu);
+  // One failed second can share a 1.4 s cell with a good one, and design section 7 allows that. Two fill it.
+  one_fail.unix_ms += 1000;
+  failing.push(one_fail);
+  one_fail.unix_ms += 1000;
+  failing.push(one_fail);
+  f = render(one_fail, 100, 34, kNow + 3000, &failing, view::cpu);
   check(row_at(f, 0, "P0") > 0, "a failed read keeps the block in place");
   check(cells_of(line_at(f, 0, "P0")).back().fg == -1 || cells_of(line_at(f, 0, "P0"))[47].glyph == " ", "and its newest cell is blank");
 
@@ -2492,7 +2508,7 @@ void check_large_sweep() {
       check(has(t, " st dxg\n") && has(t, "  S holder"), "a holder is named as one" + at);
     }
   }
-  for (const int threads : {4, 8, 14, 20, 21, 40, 64}) {
+  for (const int threads : {4, 8, 14, 20, 21, 40, 64, 65}) {
     snapshot s = contended(threads);
     const history h = contended_history(s);
     snapshot hostile = s;

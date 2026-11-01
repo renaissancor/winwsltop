@@ -167,7 +167,7 @@ documents true.
   10 s rule is asserted for the stops of `wsl-20`, `win-20` and `both-after`; `both-win-20`'s stop is pinned, see the decision log.
 - 2026-11-01. `lost` after a Windows load stops while the guest stays full fades over about 7 samples:
   13.534, 11.066, 8.708, 5.870, 3.219, 1.502, 1.211, 0.874 in `both-after`. Accepted as the lag of a 5-sample
-  mean, stated in `docs/json-output.md` and, as a TARGET of commit 8, the README, with no further clause: the guest really is full there, and a clause tuned to
+  mean, stated in `docs/json-output.md` and the README, with no further clause: the guest really is full there, and a clause tuned to
   one trial would not be evidence. `lost_check` pins these values.
 - 2026-11-01. `lost` tolerates an interval up to 2500 ms, wider than the graph's `kGapMs`. A loop short of CPU
   runs late in exactly the case the figure exists for: the 1.503 s interval in `both-win-20` cost 4 samples

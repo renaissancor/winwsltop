@@ -168,13 +168,13 @@ the panel 2 VRAM grammar: `41.2/63.7 GiB  free 22.5 GiB`, and `left_tone`.
   busy at 95% or more, for the case replay does not reach; a guest line under `kStaleS` old with at most one
   consecutive repeat; 5 finite samples since the last reset. Intervals up to 2500 ms are kept, wider than
   `kGapMs`, because the loop itself runs late under contention. Otherwise `n/a`, drawn as a gap, never 0.
-- **Outside the evidence:** memory, disk or GPU load, named in the README (TARGET, commit 8). A guest whose
+- **Outside the evidence:** memory, disk or GPU load, named in the README. A guest whose
   vCPU count differs from Windows', as a `.wslconfig` limit gives, is gated out: state `vcpus_differ`, screen
   `lost CPU n/a, vCPUs differ`. Gated `n/a` is common, and honest. A real game beside a build may read `n/a`, which is honest.
 - **Floor:** under 1 vCPU it prints `<1` and draws quiet. `wsl-20` alone read 0.354 to 0.767 with nothing
   competing. It is a judgement, not a clean noise floor: the tail below passes it with nothing competing.
 - **Lag:** a 5-sample mean, so the figure lags. After a Windows load stops under a full guest it fades over
-  about 7 samples (`lost_check` pins them). Stated in `docs/json-output.md`, and in the README at commit 8.
+  about 7 samples (`lost_check` pins them). Stated in `docs/json-output.md` and the README.
 - **Tone:** `watch` from 1 vCPU in the head, amber in the lane, because the row the panel exists for must
   not look calmer than a healthy busy machine.
 - **Always labelled `inferred`** in the head and in JSON; in the lane the gutter's `│` becomes `≈`.
@@ -229,6 +229,7 @@ stay out of scope, stated in the README, not half-fixed here.
   The quiet boundary sits above the 1.5625-point tick, so idle threads do not twinkle. Amber at the top
   matches `hot()` everywhere else and stays on the axis colour-blind readers keep. `act` red keeps its
   rarer meaning. The legend sits in the caption, in full cells: `idle ░▒▓█ ≥90%`, five swatches in reality.
+- A row holds more threads whenever rows run short, not only past 40 threads.
 - **Colour is never the only channel:** counts and numbers in the heads say it in words.
 - **Lanes** are one heat row. Left: `kern` (kernel less the VM, percent of the machine), `VM` (percent of the
   machine). Right: `iowt`, `lost` (percent of guest threads, amber from 1 vCPU). The RAM lane at 30 rows is
@@ -289,7 +290,7 @@ The tool watches a machine that may be short of CPU.
 | New PDH counters | 0 | Review |
 | Bytes per frame, 131 by 40, worst-case fixture | Under 48 KiB, with 256-colour for the ramp and equal neighbouring cells merged within a frame. No frame diff | `render_check` asserts on a noisy fixture, not a calm one |
 | Frame build | Under 5 ms, normal build | Measured |
-| Own CPU | No more than 0.5% of a core above the old live build, collector and terminal included | Baseline measured first, then delta |
+| Own CPU | No more than 0.5% of a core above the old live build | Measured 2026-11-02, release builds in a pseudo-terminal at 131 by 40, CPU panel, 60 s, two runs each: v0.1.0 0.91% and 0.85%, this build 1.06% and 0.93%. Read live, no raw file. Covers `winwsltop.exe` only: collector and terminal not measured |
 | History | One flat ring of 901 samples, kept for `kKeepMs` 900000; the drawing span is an argument. Floats, 2 sides, up to 64 threads a side. No per-second allocation | By construction |
 | Collector line | Grows under 1 KB | Measured |
 

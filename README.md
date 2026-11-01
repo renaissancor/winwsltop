@@ -59,7 +59,8 @@ all, even under load. winwsltop reads both sides at once and keeps them apart:
 - **History** for each graph: one minute, or up to 15 minutes on the CPU panel, and a JSON record you can save.
 
 Each graph names its source. Windows and WSL figures are never added together, because they
-describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero.
+describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero. On the CPU panel, one late WSL
+reading carries the last value for a second, because the two sides' clocks slip.
 
 ## Get it
 
@@ -75,7 +76,7 @@ The binary isn't code-signed, so Windows SmartScreen may warn you the first time
 |---|---|
 | `1` | Overall |
 | `2` | GPU: graphs of device, WSL VM, Windows, memory and power, then Windows GPU users and WSL `/dev/dxg` holders |
-| `3` | CPU and RAM: what each side says and what the VM costs, in words, then a timeline of every thread on both sides, then both process lists. Needs 100 by 27 or more, or it shows a simpler panel |
+| `3` | CPU and RAM: what each side says and what the VM costs, in words, then a timeline of every thread on both sides, then both process lists. Needs a window 100 wide and up to 27 tall, depending on threads, or it shows a simpler panel |
 | `t` | CPU panel: show the last 60 seconds, 5 minutes or 15 minutes. History starts when you launch, so a new run shows `collecting` |
 | `q` | Quit (Ctrl+C works too) |
 

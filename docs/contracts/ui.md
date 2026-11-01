@@ -62,13 +62,13 @@ which core owns, reads schema 1 of the collector's line.
 
 | item | value |
 |---|---|
-| source | `src/ui` 5236 lines, of which `render_check.cpp` 2801 |
+| source | `src/ui` 5262 lines, of which `render_check.cpp` 2824 |
 | checks | 120083, 0 failed, run on Windows 2026-11-02. 97 mutants of the ring, buckets, colours and large layout were built and run through `render_check quick`, on Linux with g++; all are caught now, 13 only after a check was added for them. It was not exhaustive. `handle_keys` in `main.cpp` has no automated check |
 | sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, spans 60 s and 15 min; 4, 8, 14, 20, 21, 40 and 64 threads, normal and hostile, at five widths |
 | frame bytes, 131 by 40 | noisy 33392, contended 16176, idle 14107, stale 15232; noisy at 40 threads 44542 and at 64 threads 43388. Budget 48 KiB |
 | frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.28 to 0.64 ms, worst noisy at 131 by 40. Budget 5 ms |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
-| console | Windows Terminal checked by eye once; conhost not checked. The large layout has not been seen on a terminal: its colours are unchecked, and `t` is not wired in `main.cpp` |
+| console | Windows Terminal checked by eye once for the older panels; conhost not checked. The large layout and `t` ran live through a pseudo-terminal, and its colours were read from rendered images, not seen in Windows Terminal |
 
 ## Open questions
 
@@ -81,13 +81,9 @@ which core owns, reads schema 1 of the collector's line.
 - `docs/design/cpu-panel.md` section 7 has `64 of 128` for a machine past one processor group. Nothing in the
   snapshot holds a machine-wide count and the ledger has no row for one, so the heads say `of 64` and no more.
   Needs a snapshot field and a ledger row, or that row of the design changed.
-- The lost state `vcpus_differ` was not committed when the large layout was, so `lost CPU n/a, vCPUs differ`
-  is chosen by comparing the two thread counts. Switch to the state once `snapshot.h` has it on the branch.
 - A collector that restarted while its line still reads is not named in the large layout: `collector_status`
   has no row there. The overall panel keeps it.
-- CLOSED 2026-11-01: `vm_row` on the overall screen printed `vmmem_cores` without reading `vmmem_cores_known`, so a new VM's first
-  sample reads `0.00 cores`. The large layout does not. Not changed here: outside this work, and it changes a checked screen.
-- `read_wsl` still runs twice a sample and allocates each time, in `history::push` and in `render`. The ring
+- `read_wsl` still runs three times a sample and allocates each time, in `lost_tracker`, `history::push` and `render`. The ring
   itself allocates nothing after the first push.
 
 ## Decision log
@@ -126,7 +122,7 @@ which core owns, reads schema 1 of the collector's line.
   and an empty `core_pct` are gaps, and so is a repeated line, which also happens with a healthy
   collector when the two 1 Hz loops slip, and blanks about 2 s. A WSL value is plotted at the
   Windows sample time. A backward clock step shifts the stored samples using `interval_s`, and clears
-  them at a stall of 60 s or more; a forward step reads as a stall.
+  them at a stall of the keep span, 900 s since the large CPU panel; a forward step reads as a stall.
 - 2026-11-01. Keys are decided on the virtual key code, so Delete does nothing and `q` should work
   under Hangul input. Not tried with a real IME: if it delivers `VK_PROCESSKEY`, `q` does not quit in
   that mode. Ctrl+C always does.
