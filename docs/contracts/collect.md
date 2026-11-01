@@ -73,7 +73,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - PROPOSED: a start-failure count or message so an invalid `--distro` or a missing `wsl.exe` is
   visible on the screen (`TODO.md` item 8). Needs a snapshot field: request to core.
 - Eight of the ten hand-written collector files still name no ledger section (`TODO.md` item 21).
-  `pdh_memory.cpp` also repeats a ledger ratio in its comment. `scripts/check.sh` does not check
+  `pdh_memory.cpp` also repeats a ratio derived from ledger figures in its comment. `scripts/check.sh` does not check
   comment citations, so a renamed ledger section would break them silently.
 - A disk row reports 0 for a field it could not read, because `disk_row` has no `has_*`
   (`TODO.md` item 22). Needs a snapshot field: request to core.

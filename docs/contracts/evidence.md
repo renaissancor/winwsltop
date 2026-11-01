@@ -73,11 +73,16 @@ about this machine lives.
 - Whether `vEthernet` traffic is also counted on the NIC, and whether `Get-NetAdapterStatistics` and
   `GetIfTable2` share a source.
 - No reading outside Windows was found for `% Idle Time` or the physical NIC, and the NIC is the
-  first NET row on the screen. The ledger's status for both is bindings only.
-- PROPOSED: rerun experiment 03 with traffic on disk 1 and Wi-Fi connected, which closes those
-  `Not checked` rows, in a different ambient state. It needs a load, so it needs the user's approval.
+  first NET row on the screen. `% Idle Time` is bindings only in the ledger. The physical NIC is
+  `Not checked` outside Windows, with bindings from `Get-NetAdapterStatistics`.
+- PROPOSED: rerun experiment 03 with traffic on disk 1 and Wi-Fi connected, in a different ambient
+  state, which gives those rows bindings at most: the NVMe query fails on disk 1 and Wi-Fi has no
+  reading outside Windows. It needs a load, so it needs the user's approval.
   Take one more NVMe read about a minute after the last window.
 - PROPOSED: `compare.sh` has no `set -e`, so a failed step leaves a short file and the run carries on.
+- `scripts/check.sh --windows` does not compile `host_probe.cpp`. The orchestrator built the committed
+  source and ran its `raw` mode on 2026-11-01, but the full run was not repeated, so that the saved
+  output came from that source rests on format agreement.
 
 ## Decision log
 
