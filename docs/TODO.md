@@ -22,7 +22,7 @@ re-reads the code.
 | 12 | low | core, ui | `src/ui/render.cpp`, `src/analysis/attribution.cpp` | GPU rows are joined to processes by PID with no create time; a PID reused within a second shows another process's GPU figures | deferred: PDH instance names carry no create time; documented here |
 | 13 | nit | collect | `src/host/processes.cpp` | Any process with a null image name is called `Idle`, not only PID 0 | fixed, collect: `Idle` only for PID 0, any other nameless row is `?` |
 | 14 | nit | core | `src/main.cpp` | If `GetModuleFileNameW` fails, `find_last_of` returns `npos` and `resize` throws | fixed, core e68e7b4 |
-| 15 | nit | core | `src/main.cpp` | `--record 0` prints nothing and exits 0; `--text --record N` depends on argument order | open, question in `contracts/core.md` |
+| 15 | nit | core | `src/main.cpp` | `--record 0` prints nothing and exits 0; `--text --record N` depends on argument order | fixed a0a236a: both are exit 2 |
 | 16 | nit | ui | `src/ui/console.cpp` | Keystrokes echo into the alternate screen until the next redraw | fixed, ui 3c2bcaf: echo and line input are off. Holds by construction: an unused key sent through tmux did not appear, but the original echo was never reproduced |
 | 17 | nit | collect | `src/wsl/bridge.cpp` | `pending` grows without bound if the child never writes a newline | fixed, collect c49d61a: tail over 1 MiB dropped, and the rest of that oversized line is skipped up to its newline too |
 | 18 | nit | collect | `src/wsl/bridge.cpp` | A failed `CreateFileW("NUL")` hands `INVALID_HANDLE_VALUE` to the child as stderr | fixed, collect: the child gets no stderr handle in that case |
@@ -32,6 +32,8 @@ re-reads the code.
 | 22 | low | collect, core | `src/host/disk.cpp`, `src/core/snapshot.h` | If `pdh_array` fails for one counter, or one instance has a bad `CStatus`, the row is still reported with 0 in that field, against `contracts/collect.md` rule 2. Found by reading the code in the 2026-11-01 audit; not seen to happen | open: `disk_row` has no `has_*`, so a fix needs a snapshot field (seam) |
 | 23 | nit | collect, ui | `src/host/network.cpp`, `src/ui/render.cpp` | NET shows 4 rows, and the filter does not look at `Hidden`, so here two of the always-zero WAN Miniport and `vSwitch` rows take the lines after the NIC and `vEthernet` (ledger, "Rows kept but always zero") | open |
 | 24 | nit | collect | `src/host/cpu.cpp`, `wsl-collector/collector.py` | With a zero time delta between two reads, CPU busy is reported as 0, not absent, so it draws in the graphs as a measured 0 (`contracts/collect.md` rule 2). Found by reading the code in the 2026-11-01 audit; not seen to happen | open |
+| 25 | low | collect, core | `src/wsl/bridge.cpp`, `src/record/jsonl.cpp` | Any line starting with `{` is spliced into `wsl.data` unparsed, so a malformed line would make `--once` invalid JSON. No trigger with the real collector | open |
+| 26 | nit | core | `src/record/jsonl.cpp` | The JSON carries `source` only on `gpu_engines` and `gpu_split`; other sources are stated in `docs/json-output.md` | open |
 
 Checked and found correct in the same audit: the `nt_process` layout, the `/proc/<pid>/stat` field
 indices, the NVML v2 struct version, the clock-offset sign and midpoint maths, the JSON parser's
