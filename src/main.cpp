@@ -6,7 +6,7 @@
 #include "ui/console.h"
 #include "ui/history.h"
 #include "wsl/bridge.h"
-#include <climits>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -22,6 +22,10 @@ int64_t unix_ms() {
   return static_cast<int64_t>(u.QuadPart / 10000) - 11644473600000LL;
 }
 
+#ifdef WWT_RELEASE
+// A download sits in a folder others can write to, so only the embedded collector may ever run.
+std::wstring collector_path() { return {}; }
+#else
 // The tree is mirrored as <root>\build\winwsltop.exe and <root>\wsl-collector\collector.py.
 std::wstring collector_path() {
   wchar_t path[MAX_PATH];
@@ -33,6 +37,7 @@ std::wstring collector_path() {
   p.resize(slash);
   return p + L"\\..\\wsl-collector\\collector.py";
 }
+#endif
 
 std::wstring wide(const char* s) {
   const int n = MultiByteToWideChar(CP_ACP, 0, s, -1, nullptr, 0);
@@ -57,7 +62,7 @@ void print_help(FILE* to) {
     "\n"
     "  (no option)    live screen: 1 overall, 2 GPU, 3 CPU, q quit\n"
     "  --text         print one text frame and exit\n"
-    "  --once         print one JSON line and exit; takes about 3 s\n"
+    "  --once         print one JSON line and exit; about 3 s, about 8 s if WSL does not answer\n"
     "  --record N     print N JSON lines, one a second, N at least 1\n"
     "  --distro NAME  read this WSL distro instead of the default\n"
     "  --version      print the version\n"
@@ -71,24 +76,32 @@ void print_help(FILE* to) {
 
 int main(int argc, char** argv) {
   enum class mode { live, json, text } run = mode::live;
-  int lines = 1;
+  int lines = 1, modes = 0;
   std::wstring distro;
   for (int i = 1; i < argc; ++i) {
-    if (strcmp(argv[i], "--once") == 0) run = mode::json;
+    if (strcmp(argv[i], "--once") == 0) { run = mode::json; ++modes; }
     else if (strcmp(argv[i], "--record") == 0 && i + 1 < argc) {
       // A typo must not look like success: atoi turned "abc" into 0, which printed nothing and exited 0.
+      // long is 32 bits here, so a value too large only shows as ERANGE, never as n > INT_MAX.
       char* end = nullptr;
+      errno = 0;
       const long n = strtol(argv[++i], &end, 10);
-      if (*end != '\0' || end == argv[i] || n < 1 || n > INT_MAX) { print_help(stderr); return 2; }
+      if (errno == ERANGE || *end != '\0' || end == argv[i] || n < 1) { print_help(stderr); return 2; }
       run = mode::json;
+      ++modes;
       lines = static_cast<int>(n);
     }
-    else if (strcmp(argv[i], "--text") == 0) run = mode::text;
-    else if (strcmp(argv[i], "--distro") == 0 && i + 1 < argc) distro = wide(argv[++i]);
+    else if (strcmp(argv[i], "--text") == 0) { run = mode::text; ++modes; }
+    else if (strcmp(argv[i], "--distro") == 0 && i + 1 < argc) {
+      distro = wide(argv[++i]);
+      // The bridge cannot pass these to wsl.exe; refusing here beats 8 s of silence and exit 0.
+      if (distro.find_first_of(L" \t\"\r\n") != std::wstring::npos) { print_help(stderr); return 2; }
+    }
     else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) { print_help(stdout); return 0; }
     else if (strcmp(argv[i], "--version") == 0) { printf("winwsltop %s\n", kVersion); return 0; }
     else { print_help(stderr); return 2; }
   }
+  if (modes > 1) { print_help(stderr); return 2; }  // Otherwise the last one silently wins
 
   wwt::cpu_collector cpu;
   wwt::process_collector procs;
@@ -160,14 +173,12 @@ int main(int argc, char** argv) {
     if (screen && screen->is_terminal()) hist.push(s);  // only the live screen draws it
     have_frame = true;
     if (run == mode::json) {
-      const std::string line = wwt::to_json_line(s);
-      fwrite(line.data(), 1, line.size(), stdout);
-      fputc('\n', stdout);
-      fflush(stdout);
+      const std::string line = wwt::to_json_line(s) + "\n";
+      // A reader that has gone must end the run, or a pipeline outlives it for N seconds.
+      if (fwrite(line.data(), 1, line.size(), stdout) != line.size() || fflush(stdout) != 0) return 1;
     } else if (run == mode::text) {
       const std::string frame = wwt::as_text(wwt::render(s, 131, 50, unix_ms()));
-      fwrite(frame.data(), 1, frame.size(), stdout);
-      fflush(stdout);
+      if (fwrite(frame.data(), 1, frame.size(), stdout) != frame.size() || fflush(stdout) != 0) return 1;
     } else {
       draw();
     }

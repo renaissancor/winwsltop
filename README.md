@@ -3,7 +3,7 @@
 A terminal monitor for one Windows PC running WSL2, built around the question Windows Task Manager and
 `nvidia-smi` each answer only half of: **who is using the GPU, Windows or WSL?**
 
-One small `.exe`, nothing to install inside WSL, and it only ever reads.
+One small `.exe` that only observes. Inside WSL, all it needs is `python3`.
 
 ```text
 winwsltop  21:43:50  data 1.2 s old  every 1.0 s
@@ -42,7 +42,7 @@ Windows  top 3 of 3 by GPU%, busiest engine      │ WSL /dev/dxg holders, no us
 [1] overall  [2] gpu  [3] cpu  [q] quit
 ```
 
-*The GPU panel, drawn from the test fixture's made-up data. A wide terminal shows more.*
+*The GPU panel, drawn from the test suite's sample data rather than a live run. A wide terminal shows more.*
 
 ## Why
 
@@ -56,8 +56,8 @@ all, even under load. winwsltop reads both sides at once and keeps them apart:
 - **CPU, memory, disk and network** for Windows, and CPU and processes for WSL.
 - **A one-minute history** for each graph, and a JSON record you can save.
 
-Every figure names its source. Windows and WSL figures are never added together, because they describe
-overlapping resources, and a missing reading shows as a gap, not a zero.
+Every figure on screen names its source. Windows and WSL figures are never added together, because they
+describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero.
 
 ## Get it
 
@@ -79,7 +79,7 @@ The binary isn't code-signed, so Windows SmartScreen may warn you the first time
 ```text
 winwsltop                  the live screen
 winwsltop --text           print one frame
-winwsltop --once           print one JSON line, takes about 3 s
+winwsltop --once           print one JSON line, takes about 3 s, or 8 s if WSL doesn't answer
 winwsltop --record 60      print 60 JSON lines, one a second
 winwsltop --distro NAME    read this WSL distro instead of the default
 winwsltop --help           all options, and --version
@@ -87,30 +87,34 @@ winwsltop --help           all options, and --version
 
 ## For agents and scripts
 
-It's safe to run unattended: it only reads, starts no GPU load, and ends its own collector when it exits.
-Use `--once` or `--record N`, not the live screen. Stdout carries one JSON object per line and nothing else.
+It's safe to run unattended: it changes no settings, starts no GPU load, and ends its own collector when it
+exits. The one side effect is that WSL starts the distro if it was stopped. Use `--once` or `--record N`,
+not the live screen. Stdout carries one JSON object per line and nothing else.
 
 ```bash
 # From WSL or Git Bash. Any folder works, including the Linux filesystem.
 curl -fsSL -o winwsltop.exe https://github.com/renaissancor/winwsltop/releases/latest/download/winwsltop.exe
 chmod +x winwsltop.exe
 
-# Who is using the GPU right now?
+# The GPU split, plus which WSL processes hold the GPU: holders, not usage. Needs jq.
 ./winwsltop.exe --once | jq '{util: .gpu_device.util_pct, split: .gpu_split, wsl_holders: .wsl.data.dxg_pids}'
 ```
 
 Exit 0 means it ran, not that every reading succeeded, and exit 2 means bad arguments. Before trusting a
-figure, check `gpu_split.valid`, `gpu_engines_known` and whether `wsl.data` is null.
+figure, check `gpu_split.valid` and `gpu_engines_known`, and check that `wsl.data` isn't null and `wsl.age_s`
+is under 5.
 [`docs/json-output.md`](docs/json-output.md) has every field, its units and how not to misread it.
 
 To change the code rather than run it, start at [`AGENTS.md`](AGENTS.md).
 
 ## Requirements
 
-- Windows with WSL2, and `python3` 3.8 or later in the distro. The Linux collector is built into the
-  `.exe` and uses only the standard library.
+- 64-bit Windows with WSL2, a default distro (or `--distro`), and `python3` in that distro. The Linux
+  collector is built into the `.exe` and uses only the standard library. It's written for Python 3.8 or
+  later, and has only been run on 3.12.
 - A terminal with UTF-8 and braille glyphs for the graphs. Windows Terminal is the target.
 - An NVIDIA driver for the device, memory and power readings.
+- To run it from a WSL shell, as below, WSL interop must be on, which is the default.
 
 Without a working distro, the Windows side keeps running and the screen says WSL data is unavailable.
 

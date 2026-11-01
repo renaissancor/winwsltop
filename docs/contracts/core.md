@@ -51,21 +51,20 @@ the one inferred value, and keep the build, the checks and the ownership documen
 
 | item | value |
 |---|---|
-| source under core | `src/core` 243 lines, `src/main.cpp` 147, `src/record` 129, `src/analysis` 33 |
+| source under core | `src/core` 243 lines, `src/main.cpp` 188, `src/record` 130, `src/analysis` 33 |
 | JSON schema | 1 |
 | collection cost per sample | about 9 ms on this machine, ledger "Windows collector checked" |
 | checks that exist | the two `check.sh` modes above |
-| checks that are targets | CI, recorded fixtures, a JSON validity check (`ARCHITECTURE.md`, Targets) |
+| checks that are targets | CI, recorded fixtures (`ARCHITECTURE.md`, Targets) |
 
 ## Open questions
 
 - PROPOSED: a per-collector status block in the snapshot and the record, so the screen can say which
   reader failed. Today a failed read leaves an empty vector (collect, `TODO.md` item 1) and only the
-  engine counters carry a flag, `gpu_engines_known`, which the record does not emit: `gpu_split.valid`
+  engine counters carry a flag, `gpu_engines_known`, which the record now emits: `gpu_split.valid`
   is false for it, but also when `vmwp` is unknown, so the record cannot tell the two apart.
 - PROPOSED: record the adapter LUID in `gpu_engine_row` and `gpu_memory_row` so a second adapter
   can be told apart (`TODO.md` item 4). Needs a ledger row first: two LUIDs are seen, the second unexplained.
-- Should `--record 0` be an error? Today it prints nothing and exits 0.
 - Who owns the GUI if one is built as a separate process over the JSON stream (`ROADMAP.md`)? Not decided.
 
 ## Decision log
@@ -79,7 +78,7 @@ the one inferred value, and keep the build, the checks and the ownership documen
   the `verify` row was dropped and each area owns its own checks. Approved by the user.
 - 2026-11-01. `CLAUDE.md` carries the rules; `AGENTS.md` is a pointer, kept because Codex reads it.
 - 2026-11-01. `snapshot.gpu_engines_known` added; the split is invalid without it. Not written to the
-  record, since `gpu_split.valid` already says so. The deadline clamps to now after a stall.
+  record at first, since `gpu_split.valid` already said so; added later, see below. The deadline clamps to now after a stall.
 - 2026-11-01. The old rule "work from one company is reviewed by the other" became "authors never
   audit their own work; a fresh auditor reads each stage". The user confirmed on 2026-11-01 that a
   fresh Claude auditor is enough for now; cross-company review (Codex) is no longer required.
@@ -96,3 +95,6 @@ the one inferred value, and keep the build, the checks and the ownership documen
   `docs/json-output.md`. Adding a key keeps `schema` at 1; a change of meaning raises it. `gpu_engines_known`
   was added to it, because an empty `gpu_engines` could mean idle or a failed read. A bad `--record` is now
   exit 2: `atoi` made a typo print nothing and exit 0.
+- 2026-11-01. `--record 0`, a value out of range, and combining `--text`, `--once` and `--record` are exit 2.
+  A closed stdout ends the run with exit 1. A release build never reads a collector from disk
+  (`WWT_RELEASE`), and `scripts/release.sh` proves that with a planted collector and `wsl.exe`.

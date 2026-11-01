@@ -1,6 +1,7 @@
 # Collector protocol
 
-`winwsltop.exe` runs `wsl.exe [-d <distro>] -e python3 -u -c <bootstrap>`. The bootstrap is one line of
+`winwsltop.exe` runs `wsl.exe [-d <distro>] -e python3 -I -u -c <bootstrap>`, by wsl.exe's full System32 path. `-I` keeps
+the current folder off `sys.path`, so a `json.py` beside a download cannot run. The bootstrap is one line of
 single-quoted Python that reads a decimal length line from stdin, then that many bytes of `collector.py`,
 and executes them. Windows keeps stdin open afterwards for pings. The collector prints one JSON object
 per line, about once a second, until its stdout closes or stdin reaches EOF (it then exits at once, so no
@@ -39,7 +40,7 @@ starting with `{"pong":` are consumed by the bridge and never reach the snapshot
 | `memory` | bytes from `/proc/meminfo`: `total`, `available`, `cached`, `swap_used` |
 | `pressure` | PSI `some avg10` for `cpu`, `memory`, `io`; `null` when absent |
 | `process_count` | every process seen |
-| `processes` | the top 30 by cores then RSS, plus every `/dev/dxg` holder. `cores`, `rss`, `state`, `on_gpu` |
+| `processes` | the top 30 by cores then RSS, plus every `/dev/dxg` holder. `pid`, `name`, `cores`, `rss`, `state`, `on_gpu` |
 | `dxg_pids` | PIDs with `/dev/dxg` open: identity, not usage |
 | `dxg_denied` | processes whose fds could not be read, usually root's |
 | `cost_ms` | time this sample took |

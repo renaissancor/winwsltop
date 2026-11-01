@@ -130,8 +130,10 @@ if [ "${1:-}" = "--windows" ]; then
     w=$(wslpath -u "$exe")
     "$w" --help | grep -q 'usage: winwsltop' && pass "--help prints usage, exit 0" || fail "--help"
     "$w" --version | grep -q '^winwsltop ' && pass "--version" || fail "--version"
-    code=0; "$w" --record abc >/dev/null 2>&1 || code=$?
-    [ "$code" -eq 2 ] && pass "a bad --record is exit 2" || fail "a bad --record exited $code"
+    for bad in '--record abc' '--record 99999999999' '--once --text' '--record 1 --once'; do
+      code=0; timeout 10 "$w" $bad >/dev/null 2>&1 || code=$?
+      [ "$code" -eq 2 ] && pass "$bad is exit 2" || fail "$bad exited $code"
+    done
     if "$w" --once | tr -d '\r' | python3 scripts/check_json.py docs/json-output.md; then
       pass "--once is one JSON line, every key documented"
     else

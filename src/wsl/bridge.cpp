@@ -40,6 +40,15 @@ constexpr double kStepS = 0.05;
 // never writes a newline cannot grow the buffer without bound (docs/TODO.md item 17).
 constexpr size_t kMaxPending = 1 << 20;
 
+// wsl.exe by full path only: a bare name would also search the executable's folder and the current
+// directory. Empty when System32 cannot be resolved; there is no fallback to a search.
+std::wstring system_wsl() {
+  wchar_t dir[MAX_PATH];
+  const UINT n = GetSystemDirectoryW(dir, MAX_PATH);
+  if (n == 0 || n >= MAX_PATH) return {};
+  return std::wstring(dir, n) + L"\\wsl.exe";
+}
+
 }  // namespace
 
 wsl_bridge::wsl_bridge(std::wstring script_path, std::wstring distro)
@@ -156,6 +165,8 @@ void wsl_bridge::run() {
 }
 
 bool wsl_bridge::run_once(const std::string& script) {
+  const std::wstring app = system_wsl();
+  if (app.empty()) return false;  // Handled exactly as a failed CreateProcessW.
   SECURITY_ATTRIBUTES sa{sizeof sa, nullptr, TRUE};
   HANDLE in_r, in_w, out_r, out_w;
   if (!CreatePipe(&in_r, &in_w, &sa, 0)) return false;
@@ -178,10 +189,12 @@ bool wsl_bridge::run_once(const std::string& script) {
     if (distro_.find_first_of(L" \t\"\r\n") != std::wstring::npos) { CloseHandle(in_r); CloseHandle(in_w); CloseHandle(out_r); CloseHandle(out_w); if (nul) CloseHandle(nul); return false; }
     cmdline += L"-d " + distro_ + L" ";  // Distro names have no spaces; a quoted name was rejected by wsl.exe.
   }
-  cmdline += L"-e python3 -u -c \"" + std::wstring(kBootstrap) + L"\"";
+  // -I: `-c` would put the inherited current directory first on sys.path, so a json.py there would
+  // run in the guest in place of the standard library.
+  cmdline += L"-e python3 -I -u -c \"" + std::wstring(kBootstrap) + L"\"";
   std::vector<wchar_t> cmd(cmdline.begin(), cmdline.end());
   cmd.push_back(0);
-  const BOOL ok = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED,
+  const BOOL ok = CreateProcessW(app.c_str(), cmd.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_SUSPENDED,
                                  nullptr, nullptr, &si, &pi);
   CloseHandle(in_r);
   CloseHandle(out_w);

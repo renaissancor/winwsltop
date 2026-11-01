@@ -56,7 +56,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 
 | item | value |
 |---|---|
-| source | `src/host` 269 lines, `src/gpu` 253, `src/wsl` 562 (233 of them generated), `collector.py` 144 |
+| source | `src/host` 269 lines, `src/gpu` 253, `src/wsl` 575 (233 of them generated), `collector.py` 144 |
 | collector cost | 3.46 ms per sample; line 0.08 to 0.17 s old on arrival (ledger, "WSL collector checked") |
 | `GPU Engine` read | 0.53 ms over 485 instances (ledger, "Windows collector checked") |
 | NVML init | 626 to 685 ms at construction, about 1 ms per sample (ledger, experiment 02) |
@@ -111,3 +111,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - 2026-11-01. `disk.cpp` and `network.cpp` name their ledger section and say it records what was and
   was not checked. They list no per-counter status, so a comment cannot drift from the ledger or read
   as a claim that a value is verified. Comments only; no collector changed for experiment 03.
+- 2026-11-01. `wsl.exe` is started by its full System32 path as `lpApplicationName`, so the executable's
+  folder and the current directory are not searched. If System32 cannot be resolved, it is a failed start,
+  never a search. `python3` runs with `-I`, so a `json.py` in the current folder cannot run in the guest;
+  it also ignores `PYTHON*` variables and the user site, which a stdlib-only collector does not need.

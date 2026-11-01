@@ -8,6 +8,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 [ -f "docs/releases/$version.md" ] || { echo "docs/releases/$version.md is missing" >&2; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "the tree is not clean" >&2; exit 1; }
+rm -rf dist  # A refused run must not leave an older binary looking valid.
 scripts/check.sh --windows
 
 win_exe=$(scripts/build.sh release | tail -1)
@@ -28,25 +29,31 @@ while read -r dll; do
 done <<< "$deps"
 
 # Nothing about the machine that built it. Names come from this machine, so none are written here.
-win_user=$(cd /mnt/c && cmd.exe /c 'echo %USERNAME%' | tr -d '\r')
-win_host=$(cd /mnt/c && cmd.exe /c 'echo %COMPUTERNAME%' | tr -d '\r')
-for needle in "$win_user" "$win_host" "$(whoami)" "$(hostname)" 'Users\' '.pdb' 'AppData'; do
-  [ -n "$needle" ] || fail "an identity to search for came back empty"
-  if LC_ALL=C grep -a -i -q -F -- "$needle" "$exe"; then fail "the binary contains a private string or debug path"; fi
-done
+python3 scripts/check_binary.py "$exe" \
+  "$(cd /mnt/c && cmd.exe /c 'echo %USERNAME%' | tr -d '\r')" \
+  "$(cd /mnt/c && cmd.exe /c 'echo %COMPUTERNAME%' | tr -d '\r')" \
+  "$(whoami)" "$(hostname)" 'Users\' 'AppData' '.pdb' '/home/' \
+  || fail "the binary failed the private string check"
 
-# It runs alone: from an empty folder, unelevated, with no repo and no build tools on PATH.
+# It runs from a folder salted like a Downloads folder: every file here is something Windows or Python
+# would pick up if the search order allowed it, and any one of them taking effect fails this step.
+# A fake wsl.exe or json.py yields no WSL data, a fake DLL stops the program loading, and the fake
+# collector announces itself. WSL must answer through the embedded collector.
 tmp_win=$(cd /mnt/c && cmd.exe /c 'echo %TEMP%' | tr -d '\r')"\\winwsltop-release-$$"
 tmp=$(wslpath -u "$tmp_win")
-mkdir -p "$tmp"
+[ -n "$tmp" ] || fail "no temporary folder"
+mkdir -p "$tmp/bin" "$tmp/wsl-collector"
 trap 'rm -rf "$tmp"' EXIT
-cp "$exe" "$tmp/winwsltop.exe"
-json=$(cd "$tmp" && env -i PATH=/mnt/c/Windows/System32 ./winwsltop.exe --once | tr -d '\r')
-printf '%s' "$json" | python3 -c '
-import json, sys
-s = json.loads(sys.stdin.read().strip().splitlines()[-1])
-print("ran from an empty folder, snapshot keys:", len(s))
-' || fail "--once from an empty folder did not print a JSON snapshot"
+cp "$exe" "$tmp/bin/winwsltop.exe"
+cp /mnt/c/Windows/System32/whoami.exe "$tmp/bin/wsl.exe"
+printf 'raise SystemExit(1)\n' > "$tmp/bin/json.py"
+printf 'not a dll' > "$tmp/bin/pdh.dll"
+printf 'not a dll' > "$tmp/bin/IPHLPAPI.DLL"
+printf 'import json\nprint(json.dumps({"schema": 1, "distro": "PLANTED"}), flush=True)\n' > "$tmp/wsl-collector/collector.py"
+json=$(cd "$tmp/bin" && ./winwsltop.exe --once | tr -d '\r') || fail "the binary did not run beside planted files"
+case "$json" in *PLANTED*) fail "the on-disk collector ran" ;; esac
+printf '%s\n' "$json" | python3 scripts/check_json.py docs/json-output.md --need-wsl \
+  || fail "--once from an empty folder is not a full snapshot with live WSL data"
 
 mkdir -p dist
 cp "$exe" dist/winwsltop.exe
