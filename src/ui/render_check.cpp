@@ -153,7 +153,7 @@ void check_honesty() {
     const std::string b = as_text(render(bare(), w, 60, kNow));
     check(has(b, "device  unavailable"), "no GPU says so" + n);
     check(has(b, "split   unavailable"), "no split says so" + n);
-    check(has(b, "on GPU  unavailable"), "no holders says so" + n);
+    check(has(b, "dxg     unavailable"), "no holders says so" + n);
     check(has(b, "WSL data unavailable"), "no WSL says so" + n);
     check(!has(b, "dxg_denied"), "dxg_denied hidden at zero" + n);
     check(b.find("  0%") == std::string::npos || b.find("  0%") > b.find("WINDOWS"), "no GPU zero before WINDOWS" + n);
@@ -881,6 +881,91 @@ void check_denied_note() {
   check(denied_note(1000, 31) == "dxg_denied 1000: may miss root", "31 columns hold four digits");
 }
 
+// "on GPU" read as usage. A process here has /dev/dxg open and nothing more is known, so no panel at any
+// width says otherwise, and the two places that name holders carry the label while they can.
+void check_holder_wording() {
+  const auto row_of = [](const std::string& text, const char* word) {
+    const size_t at = text.find(word);
+    if (at == std::string::npos) return std::string();
+    const size_t start = text.rfind('\n', at) + 1;  // No newline before it wraps to 0
+    return text.substr(start, text.find('\n', at) - start);
+  };
+  const auto after_bar = [](const std::string& row) { return row.substr(row.find(" │ ") == std::string::npos ? 0 : row.find(" │ ") + 5); };
+
+  const snapshot base = busy(), many = with_holders(busy(), 22), gone = no_wsl();
+  const snapshot none = [] {
+    snapshot s = busy();
+    const std::string pids = "\"dxg_pids\":[4121,4388]";
+    s.wsl_json.replace(s.wsl_json.find(pids), pids.size(), "\"dxg_pids\":[]");
+    return s;
+  }();
+  const snapshot long_distro = [] {
+    snapshot s = busy();
+    const std::string key = "\"distro\":\"Ubuntu-24.04\"";
+    s.wsl_json.replace(s.wsl_json.find(key), key.size(), "\"distro\":\"" + std::string(90, 'd') + "\"");
+    return s;
+  }();
+  const history demo = demo_minute(base);
+
+  // Every state, every width, every panel: the words never come back, whole or cut.
+  for (const snapshot* s : {&base, &none, &many, &gone, &long_distro}) {
+    for (int w = 1; w <= 300; ++w) {
+      for (const int rows : {24, 66}) {
+        std::string frames = as_text(render(*s, w, rows, kNow));
+        for (const view v : {view::overall, view::gpu, view::cpu}) frames += as_text(render(*s, w, rows, kNow, &demo, v));
+        check(!has(frames, "on GPU") && !has(frames, "on G…") && !has(frames, "on GP…"), "holders are never called on GPU at " + std::to_string(w) + "x" + std::to_string(rows));
+      }
+    }
+  }
+
+  // The overall row in each of its states, as it reads at a normal width.
+  check(has(as_text(render(base, 131, 40, kNow)), "dxg     python3 4121  한글추론기 4388    /dev/dxg holders, no usage measured\n"), "the holders row names /dev/dxg");
+  check(has(as_text(render(none, 131, 40, kNow)), "dxg     no holder seen    /dev/dxg holders, no usage measured\n"), "an empty holders row keeps its label");
+  check(has(as_text(render(gone, 131, 40, kNow)), "dxg     unavailable: no WSL data  /dev/dxg holders, no usage measured\n"), "an unavailable holders row keeps its label");
+
+  // The label is whole down to the narrowest panel: names and the long wording go first.
+  for (int w = 36; w <= 300; ++w) {
+    for (const snapshot* s : {&base, &many}) {
+      const std::string row = row_of(as_text(render(*s, w, 66, kNow)), "dxg  ");
+      check(row.size() >= 18 && row.compare(row.size() - 18, 18, " no usage measured") == 0, "the holders row ends in its label at " + std::to_string(w));
+    }
+    if (w >= 43) {
+      const std::string row = row_of(as_text(render(none, w, 66, kNow)), "dxg  ");
+      check(has(row, "no holder seen") && has(row, " no usage measured"), "the empty row keeps its label at " + std::to_string(w));
+    }
+    if (w >= 51) {
+      const std::string row = row_of(as_text(render(gone, w, 66, kNow)), "dxg  ");
+      check(has(row, "unavailable: no WSL data  ") && has(row, " no usage measured"), "the unavailable row keeps its label at " + std::to_string(w));
+    }
+  }
+
+  // The list under PROCESSES, side by side or stacked, both panels that draw it.
+  for (int w = 41; w <= 300; ++w) {
+    for (const snapshot* s : {&base, &long_distro}) {
+      for (const view v : {view::overall, view::cpu}) {
+        const std::string t = as_text(render(*s, w, 66, kNow, &demo, v)), at = " at " + std::to_string(w) + " view " + std::to_string(static_cast<int>(v));
+        const std::string head = after_bar(row_of(t, " of 64,"));
+        if (head.empty()) continue;  // The panel has no room for the list
+        check(head.size() >= 18 && head.compare(head.size() - 18, 18, " no usage measured") == 0, "the WSL list says no usage is measured" + at);
+        const std::string below = t.substr(t.find(" of 64,"));
+        const std::string cols = after_bar(row_of(below, "RSS GiB"));
+        check(cols.size() >= 5 && cols.compare(cols.size() - 5, 5, "  dxg") == 0, "the column names /dev/dxg, not the GPU" + at);
+        const std::string held = after_bar(row_of(below, "python3"));
+        check(held.size() >= 8 && held.compare(held.size() - 8, 8, "  holder") == 0, "a holder's cell is whole" + at);
+      }
+    }
+  }
+  snapshot hostile = base;
+  const std::string name = "\"distro\":\"Ubuntu-24.04\"";
+  hostile.wsl_json.replace(hostile.wsl_json.find(name), name.size(), R"("distro":"\u001b]0;pwned\u0007\u202e)" + std::string(60, 'd') + "\"");
+  for (const int w : {60, 100, 131}) check(vt_clean(vt_frame(render(hostile, w, 66, kNow), 66)), "a cut distro stays safe at " + std::to_string(w));
+
+  const auto head_at = [&](int w) { return as_text({wsl_list(read_wsl(base.wsl_json), w, 3)[0]}); };
+  check(has(head_at(100), "WSL Ubuntu-24.04  top 3 of 64, /dev/dxg holders first, then cores, no usage measured\n"), "the longest wording where it fits");
+  check(has(head_at(64), "WSL Ubuntu-24.04  top 3 of 64, holders first, no usage measured\n"), "the 131-column list keeps the order");
+  check(has(head_at(49), "WSL Ubuntu-…  top 3 of 64, dxg: no usage measured\n"), "the distro gives way to the label");
+}
+
 void check_sweep(const snapshot& s, const history& h, const char* name, int step = 3) {
   for (const view v : {view::overall, view::gpu, view::cpu}) {
     for (const int w : sizes(300, step)) {
@@ -938,6 +1023,81 @@ void check_sizes_with_history() {
 }
 
 #ifdef _WIN32
+// A real failed write ends a redirected run; nothing else may. stdout is swapped by hand, because the
+// console reads it in its constructor. printf is not affected: the C runtime keeps its own handle.
+void check_write_failed() {
+  const HANDLE saved = GetStdHandle(STD_OUTPUT_HANDLE);
+  const std::vector<line> frame = render(busy(), 80, 24, kNow);
+
+  HANDLE reader = nullptr, writer = nullptr;
+  check(CreatePipe(&reader, &writer, nullptr, 1 << 20) != 0, "a pipe for the check");
+  SetStdHandle(STD_OUTPUT_HANDLE, writer);
+  {
+    console c;
+    check(!c.is_terminal() && !c.write_failed(), "nothing has failed before the first write");
+    c.draw(frame);
+    check(!c.write_failed(), "a pipe with a reader takes a frame");
+    c.draw({});
+    check(!c.write_failed(), "an empty frame writes nothing and fails nothing");
+    CloseHandle(reader);
+    c.draw(frame);
+    check(c.write_failed(), "a pipe whose reader has gone is a failed write");
+  }
+  CloseHandle(writer);
+
+  HANDLE nul = CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+  SetStdHandle(STD_OUTPUT_HANDLE, nul);
+  {
+    console c;
+    c.draw(frame);
+    check(!c.write_failed(), "output sent to NUL is not a failure");
+  }
+  CloseHandle(nul);
+
+  nul = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+  SetStdHandle(STD_OUTPUT_HANDLE, nul);
+  {
+    console c;
+    c.draw(frame);
+    check(c.write_failed(), "any refused write counts, not only a pipe");
+  }
+  CloseHandle(nul);
+
+  SetStdHandle(STD_OUTPUT_HANDLE, nullptr);
+  {
+    console c;
+    c.draw(frame);
+    check(c.write_failed(), "no stdout at all is a failed write");
+  }
+
+  HANDLE screen = CreateFileW(L"CONOUT$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+  if (screen == INVALID_HANDLE_VALUE) {
+    printf("console output: no console here, live console checks skipped\n");
+  } else {
+    SetStdHandle(STD_OUTPUT_HANDLE, screen);
+    {
+      console c;
+      check(c.is_terminal(), "CONOUT$ is a terminal");
+      c.draw(frame);
+      c.draw({});
+      check(!c.write_failed(), "a live console does not trip it");
+    }
+    CloseHandle(screen);
+    // Read-only, so VT cannot turn on and the plain branch writes to a console, and WriteFile refuses.
+    screen = CreateFileW(L"CONOUT$", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    SetStdHandle(STD_OUTPUT_HANDLE, screen);
+    {
+      console c;
+      check(!c.is_terminal(), "without write access the console takes the plain branch");
+      c.draw(frame);
+      check(!c.write_failed(), "a console in the plain branch does not trip it either");
+    }
+    CloseHandle(screen);
+    printf("console output: live console checks ran\n");
+  }
+  SetStdHandle(STD_OUTPUT_HANDLE, saved);
+}
+
 // Puts real events in the console's input buffer, where there is one; a piped run has none.
 void check_console() {
   HANDLE in = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
@@ -1062,6 +1222,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 #ifdef _WIN32
+  check_write_failed();  // Before check_console, which can leave this process without a console
   check_console();
 #endif
   check_width();
@@ -1074,6 +1235,7 @@ int main(int argc, char** argv) {
   check_scale();
   check_panels();
   check_denied_note();
+  check_holder_wording();
   check_sizes_with_history();
   printf("%d checks, %d failed\n", g_checks, g_failed);
   return g_failed ? 1 : 0;

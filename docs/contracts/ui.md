@@ -57,8 +57,8 @@ reads schema 1 of the collector's line.
 
 | item | value |
 |---|---|
-| source | `src/ui` 2932 lines, of which `render_check.cpp` 1080 |
-| checks | 95325, 0 failed, run on Windows 2026-11-01. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
+| source | `src/ui` 3117 lines, of which `render_check.cpp` 1242 |
+| checks | 102504, 0 failed, run on Windows 2026-11-01. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
 | sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66 |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once; conhost not checked |
@@ -108,3 +108,10 @@ reads schema 1 of the collector's line.
 - 2026-11-01. The `dxg_denied` warning has two wordings, chosen by the room it has, because no single
   honest string fits every width. It is whole in both panels from 37 columns up, and neither wording says
   a root process holds the GPU.
+- 2026-11-01. `/dev/dxg` holders read `dxg` and `holder` on screen, because `on GPU` read like usage; the
+  `on_gpu` field stays in the data. The WSL list head has three wordings chosen by room, and the distro
+  gives way before the label. The overall row carries the label even when WSL is unavailable, in a short form
+  when narrow.
+- 2026-11-01. `console::write_failed()` is set when a write fails in the plain branch, including with no
+  stdout at all, and never for a console. A reader that stays open but stops reading still blocks the
+  write; that is not covered.

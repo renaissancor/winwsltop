@@ -103,8 +103,10 @@ void console::draw(const std::vector<line>& lines) {
     return;
   }
   const std::string text = as_text(lines);
-  DWORD done = 0;
-  WriteFile(out_, text.data(), static_cast<DWORD>(text.size()), &done, nullptr);
+  DWORD done = 0, mode = 0;
+  // Only WriteFile saying no counts: a short count is a slow reader, and an empty frame writes nothing.
+  // stdout can still be a console here, when VT would not turn on, and a console is not a closed pipe.
+  if (!WriteFile(out_, text.data(), static_cast<DWORD>(text.size()), &done, nullptr) && !GetConsoleMode(out_, &mode)) write_failed_ = true;
 }
 
 bool console::stop_requested() { return g_stop; }

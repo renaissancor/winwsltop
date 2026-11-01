@@ -6,6 +6,7 @@
 #include "ui/console.h"
 #include "ui/history.h"
 #include "wsl/bridge.h"
+#include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -88,16 +89,19 @@ int main(int argc, char** argv) {
       // long is 32 bits here, so a value too large only shows as ERANGE, never as n > INT_MAX.
       char* end = nullptr;
       errno = 0;
-      const long n = strtol(argv[++i], &end, 10);
-      if (errno == ERANGE || *end != '\0' || end == argv[i] || n < 1) { print_help(stderr); return 2; }
+      const char* text = argv[++i];
+      const long n = strtol(text, &end, 10);
+      if (!isdigit(static_cast<unsigned char>(*text)) || errno == ERANGE || *end != '\0' || n < 1) { print_help(stderr); return 2; }
       run = mode::json;
       ++modes;
       lines = static_cast<int>(n);
     }
     else if (strcmp(argv[i], "--text") == 0) { run = mode::text; ++modes; }
     else if (strcmp(argv[i], "--distro") == 0 && i + 1 < argc) {
-      distro = wide(argv[++i]);
-      // The bridge cannot pass these to wsl.exe; refusing here beats 8 s of silence and exit 0.
+      // A missing name would swallow the next option and run the live screen for ever, and the bridge
+      // cannot pass spaces or quotes to wsl.exe; refusing beats 8 s of silence and exit 0.
+      if (argv[++i][0] == '\0' || argv[i][0] == '-') { print_help(stderr); return 2; }
+      distro = wide(argv[i]);
       if (distro.find_first_of(L" \t\"\r\n") != std::wstring::npos) { print_help(stderr); return 2; }
     }
     else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) { print_help(stdout); return 0; }
@@ -184,6 +188,8 @@ int main(int argc, char** argv) {
       if (fwrite(frame.data(), 1, frame.size(), stdout) != frame.size() || fflush(stdout) != 0) return 1;
     } else {
       draw();
+      // A live run with nowhere to write would otherwise never end, and neither would its collector.
+      if (screen->write_failed()) { delete screen; return 1; }
     }
   }
   delete screen;

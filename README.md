@@ -56,7 +56,7 @@ all, even under load. winwsltop reads both sides at once and keeps them apart:
 - **CPU, memory, disk and network** for Windows, and CPU and processes for WSL.
 - **A one-minute history** for each graph, and a JSON record you can save.
 
-Every figure on screen names its source. Windows and WSL figures are never added together, because they
+The GPU panel names the source of each figure. Windows and WSL figures are never added together, because they
 describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero.
 
 ## Get it
@@ -134,9 +134,9 @@ console are all untested, so reports from other machines are welcome, including 
 
 ## How it's checked
 
-This project records a counter only after checking what it reads on real hardware.
-[`docs/measurable.md`](docs/measurable.md) is the ledger of what was observed, with the raw output for
-each number, and it says plainly what was false or never checked. The experiments behind it are in
+[`docs/measurable.md`](docs/measurable.md) is the ledger of what was observed on real hardware, with the
+raw output for each number where it was saved. It says plainly what turned out false, what was only
+partly checked, and what was never checked. The experiments behind it are in
 [`experiments/`](experiments/).
 
 ## Build from source

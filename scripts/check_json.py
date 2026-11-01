@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Reads `winwsltop --once` on stdin and checks it against what docs/json-output.md promises.
 
-usage: check_json.py docs/json-output.md [--need-wsl]
+usage: check_json.py docs/json-output.md [--full]
 
-Key sets are fixed here, per object and in both directions, so a gutted snapshot fails and a key added
-to the output has to be added here and to the doc. --need-wsl also requires a live collector line."""
+Key sets are fixed here, per object and in both directions, and a key added to the output has to be
+added here and to its doc. --full is for the release machine, which has WSL and an NVIDIA GPU: it also
+requires every collector to have returned real data, so a binary that runs but measures nothing fails."""
 import json
 import re
 import sys
@@ -67,13 +68,32 @@ if snapshot["schema"] != 1:
     fail("schema is not 1")
 
 data = snapshot["wsl"]["data"]
-if "--need-wsl" in sys.argv and not isinstance(data, dict):
-    fail("wsl.data is null: the collector did not run")
 if isinstance(data, dict):
     same("wsl.data", data, WSL_DATA)
+if "--full" in sys.argv:
+    if not isinstance(data, dict):
+        fail("wsl.data is null: the collector did not run")
+    wsl = snapshot["wsl"]
+    if not 0 <= wsl["age_s"] < 5:
+        fail(f"wsl.age_s is {wsl['age_s']}: the collector is not live")
+    if wsl["restarts"] != 0:
+        fail(f"the collector restarted {wsl['restarts']} times")
+    if data["schema"] != 1 or not data["core_pct"] or not data["processes"]:
+        fail("wsl.data has no real content")
+    if not isinstance(data["busy_pct"], (int, float)):
+        fail("wsl.data.busy_pct is not a number")
+    if not device["present"] or "util_pct" not in device or "mem_total" not in device:
+        fail("no GPU device readings: NVML did not load")
+    if not snapshot["gpu_engines_known"] or not snapshot["gpu_split"]["valid"]:
+        fail("no GPU engine readings: PDH did not work")
+    if not snapshot["disks"] or not snapshot["nets"] or not snapshot["gpu_memory"]:
+        fail("no disk, network or GPU memory rows")
 
-doc = set(re.findall(r"`([a-z_0-9]+)`", open(sys.argv[1], encoding="utf-8").read()))
+def named_in(path):
+    return set(re.findall(r"`([a-z_0-9]+)`", open(path, encoding="utf-8").read()))
+
+
 every = set().union(*OBJECTS.values(), *ROWS.values(), DEVICE_ALWAYS, DEVICE_OPTIONAL)
-missing = sorted(every - doc)
+missing = sorted(every - named_in(sys.argv[1])) + sorted(WSL_DATA - named_in("wsl-collector/PROTOCOL.md"))
 if missing:
-    fail("not in the doc: " + ", ".join(missing))
+    fail("not in the docs: " + ", ".join(missing))

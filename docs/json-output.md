@@ -13,8 +13,8 @@ answer. A stopped distro gets started, which can take longer, and the run may th
 | code | meaning |
 |---|---|
 | 0 | It ran. This includes runs with no WSL data or no GPU, so read the fields below |
-| 1 | Stdout closed before the run finished, for example the reader of a pipe went away |
-| 2 | Bad arguments: an unknown option, a `--record` value that isn't a whole number from 1 to 2147483647, a `--distro` name with spaces or quotes, or more than one of `--text`, `--once` and `--record`. Usage goes to stderr |
+| 1 | Stdout closed before the run finished, for example the reader of a pipe went away. From a WSL shell, WSL's own pipe relay decides instead: the exit code can be 141 or 0, and `>&-` can run to the end |
+| 2 | Bad arguments: an unknown option, a `--record` value that isn't a whole number from 1 to 2147483647, a `--distro` name that is empty, starts with `-`, or holds spaces or quotes, or more than one of `--text`, `--once` and `--record`. Usage goes to stderr |
 
 ## Reading it safely
 
@@ -29,8 +29,9 @@ answer. A stopped distro gets started, which can take longer, and the run may th
   `wsl.data.dxg_pids` lists who holds the GPU, which is identity, not usage.
 - **The split is not an exact share.** `vm_pct` and `windows_pct` have summed to 88% and peaked at 112%
   here, and they can differ from `gpu_device.util_pct`. The difference is unexplained.
-- **A zero can be a failed read.** Disk fields and CPU busy can read 0 instead of being absent:
-  [`TODO.md`](TODO.md) items 22 and 24. Numbers that aren't finite print as `null`.
+- **A zero can be a failed read.** Disk fields, CPU busy, `memory` fields, network rates after a counter
+  reset, and `vm_local` and `windows_local` can read 0 instead of being absent, even with `valid` true:
+  [`TODO.md`](TODO.md) items 22, 24 and 27. Numbers that aren't finite print as `null`.
 
 `schema` is 1. A change of meaning raises it, and new keys can appear without raising it, so ignore keys
 you don't know. Sizes are bytes, and `cores` of 1.0 is one logical CPU busy for the whole interval.

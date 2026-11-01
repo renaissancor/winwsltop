@@ -130,7 +130,7 @@ if [ "${1:-}" = "--windows" ]; then
     w=$(wslpath -u "$exe")
     "$w" --help | grep -q 'usage: winwsltop' && pass "--help prints usage, exit 0" || fail "--help"
     "$w" --version | grep -q '^winwsltop ' && pass "--version" || fail "--version"
-    for bad in '--record abc' '--record 99999999999' '--once --text' '--record 1 --once'; do
+    for bad in '--record abc' '--record 0' '--record 99999999999' '--once --text' '--record 1 --once' '--distro --once'; do
       code=0; timeout 10 "$w" $bad >/dev/null 2>&1 || code=$?
       [ "$code" -eq 2 ] && pass "$bad is exit 2" || fail "$bad exited $code"
     done

@@ -49,11 +49,13 @@ cp /mnt/c/Windows/System32/whoami.exe "$tmp/bin/wsl.exe"
 printf 'raise SystemExit(1)\n' > "$tmp/bin/json.py"
 printf 'not a dll' > "$tmp/bin/pdh.dll"
 printf 'not a dll' > "$tmp/bin/IPHLPAPI.DLL"
+printf '<?xml version="1.0"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"><file name="pdh.dll"/></assembly>' > "$tmp/bin/winwsltop.exe.manifest"
 printf 'import json\nprint(json.dumps({"schema": 1, "distro": "PLANTED"}), flush=True)\n' > "$tmp/wsl-collector/collector.py"
-json=$(cd "$tmp/bin" && ./winwsltop.exe --once | tr -d '\r') || fail "the binary did not run beside planted files"
+# Eight samples, not one: a collector that dies after its first line must show up as stale data.
+json=$(cd "$tmp/bin" && ./winwsltop.exe --record 8 | tr -d '\r') || fail "the binary did not run beside planted files"
 case "$json" in *PLANTED*) fail "the on-disk collector ran" ;; esac
-printf '%s\n' "$json" | python3 scripts/check_json.py docs/json-output.md --need-wsl \
-  || fail "--once from an empty folder is not a full snapshot with live WSL data"
+printf '%s\n' "$json" | tail -1 | python3 scripts/check_json.py docs/json-output.md --full \
+  || fail "the last sample from a salted folder is not a full snapshot with live data"
 
 mkdir -p dist
 cp "$exe" dist/winwsltop.exe

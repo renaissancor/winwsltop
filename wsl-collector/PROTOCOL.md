@@ -6,8 +6,9 @@ single-quoted Python that reads a decimal length line from stdin, then that many
 and executes them. Windows keeps stdin open afterwards for pings. The collector prints one JSON object
 per line, about once a second, until its stdout closes or stdin reaches EOF (it then exits at once, so no
 collector outlives `winwsltop.exe`). Nothing is written inside WSL, and it reads no command lines.
-The bridge reads `collector.py` from `wsl-collector/` beside the executable and falls back to the copy
-embedded in `src/wsl/collector_embed.cpp`; regenerate that with `python3 wsl-collector/embed.py`.
+A normal build reads `collector.py` from `..\wsl-collector\` relative to the executable and falls back to
+the copy embedded in `src/wsl/collector_embed.cpp`; regenerate that with `python3 wsl-collector/embed.py`.
+A release build only ever uses the embedded copy.
 
 ## Clock alignment
 

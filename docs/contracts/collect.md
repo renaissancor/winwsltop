@@ -59,7 +59,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 | source | `src/host` 269 lines, `src/gpu` 253, `src/wsl` 575 (233 of them generated), `collector.py` 144 |
 | collector cost | 3.46 ms per sample; line 0.08 to 0.17 s old on arrival (ledger, "WSL collector checked") |
 | `GPU Engine` read | 0.53 ms over 485 instances (ledger, "Windows collector checked") |
-| NVML init | 626 to 685 ms at construction, about 1 ms per sample (ledger, experiment 02) |
+| NVML init | about 626 ms at construction, about 1 ms per sample (ledger, experiment 02) |
 | `/dev/dxg` scan | incomplete without root: 36 of about 64 processes unreadable (ledger) |
 | verified against the other side | memory total, process count, `vmmemWSL` working set equal; threads and CPU within a window (ledger) |
 | not verified | GPU memory under a WSL allocation; the NVML `NVSMI` fallback path; a failing `nvmlInit_v2` |

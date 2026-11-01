@@ -34,6 +34,7 @@ re-reads the code.
 | 24 | nit | collect | `src/host/cpu.cpp`, `wsl-collector/collector.py` | With a zero time delta between two reads, CPU busy is reported as 0, not absent, so it draws in the graphs as a measured 0 (`contracts/collect.md` rule 2). Found by reading the code in the 2026-11-01 audit; not seen to happen | open |
 | 25 | low | collect, core | `src/wsl/bridge.cpp`, `src/record/jsonl.cpp` | Any line starting with `{` is spliced into `wsl.data` unparsed, so a malformed line would make `--once` invalid JSON. No trigger with the real collector | open |
 | 26 | nit | core | `src/record/jsonl.cpp` | The JSON carries `source` only on `gpu_engines` and `gpu_split`; other sources are stated in `docs/json-output.md` | open |
+| 27 | low | core, collect | `src/main.cpp`, `src/analysis/attribution.cpp` | The GPU memory read result is ignored, so `vm_local` and `windows_local` read 0 with `gpu_split.valid` true when it fails | open |
 
 Checked and found correct in the same audit: the `nt_process` layout, the `/proc/<pid>/stat` field
 indices, the NVML v2 struct version, the clock-offset sign and midpoint maths, the JSON parser's

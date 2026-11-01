@@ -15,6 +15,9 @@ class console {
   bool is_terminal() const { return terminal_; }
   bool size(int& width, int& height) const;  // false when stdout is not a console
   void draw(const std::vector<line>& lines);
+  // True for good once writing plain text to redirected stdout has failed: a pipe with no reader, a
+  // full disk, no stdout at all. Nothing can reach the reader after that. A console never sets it.
+  bool write_failed() const { return write_failed_; }
   // Ctrl+C or a closing window asked to end. Poll it, so that the destructor runs.
   static bool stop_requested();
   // The next key this program uses: '1', '2', '3' or 'q'. 0 when none is waiting or there is no
@@ -28,6 +31,7 @@ class console {
   void* in_ = nullptr;  // CONIN$, null without a console
   unsigned long saved_mode_ = 0, saved_in_mode_ = 0;
   bool terminal_ = false;
+  bool write_failed_ = false;
 };
 
 }  // namespace wwt

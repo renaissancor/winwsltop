@@ -357,19 +357,26 @@ std::vector<line> gpu_section(const snapshot& s, const wsl_view& w, int width) {
     out.push_back(side("Windows", split.windows_pct, split.windows_local, ""));
   }
 
+  // Who has /dev/dxg open, which is not who is using the GPU, so every state of this row says so. The
+  // short wording keeps "no usage measured" whole on a row too narrow for the long one.
+  static constexpr std::string_view kTail = "  /dev/dxg holders, no usage measured", kShortTail = "  no usage measured";
+  static constexpr std::string_view kNoHolder = "no holder seen  ", kNoData = "unavailable: no WSL data";
+  row r;
+  r.add("dxg", tone::dim).to(kCol - 5);
+  const auto tail_after = [&](int least) { return r.cols() + least + static_cast<int>(kTail.size()) <= width ? kTail : kShortTail; };
   if (!w.ok) {
-    out.push_back(message("on GPU", "unavailable: no WSL data", tone::watch, kCol - 5));
+    r.add(kNoData, tone::watch);
+    r.add_if_fits(tail_after(static_cast<int>(kNoData.size())), width);
+    out.push_back(r);
   } else {
     // Names only. /dev/dxg says who holds the GPU; nothing here says how much each one uses.
-    static constexpr std::string_view kTail = "  /dev/dxg holders, no usage measured";
-    row r;
-    r.add("on GPU", tone::dim).to(kCol - 5);
-    const int room = width - r.cols() - static_cast<int>(kTail.size()) - 8;
     std::vector<std::string> names;
     for (const uint32_t pid : w.dxg_pids) {
       const auto it = std::find_if(w.processes.begin(), w.processes.end(), [&](const wsl_process& p) { return p.pid == pid; });
       names.push_back(it == w.processes.end() ? fmt("pid %u", pid) : fit(it->name, 20) + fmt(" %u", pid));
     }
+    const std::string_view tail = tail_after(names.empty() ? static_cast<int>(kNoHolder.size()) : display_width(fmt("+%d more", static_cast<int>(names.size()))));
+    const int room = width - r.cols() - static_cast<int>(tail.size()) - 8;
     size_t shown = 0;
     int used = 0;
     for (; shown < names.size(); ++shown) {
@@ -378,9 +385,9 @@ std::vector<line> gpu_section(const snapshot& s, const wsl_view& w, int width) {
       r.add(names[shown]).add("  ");
       used += n;
     }
-    if (names.empty()) r.add("no holder seen  ", tone::dim);
+    if (names.empty()) r.add(kNoHolder, tone::dim);
     else if (shown < names.size()) r.add(fmt("+%d more", static_cast<int>(names.size() - shown)));
-    r.add(kTail, tone::dim);
+    r.add(tail, tone::dim);
     out.push_back(r);
     if (w.dxg_denied > 0) {
       out.push_back(message("", denied_note(w.dxg_denied, width - (kCol - 5)), tone::watch, kCol - 5));
@@ -636,8 +643,18 @@ std::vector<line> wsl_list(const wsl_view& w, int col, int rows) {
     return a->cores != b->cores ? a->cores > b->cores : a->rss > b->rss;
   });
   const size_t shown = std::min(list.size(), static_cast<size_t>(std::max(0, rows)));
-  if (!w.distro.empty()) head.add(" ").add(w.distro, tone::title, true);
-  head.add(fmt("  top %d of %lld, on GPU first, then cores", static_cast<int>(shown), static_cast<long long>(w.process_count)), tone::dim);
+  // The "holder" column is /dev/dxg open, not GPU use, and this head is where the list says so. The
+  // longest wording that fits, and the distro, which the WSL section names too, gives way before it.
+  static constexpr std::string_view kHeads[] = {", /dev/dxg holders first, then cores, no usage measured", ", holders first, no usage measured", ", dxg: no usage measured"};
+  const std::string count = fmt("  top %d of %lld", static_cast<int>(shown), static_cast<long long>(w.process_count));
+  const int taken = head.cols() + display_width(count), distro = w.distro.empty() ? 0 : display_width(w.distro) + 1;
+  std::string_view label = kHeads[std::size(kHeads) - 1];
+  for (const std::string_view h : kHeads) {
+    if (taken + distro + static_cast<int>(h.size()) <= col) { label = h; break; }
+  }
+  const std::string name = fit(w.distro, col - taken - static_cast<int>(label.size()) - 1);
+  if (!name.empty()) head.add(" ").add(name, tone::title, true);
+  head.add(count, tone::dim).add(label, tone::dim);
   out.push_back(head);
 
   const bool pids = col >= 48;
@@ -646,7 +663,7 @@ std::vector<line> wsl_list(const wsl_view& w, int col, int rows) {
   cols.add(pad_left("cores", 6), tone::dim).add(" ");
   if (pids) cols.add(pad_left("pid", 7), tone::dim).add(" ");
   cols.add(pad("name", name_w), tone::dim).add(pad_left("RSS GiB", 8), tone::dim).add("  st", tone::dim);
-  cols.add("  GPU", tone::dim);
+  cols.add("  dxg", tone::dim);
   out.push_back(cols);
 
   for (size_t i = 0; i < shown; ++i) {
@@ -656,7 +673,7 @@ std::vector<line> wsl_list(const wsl_view& w, int col, int rows) {
     if (pids) r.add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
     r.add(pad(p.name, name_w), p.on_gpu ? tone::title : tone::text).add(pad_left(fmt("%.1f", gib(p.rss)), 8));
     r.add("  ").add(pad(p.state, 1), p.state == "D" ? tone::watch : tone::dim);
-    if (p.on_gpu) r.add("  on GPU");
+    if (p.on_gpu) r.add("  holder");
     out.push_back(r);
   }
   return out;

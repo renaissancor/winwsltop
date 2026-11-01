@@ -54,7 +54,7 @@ the one inferred value, and keep the build, the checks and the ownership documen
 | source under core | `src/core` 243 lines, `src/main.cpp` 191, `src/record` 130, `src/analysis` 33 |
 | JSON schema | 1 |
 | collection cost per sample | about 9 ms on this machine, ledger "Windows collector checked" |
-| checks that exist | the two `check.sh` modes above |
+| checks that exist | the two `check.sh` modes above, and `scripts/release.sh` |
 | checks that are targets | CI, recorded fixtures (`ARCHITECTURE.md`, Targets) |
 
 ## Open questions
@@ -96,8 +96,12 @@ the one inferred value, and keep the build, the checks and the ownership documen
   was added to it, because an empty `gpu_engines` could mean idle or a failed read. A bad `--record` is now
   exit 2: `atoi` made a typo print nothing and exit 0.
 - 2026-11-01. `--record 0`, a value out of range, and combining `--text`, `--once` and `--record` are exit 2.
-  A closed stdout ends the run with exit 1. A release build never reads a collector from disk
+  A closed stdout ends the run with exit 1, when launched natively. A release build never reads a collector from disk
   (`WWT_RELEASE`), and `scripts/release.sh` proves that with a planted collector and `wsl.exe`.
-- 2026-11-01. The DLL search is limited to System32 first thing in `main`, and a release build delay-loads
-  `pdh` and `iphlpapi`. `/DEPENDENTLOAD:SYSTEM32` was tried and does not cover an `.exe`'s own static
+- 2026-11-01. The DLL search is limited to System32 first thing in `main`, a release build delay-loads
+  `pdh` and `iphlpapi` and embeds a manifest, which stops a sidecar manifest redirecting a DLL. `/DEPENDENTLOAD:SYSTEM32` was tried and does not cover an `.exe`'s own static
   imports: the planted DLLs in `scripts/release.sh` still stopped it loading.
+- 2026-11-01. A `winwsltop.exe.local` beside the exe was still honoured on the build machine, which has
+  `DevOverrideEnable=1`, a developer setting. It is not tested on a default machine, and is accepted as
+  outside what a release can close. Publishing order: merge, then `scripts/release.sh`, then
+  `gh release create vX.Y.Z dist/winwsltop.exe dist/winwsltop.exe.sha256 --notes-file docs/releases/vX.Y.Z.md`.
