@@ -56,15 +56,15 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 
 | item | value |
 |---|---|
-| source | `src/host` 356 lines, `src/gpu` 253, `src/wsl` 620 (278 of them generated), `collector.py` 165 |
+| source | `src/host` 356 lines, `src/gpu` 253, `src/wsl` 621 (279 of them generated), `collector.py` 165 |
 | collector cost | 3.46 ms per sample; line 0.08 to 0.17 s old on arrival (ledger, "WSL collector checked") |
-| collector line | 3522 to 3536 bytes with 30 rows, 443 to 447 larger with `cpu_split`, `load` and `threads`, against a 1 KB budget (`docs/design/cpu-panel.md` section 8). Cost 6.99 ms against 7.05 for the old collector, run side by side for 10 samples |
-| Ready count | 29.3 µs mean, 57.3 max, over 345 processes and 6152 threads, on 6.32 ms for a sample; `cost.processes` averaged 5.04 ms over 11 samples. No load |
+| collector line | 3522 to 3536 bytes with 30 rows, 443 to 447 larger with `cpu_split`, `load` and `threads`, against a 1 KB budget (`docs/design/cpu-panel.md` section 8). Cost 6.99 ms against 7.05 for the old collector, run side by side for 10 samples | Read live, no raw file.
+| Ready count | 29.3 µs mean, 57.3 max, over 345 processes and 6152 threads, on 6.32 ms for a sample; `cost.processes` averaged 5.04 ms over 11 samples. No load | Read live, no raw file.
 | `GPU Engine` read | 0.53 ms over 485 instances (ledger, "Windows collector checked") |
 | NVML init | about 626 ms at construction, about 1 ms per sample (ledger, experiment 02) |
 | `/dev/dxg` scan | incomplete without root: 36 of about 64 processes unreadable (ledger) |
 | verified against the other side | memory total, process count, `vmmemWSL` working set equal; threads and CPU within a window (ledger) |
-| CPU split and layout | `user_pct` plus `kernel_pct` within 0.001 of `busy_pct` over 11 samples. The same formula on the same NT counts against `_Total` `% User Time` and `% Privileged Time`, 11 windows: mean gap 0.004 and 0.026 points, largest 0.009 and 0.091. Layout on this machine: 20 rows, 6 two-thread cores of class 1 then 8 one-thread cores of class 0, as the ledger's "CPU layout" |
+| CPU split and layout | `user_pct` plus `kernel_pct` within 0.001 of `busy_pct` over 11 samples. The same formula on the same NT counts against `_Total` `% User Time` and `% Privileged Time`, 11 windows: mean gap 0.004 and 0.026 points, largest 0.009 and 0.091. Layout on this machine: 20 rows, 6 two-thread cores of class 1 then 8 one-thread cores of class 0, as the ledger's "CPU layout" | Read live, no raw file.
 | not verified | GPU memory under a WSL allocation; the NVML `NVSMI` fallback path; a failing `nvmlInit_v2`; the Ready counts under load, where at most 1 and 0 were seen at idle; `vmmem_cores_known` false on a new `vmmemWSL`; a failed layout read; more than one processor group |
 
 ## Open questions

@@ -43,6 +43,8 @@ which core owns, reads schema 1 of the collector's line.
    except `kStaleS`, in `snapshot.h` because `lost` stops on it too.
 8. Graphs use a fixed 0-100 scale with time on the x axis. A missing sample or a stall is a blank gap,
    never a zero. Panels are never stacked or summed, and each graph title names its source.
+   Exception, the large CPU panel only: a repeated guest line carries the previous value for one sample,
+   and two in a row are a gap (design section 5). Heat and lanes there show a mean, the plots a peak.
 
 ## How to validate
 
@@ -83,7 +85,7 @@ which core owns, reads schema 1 of the collector's line.
   is chosen by comparing the two thread counts. Switch to the state once `snapshot.h` has it on the branch.
 - A collector that restarted while its line still reads is not named in the large layout: `collector_status`
   has no row there. The overall panel keeps it.
-- `vm_row` on the overall screen prints `vmmem_cores` without reading `vmmem_cores_known`, so a new VM's first
+- CLOSED 2026-11-01: `vm_row` on the overall screen printed `vmmem_cores` without reading `vmmem_cores_known`, so a new VM's first
   sample reads `0.00 cores`. The large layout does not. Not changed here: outside this work, and it changes a checked screen.
 - `read_wsl` still runs twice a sample and allocates each time, in `history::push` and in `render`. The ring
   itself allocates nothing after the first push.
@@ -145,3 +147,6 @@ which core owns, reads schema 1 of the collector's line.
 - 2026-11-01. `console::write_failed()` is set when a write fails in the plain branch, including with no
   stdout at all, and never for a console. A reader that stays open but stops reading still blocks the
   write; that is not covered.
+- 2026-11-01. The large CPU panel's heat block and thin lanes replace part of the btop-sized graphs
+  decision above, on windows under about 40 rows: the user chose it, given the 100 by 34 allocation.
+  Taller windows give the height back to the busy graph.

@@ -61,7 +61,7 @@ documents true.
 
 | item | value |
 |---|---|
-| source under core | `src/core` 619 lines, `src/main.cpp` 201, `src/record` 164, `src/analysis` 169, `scripts/lost_check.cpp` 448 |
+| source under core | `src/core` 620 lines, `src/main.cpp` 212, `src/record` 165, `src/analysis` 175, `scripts/lost_check.cpp` 508 |
 | JSON schema | 1 |
 | collection cost per sample | about 9 ms on this machine, ledger "Windows collector checked" |
 | checks that exist | the two `check.sh` modes above, `scripts/lost_check.cpp` under the second, and `scripts/release.sh` |

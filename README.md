@@ -53,8 +53,10 @@ all, even under load. winwsltop reads both sides at once and keeps them apart:
 - **GPU use on each side:** Windows processes, and the whole WSL VM as one figure.
 - **Who holds the GPU in WSL:** the Linux processes that have `/dev/dxg` open.
 - **The device itself:** utilisation, memory, power, temperature and clock.
-- **CPU, memory, disk and network** for Windows, and CPU and processes for WSL.
-- **A one-minute history** for each graph, and a JSON record you can save.
+- **When the two sides fight over the CPU:** WSL can't see this for itself. In one test it read 99.997% busy,
+  with `steal` at 0, while doing 71% less work. The CPU panel shows what Windows really gave the VM.
+- **CPU, memory, disk and network** for Windows, and CPU, memory and processes for WSL.
+- **History** for each graph: one minute, or up to 15 minutes on the CPU panel, and a JSON record you can save.
 
 Each graph names its source. Windows and WSL figures are never added together, because they
 describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero.
@@ -73,8 +75,28 @@ The binary isn't code-signed, so Windows SmartScreen may warn you the first time
 |---|---|
 | `1` | Overall |
 | `2` | GPU: graphs of device, WSL VM, Windows, memory and power, then Windows GPU users and WSL `/dev/dxg` holders |
-| `3` | CPU: Windows and WSL side by side, per-core rows, both process lists |
+| `3` | CPU and RAM: what each side says and what the VM costs, in words, then a timeline of every thread on both sides, then both process lists. Needs 100 by 27 or more, or it shows a simpler panel |
+| `t` | CPU panel: show the last 60 seconds, 5 minutes or 15 minutes. History starts when you launch, so a new run shows `collecting` |
 | `q` | Quit (Ctrl+C works too) |
+
+The CPU panel is built for a dark terminal. A light theme stays readable only in part.
+
+### What `WSL short` means
+
+`WSL short ≈14 of 20 vCPUs, inferred` is the gap between how busy WSL says it was and how much CPU Windows
+charged the VM. It's the one cross-system figure in the tool, and it's an inference, so it says so. In a
+test with both sides using every thread, it tracked the work WSL really lost, at three levels of contention,
+one trial each. It isn't a measurement, and it's limited to what was tested:
+
+- It needs WSL at 99% or more and Windows at 95% or more. Anywhere else it reads `n/a`, which doesn't mean
+  nothing was lost. A partly busy WSL under contention hasn't been tested.
+- A `.wslconfig` limit on processors turns it off, as `lost CPU n/a, vCPUs differ`.
+- It was only tested against CPU load, not memory, disk or GPU load, so a game beside a build may read `n/a`.
+- It's a 5-second mean, so it lags, and it fades over about 7 seconds after Windows goes quiet.
+
+The tool shows no CPU temperature or clock speed. No temperature was readable here without administrator
+rights, and the live clock figures don't yet agree with each other. Its busy figures can also differ from
+Task Manager's.
 
 ```text
 winwsltop                  the live screen
