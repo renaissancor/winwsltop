@@ -45,3 +45,13 @@ A rerun should take one more NVMe read about a minute after the last window: the
 later reading to show whether its gap from the drive was durable.
 
 **Result (2026-11-01):** see `docs/measurable.md`, section "Disk and network collectors checked".
+
+**Redaction (2026-11-01):** the three files `results/window{1,2,3}-counters-2026-11-01.txt` are no
+longer byte-for-byte what the run wrote. One GUID in their `STORAGE\Volume\{...}` instance names was
+a version 1 UUID whose last 12 hex digits were this PC's Bluetooth adapter MAC address, so the user
+approved replacing those digits with `xxxxxxxxxxxx` before the repo went public (225 lines). The
+rest of that GUID is kept and no measured number changed. The other GUID in those `STORAGE\Volume`
+rows was kept, because its last 12 digits are the Windows "no NIC" placeholder, not an adapter
+address (decoded and compared with this machine's adapters by the orchestrator on 2026-11-01).
+`analyze.py` does not read either GUID: rerun on these files, its output is identical to
+`results/analysis-2026-11-01.txt`.

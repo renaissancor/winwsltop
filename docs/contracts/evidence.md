@@ -111,3 +111,15 @@ about this machine lives.
 - 2026-11-01. An earlier full run of experiment 03 was overwritten before the scripts were final. No
   ledger number comes from it. The index row in `docs/README.md` was added by the orchestrator in the
   same commit as the experiment (622f874), since `scripts/check.sh` needs them together.
+- 2026-11-01. Approved by the user before the repo goes public: one GUID in the
+  `STORAGE\Volume\{...}` instance names of
+  `experiments/03-host-counters/results/window{1,2,3}-counters-2026-11-01.txt` was redacted across
+  the history. It was a version 1 UUID whose last 12 hex digits were this PC's Bluetooth adapter MAC
+  address; those digits now read `xxxxxxxxxxxx` (225 lines) and the rest of the GUID is kept. The
+  other GUID in those `STORAGE\Volume` rows was kept, because its last 12 digits are the Windows
+  "no NIC" placeholder, not an adapter address (decoded and compared with this machine's adapters by
+  the orchestrator on 2026-11-01). No measured number changed, and `analyze.py` reruns on these
+  files to output identical to `analysis-2026-11-01.txt`. This is the one sanctioned edit to a file
+  holding measured output; derived analysis output is outside that claim, and
+  `analysis-2026-11-01.txt` changed in 36ed08b. Commit hashes across the repo changed in the same
+  rewrite, and citations were remapped.
