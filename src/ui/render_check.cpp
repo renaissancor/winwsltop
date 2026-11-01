@@ -1,7 +1,9 @@
-// Checks the renderer on hand-built snapshots. render_check <busy|bare> W H prints a frame as text;
-// render_check <busy|bare> draws it on the console until Ctrl+C.
+// Checks the renderer on hand-built snapshots. render_check <busy|bare> W H prints a frame as text,
+// the one overall screen with no history; add overall, gpu or cpu for that panel over a made-up minute.
+// render_check <busy|bare> draws on the console until Ctrl+C; add live for the panels, keys 1 2 3 q.
 // Build: scripts/build.sh src/ui/render_check.cpp   (it includes the sources it tests)
 #include "ui/render.cpp"
+#include "ui/history.h"
 #include "ui/wsl_view.cpp"
 #ifdef _WIN32
 #include "ui/console.cpp"
@@ -12,6 +14,8 @@
 #include <limits>
 
 using namespace wwt;
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+constexpr double kInf = std::numeric_limits<double>::infinity();
 
 namespace {
 
@@ -113,6 +117,24 @@ void check_size(const snapshot& s, const char* name) {
   check(render(s, 0, 40).empty() && render(s, 100, 0).empty() && render(s, -5, -5).empty(), "no size, no lines");
 }
 
+// Only colour, cursor and erase sequences, and no control character.
+bool vt_clean(const std::string& vt) {
+  bool clean = !has(vt, "\x1b[2J") && !has(vt, "\x1b]0");
+  for (size_t i = 0; i < vt.size(); ++i) {
+    const auto c = static_cast<unsigned char>(vt[i]);
+    if (c == 0x1B) {
+      clean = clean && i + 1 < vt.size() && vt[i + 1] == '[';
+      size_t e = i + 2;
+      while (e < vt.size() && (vt[e] == ';' || vt[e] == '?' || (vt[e] >= '0' && vt[e] <= '9'))) ++e;
+      clean = clean && e < vt.size() && (vt[e] == 'm' || vt[e] == 'H' || vt[e] == 'K' || vt[e] == 'J');
+      i = e;
+    } else if (c < 0x20 || c == 0x7F) {
+      clean = false;
+    }
+  }
+  return clean;
+}
+
 void check_honesty() {
   for (const int w : {80, 100, 131, 200}) {
     const std::string n = " at " + std::to_string(w);
@@ -188,22 +210,7 @@ void check_edges() {
   s.wsl_json = "{\"schema\":1,\"busy";
   check(has(as_text(render(s, 131, 40, kNow)), "could not be read"), "a cut line is not guessed at");
 
-  const std::string vt = vt_frame(render(busy(), 131, 40, kNow), 40);
-  bool clean = true;
-  for (size_t i = 0; i < vt.size(); ++i) {
-    const auto c = static_cast<unsigned char>(vt[i]);
-    if (c == 0x1B) {
-      clean = clean && i + 1 < vt.size() && vt[i + 1] == '[';
-      size_t e = i + 2;
-      while (e < vt.size() && (vt[e] == ';' || vt[e] == '?' || (vt[e] >= '0' && vt[e] <= '9'))) ++e;
-      clean = clean && e < vt.size() && (vt[e] == 'm' || vt[e] == 'H' || vt[e] == 'K' || vt[e] == 'J');
-      i = e;
-    } else if (c < 0x20 || c == 0x7F) {
-      clean = false;
-    }
-  }
-  check(clean, "only our own sequences reach the terminal");
-  check(!has(vt, "\x1b[2J") && !has(vt, "\x1b]0"), "names cannot clear the screen or set the title");
+  check(vt_clean(vt_frame(render(busy(), 131, 40, kNow), 40)), "only our own sequences reach the terminal");
 }
 
 void check_width() {
@@ -243,6 +250,468 @@ void check_reader() {
   check(read_wsl("{\"schema\":1,\"busy_pct\":1,\"memory\":{\"total\":-5},\"process_count\":1e300}").mem_total == 0, "out of range numbers do not wrap");
 }
 
+// ---- History and panels --------------------------------------------------------------------------
+
+// A sample at a time, on a snapshot's other fields. wsl_busy below 0 keeps the snapshot's own line.
+snapshot sample_at(snapshot s, int64_t t, double device, double vm, double win, double wsl_busy = -1) {
+  s.unix_ms = t;
+  s.gpu_device.util_pct = device;
+  s.gpu_split.vm_pct = vm;
+  s.gpu_split.windows_pct = win;
+  s.cpu.busy_pct = device * 0.6;
+  const size_t at = s.wsl_json.find("\"busy_pct\":");
+  if (wsl_busy >= 0 && at != std::string::npos) {
+    s.wsl_json.replace(at, s.wsl_json.find(',', at) - at, "\"busy_pct\":" + std::to_string(wsl_busy));
+  }
+  return s;
+}
+
+// A made-up minute for reading frames: load in waves, the measured 112% peak, a 5 s stall.
+history demo_minute(const snapshot& base) {
+  history h;
+  for (int age = 60; age >= 0; --age) {
+    if (age >= 20 && age < 25) continue;
+    const double wave = 50 + 45 * std::sin(age / 7.0);
+    snapshot s = sample_at(base, kNow - age * 1000, wave, age == 42 ? 112 : wave * 0.6, (100 - wave) * 0.4, 30 + wave / 2);
+    if (base.gpu_device.present) {
+      s.gpu_device.mem_used = static_cast<uint64_t>((6 + wave / 25) * static_cast<double>(kG));
+      s.gpu_device.power_w = 40 + wave * 1.5;
+    }
+    h.push(s);
+  }
+  return h;
+}
+
+int count_braille(const std::string& t) {  // U+2801 to U+28FF: a blank cell is a space
+  int n = 0;
+  for (size_t i = 0; i + 2 < t.size(); ++i) {
+    const auto a = static_cast<unsigned char>(t[i]), b = static_cast<unsigned char>(t[i + 1]), c = static_cast<unsigned char>(t[i + 2]);
+    if (a == 0xE2 && b >= 0xA0 && b <= 0xA3 && !(b == 0xA0 && c == 0x80)) ++n;
+  }
+  return n;
+}
+
+// Only the graph rows of a frame: the core rows are braille too.
+std::string graph_rows(const std::string& t) {
+  std::string out;
+  for (size_t from = 0; from < t.size();) {
+    const size_t nl = std::min(t.find('\n', from), t.size());
+    const std::string l = t.substr(from, nl - from);
+    if (has(l, "│") && !has(l, " │ ") && (has(l, "   │") || has(l, "100│") || has(l, "  0│"))) out += l + "\n";
+    from = nl + 1;
+  }
+  return out;
+}
+
+int known_columns(const std::vector<double>& cols) {
+  int n = 0;
+  for (const double c : cols) n += std::isnan(c) ? 0 : 1;
+  return n;
+}
+
+constexpr int kDots = 240;  // 4 dots a second: every second has its own columns
+
+std::vector<double> util_columns(const history& h, int64_t end = kNow) { return plot_columns(h, &history_sample::gpu_util, end, kDots); }
+
+void check_time_axis() {
+  const snapshot base = busy();
+  history h;
+  check(known_columns(util_columns(h)) == 0, "no history, nothing drawn");
+  h.push(sample_at(base, kNow, 40, 1, 1));
+  std::vector<double> c = util_columns(h);
+  check(known_columns(c) == 1 && !std::isnan(c[kDots - 1]), "one sample is one column, at now");
+
+  h = history();
+  h.push(sample_at(base, kNow - 30000, 40, 1, 1));
+  h.push(sample_at(base, kNow - 29000, 40, 1, 1));
+  c = util_columns(h);
+  check(!std::isnan(c[kDots / 2]) && !std::isnan(c[kDots / 2 + 3]) && std::isnan(c[kDots / 2 - 1]) && std::isnan(c[kDots / 2 + 5]) && std::isnan(c[kDots - 1]),
+        "two samples 30 s ago sit in the middle: time places them, not their count");
+
+  h = history();
+  h.push(sample_at(base, kNow - 60000, 40, 1, 1));
+  c = util_columns(h);
+  check(!std::isnan(c[0]) && known_columns(c) == 1, "60 s ago is the left edge exactly");
+  check(known_columns(util_columns(h, kNow + 1000)) == 0, "61 s ago is off the graph");
+
+  h = history();
+  for (int age = 10; age >= 0; --age) h.push(sample_at(base, kNow - age * 1000, 40, 1, 1));
+  c = util_columns(h);
+  check(known_columns(c) >= 40 && known_columns(c) <= 44, "a steady second fills its columns");
+  check(std::isnan(c[kDots / 2]), "a short history leaves the rest blank, not at zero");
+
+  h = history();
+  for (const int age : {6, 5, 4, 2, 1, 0}) h.push(sample_at(base, kNow - age * 1000, 40, 1, 1));
+  c = util_columns(h);
+  const int skipped = kDots - 1 - 3 * 4;  // Where 3 s ago falls
+  check(std::isnan(c[skipped]) && !std::isnan(c[skipped + 4]) && !std::isnan(c[skipped - 4]), "a skipped second is a gap");
+
+  h = history();
+  for (const int age : {30, 29, 28, 3, 2, 1, 0}) h.push(sample_at(base, kNow - age * 1000, 40, 1, 1));
+  c = util_columns(h);
+  int blank = 0;
+  for (int k = kDots - 1 - 27 * 4 + 1; k < kDots - 1 - 3 * 4; ++k) blank += std::isnan(c[static_cast<size_t>(k)]) ? 1 : 0;
+  check(blank == 24 * 4 - 1, "a stall is a gap as long as the stall");
+
+  h = history();
+  for (int age = 5; age >= 0; --age) {
+    snapshot s = sample_at(base, kNow - age * 1000, 40, 1, 1);
+    if (age == 3) { s.gpu_device.has_util = false; s.gpu_split.valid = false; s.gpu_device.has_power = false; }
+    h.push(s);
+  }
+  c = util_columns(h);
+  check(std::isnan(c[static_cast<size_t>(kDots - 1 - 3 * 4)]) && std::isnan(c[static_cast<size_t>(kDots - 1 - 2 * 4 - 1)]) && !std::isnan(c[kDots - 1]), "a missing reading is a gap, not 0");
+  check(std::isnan(plot_columns(h, &history_sample::vm_pct, kNow, kDots)[kDots - 1 - 3 * 4]), "an invalid split is a gap");
+  check(!std::isnan(plot_columns(h, &history_sample::gpu_mem_pct, kNow, kDots)[kDots - 1 - 3 * 4]), "one figure's gap is not another's");
+
+  snapshot stale = base;
+  stale.wsl_age_s = 8;
+  h = history();
+  h.push(sample_at(stale, kNow, 40, 1, 1));
+  check(std::isnan(h.samples().back().wsl_cpu), "a stale collector line is a gap, not a flat line");
+  const std::string t = as_text(render(stale, 131, 40, kNow, &h, view::cpu));
+  check(has(t, "23%  WSL CPU") && has(t, "collector line 8.0 s old"), "a stale figure is printed with its age");
+
+  // The clock steps back: spacing survives, nothing lands ahead of now, a graph is still sane.
+  h = history();
+  for (int age = 10; age >= 0; --age) h.push(sample_at(base, kNow - age * 1000, 40, 1, 1));
+  h.push(sample_at(base, kNow - 3600000, 40, 1, 1));
+  h.push(sample_at(base, kNow - 3599000, 40, 1, 1));
+  bool ordered = true;
+  const auto& all = h.samples();
+  for (size_t i = 1; i < all.size(); ++i) ordered = ordered && all[i].unix_ms - all[i - 1].unix_ms == 1000;
+  check(ordered && all.size() == 13 && all.back().unix_ms == kNow - 3599000, "a backward step keeps the spacing");
+  check(known_columns(util_columns(h, kNow - 3599000)) >= 48, "the graph survives a backward step");
+  check(graph_end(h, kNow - 7200000) == kNow - 3599000, "a clock behind the newest sample is not the graph's end");
+  check(count_braille(graph_rows(as_text(render(busy(), 131, 40, kNow - 7200000, &h, view::gpu)))) > 0, "drawing behind the newest sample still draws");
+
+  snapshot same = base;
+  h = history();
+  for (int i = 0; i < 5; ++i) h.push(same);
+  check(h.samples().size() == 5 && h.samples().front().unix_ms < h.samples().back().unix_ms, "an unmoved clock still advances the samples");
+
+  same.unix_ms = 0;
+  h = history();
+  h.push(same);
+  same.unix_ms = std::numeric_limits<int64_t>::max();
+  h.push(same);
+  check(h.samples().empty(), "a time that cannot be placed is not stored");
+
+  h = history();
+  for (int i = 0; i < 2000; ++i) h.push(sample_at(base, kNow + i * 1000, 40, 1, 1));
+  check(h.samples().size() == 62, "the ring keeps 60 s and the sample before them");
+  h = history();
+  for (int i = 0; i < 5000; ++i) h.push(sample_at(base, kNow + i, 40, 1, 1));
+  check(h.samples().size() <= 600, "the ring is bounded however fast it is pushed");
+}
+
+void check_scale() {
+  const auto cols = [](double v) { return std::vector<double>(40, v); };
+  std::vector<std::string> rows = plot_rows(cols(100), 5);
+  check(count_braille(rows[0]) == 20 && has(rows[0], "⣿"), "100 reaches the top row");
+  rows = plot_rows(cols(50), 4);
+  check(count_braille(rows[0]) == 0 && count_braille(rows[1]) == 0 && has(rows[2], "⣿") && has(rows[3], "⣿"), "50 fills half: the scale is fixed");
+  rows = plot_rows(cols(1), 4);
+  check(count_braille(rows[0]) == 0 && count_braille(rows[2]) == 0 && count_braille(rows[3]) == 20, "a small value stays small: no auto-scale");
+  rows = plot_rows(cols(0), 4);
+  check(has(rows[3], "⣀") && count_braille(rows[2]) == 0, "a measured 0 is a line, not a gap");
+  rows = plot_rows(cols(kNaN), 4);
+  check(count_braille(rows[0] + rows[1] + rows[2] + rows[3]) == 0, "a gap is empty");
+
+  history h;
+  snapshot s = busy();
+  s.gpu_split.vm_pct = 112;
+  s.unix_ms = kNow;
+  h.push(s);
+  const std::vector<double> c = plot_columns(h, &history_sample::vm_pct, kNow, kDots);
+  check(c[kDots - 1] == 100, "over 100 clamps in the graph");
+  check(h.samples().back().vm_pct == 112, "the sample keeps what was measured");
+  const std::string t = as_text(render(s, 131, 50, kNow, &h, view::gpu));
+  check(has(t, "112%  WSL VM"), "the printed number stays as measured");
+
+  s = busy();
+  s.gpu_split = {true, 1e300, -5, 1, 1};
+  s.unix_ms = kNow;
+  history huge;
+  huge.push(s);
+  check(plot_columns(huge, &history_sample::vm_pct, kNow, kDots)[kDots - 1] == 100 && plot_columns(huge, &history_sample::windows_pct, kNow, kDots)[kDots - 1] == 0, "out of range clamps both ways");
+  check(has(as_text(render(s, 131, 50, kNow, &huge, view::gpu)), "1e+300%"), "a huge number is printed, short enough to fit");
+
+  for (const view v : {view::gpu, view::cpu}) {
+    for (const auto& [w, h2] : {std::pair{131, 50}, std::pair{80, 24}}) {
+      const history demo = demo_minute(busy());
+      const std::string f = as_text(render(busy(), w, h2, kNow, &demo, v));
+      const std::string n = " " + std::to_string(w) + "x" + std::to_string(h2);
+      check(has(f, "100│") && has(f, "  0│") && has(f, "-60s") && has(f, " now"), "axes are labelled" + n);
+      check(count_braille(graph_rows(f)) > 0, "a minute draws" + n);
+    }
+  }
+}
+
+void check_panels() {
+  const snapshot full = busy();
+  const history empty, demo = demo_minute(full), demo_bare = demo_minute(bare());
+
+  // Without a history the screen is today's, whatever view is asked for.
+  for (const auto& s : {busy(), bare()}) {
+    const std::string plain = as_text(render(s, 131, 50, kNow));
+    check(as_text(render(s, 131, 50, kNow, nullptr, view::gpu)) == plain && as_text(render(s, 131, 50, kNow, nullptr, view::cpu)) == plain, "no history, no panels");
+    check(!has(plain, "[q] quit"), "no history, no footer");
+    // The overall panel is the same screen one row shorter, with the footer as its last row.
+    const auto with = render(s, 131, 50, kNow, &demo, view::overall);
+    const auto without = render(s, 131, 49, kNow);
+    check(with.size() == without.size() + 1 && as_text({with.begin(), with.end() - 1}) == as_text(without), "the overall panel is today's screen");
+    check(count_braille(graph_rows(as_text(with))) == 0 && !has(as_text(with), "-60s"), "the overall panel has no graphs");
+  }
+
+  const auto footer_of = [&](view v, int w = 131, int h = 50) {
+    const auto f = render(full, w, h, kNow, &demo, v);
+    return f.back();
+  };
+  const struct { view v; const char* name; } keys[] = {{view::overall, "[1] overall"}, {view::gpu, "[2] gpu"}, {view::cpu, "[3] cpu"}};
+  for (const auto& k : keys) {
+    const line f = footer_of(k.v);
+    const std::string text = as_text({f});
+    check(has(text, "[1] overall  [2] gpu  [3] cpu  [q] quit"), "the footer names the keys");
+    for (const auto& o : keys) {
+      bool on = false;
+      for (const span& p : f) on = on || (has(p.text, o.name) && p.bold && p.color == tone::title);
+      check(on == (o.v == k.v), std::string("only the active panel is highlighted: ") + o.name);
+    }
+    check(render(full, 131, 50, kNow, &demo, k.v).size() <= 50, "the footer is counted in height");
+    check(has(as_text({render(full, 131, 1, kNow, &demo, k.v).back()}), "[1]"), "one row is the footer");
+  }
+
+  // GPU panel labels, at a width where each title is on one line, then wrapped.
+  const std::string g = as_text(render(full, 200, 60, kNow, &demo, view::gpu));
+  for (const char* label : {"device · NVML", "WSL VM · engine counters, VM level, not exact shares", "Windows · engine counters", "GPU memory · NVML, used of total", "power · NVML, of limit", "/dev/dxg holders, no usage measured"}) {
+    check(has(g, label), std::string("labelled: ") + label);
+  }
+  for (const int w : {40, 80, 112, 131}) {
+    const std::string t = as_text(render(full, w, 66, kNow, &demo, view::gpu));
+    const std::string n = " at " + std::to_string(w);
+    check(has(t, "device · NVML") && has(t, "engine counters,") && has(t, "VM level, not exact shares") && has(t, "Windows · engine counters"), "wrapped titles stay whole" + n);
+    check(has(t, "dxg_denied 36") && has(t, "no usage measured"), "holders carry no usage" + n);
+    check(!has(t, "88%"), "52 + 36 is never shown" + n);
+    check(has(t, "different measures"), "device and engine figures are not expected to match" + n);
+  }
+  check(has(g, "9.0/12.0 GiB") && has(g, "187/200 W") && !has(g, "75%") && !has(g, "94%"), "bytes and watts stay in their units");
+
+  // The GPU lists: Windows by GPU%, holders apart, no Linux figure.
+  const auto frame = render(full, 131, 50, kNow, &demo, view::gpu);
+  bool seen_right = false;
+  size_t vmwp = 0, game = 0, n = 0;
+  for (const line& l : frame) {
+    const std::string t = as_text({l});
+    ++n;
+    if (has(t, "vmwp.exe")) vmwp = n;
+    if (has(t, "Game.Shipping")) game = n;
+    if (has(t, "한글추론기") || has(t, "python3")) {
+      const size_t bar = t.find(" │ ");
+      check(bar != std::string::npos && t.find(has(t, "python3") ? "python3" : "한글추론기") > bar, "holders right of the divider");
+      check(!has(t.substr(bar), "%") && !has(t.substr(bar), "on GPU"), "no per-Linux-process GPU figure");
+      seen_right = true;
+    }
+  }
+  check(seen_right && vmwp && game && vmwp < game, "Windows GPU users sorted by GPU%");
+  snapshot resort = full;
+  resort.gpu_engines = {{11736, "3D", 5}, {9002, "3D", 80}};
+  const std::string rs = as_text(render(resort, 131, 50, kNow, &demo, view::gpu));
+  check(rs.find("Game.Shipping") < rs.find("vmwp.exe"), "the GPU list follows GPU%, not cores");
+  check(!has(as_text(render(full, 131, 50, kNow, &demo, view::gpu)), "svchost.exe"), "no process without GPU use in that list");
+  const std::string stacked = as_text(render(full, 60, 66, kNow, &demo, view::gpu));
+  check(stacked.rfind("vmwp.exe") < stacked.find("한글추론기", stacked.find("PROCESSES")), "stacked GPU lists do not interleave");
+
+  // The CPU panel.
+  for (const int w : {80, 131, 200}) {
+    const std::string t = as_text(render(full, w, 60, kNow, &demo, view::cpu));
+    const std::string where = " at " + std::to_string(w);
+    check(has(t, "whole machine, includes the WSL VM") && has(t, "guest view, inside the VM"), "CPU graphs name their source" + where);
+    check(has(t, "hottest core 3 at 96%") && has(t, "hottest core 6 at 97%"), "both sets of core rows" + where);
+    check(!has(t, "62%") && !has(t, "61.6"), "Windows and WSL busy are not added" + where);
+    check(has(t, "top ") && has(t, "ollama") && has(t, "svchost.exe"), "both process lists" + where);
+  }
+  const auto cpu = render(full, 131, 60, kNow, &demo, view::cpu);
+  for (const line& l : cpu) {
+    const std::string t = as_text({l});
+    if (has(t, "ollama")) check(t.find("ollama") > t.find(" │ "), "CPU panel: Linux names right of the divider");
+    if (has(t, "svchost.exe")) check(t.find("svchost.exe") < t.find(" │ "), "CPU panel: Windows names left of the divider");
+  }
+
+  // Missing is n/a, in every panel, and history does not fill in for it.
+  const std::string bg = as_text(render(bare(), 131, 50, kNow, &demo_bare, view::gpu));
+  for (const char* v : {"n/a  device · NVML", "n/a  WSL VM ·", "n/a  Windows · engine counters", "n/a  GPU memory", "n/a  power"}) check(has(bg, v), std::string("missing: ") + v);
+  check(count_braille(graph_rows(bg)) == 0, "no measurement, a blank graph");
+  check(has(bg, "device  unavailable") && has(bg, "unavailable: no GPU engine data") && has(bg, "unavailable: no WSL data"), "bare GPU panel says what is missing");
+  check(!has(bg.substr(0, bg.find("PROCESSES")), " 0%"), "the GPU panel shows no zero");
+
+  const std::string bc = as_text(render(bare(), 131, 50, kNow, &demo_bare, view::cpu));
+  check(has(bc, "n/a  WSL CPU") && has(bc, "WSL data unavailable"), "no WSL line is n/a");
+  check(!has(bc, "  0%  WSL"), "no WSL line is not 0");
+  snapshot no_cpu = bare();
+  no_cpu.cpu = {};
+  check(has(as_text(render(no_cpu, 131, 50, kNow, &demo_bare, view::cpu)), "n/a  Windows CPU"), "a failed CPU read is n/a");
+  history nc;
+  no_cpu.unix_ms = kNow;
+  nc.push(no_cpu);
+  check(std::isnan(nc.samples().back().windows_cpu), "a failed CPU read is a gap");
+
+  snapshot part = busy();
+  part.gpu_device.has_util = part.gpu_device.has_power = false;
+  part.gpu_device.has_mem = false;
+  part.gpu_split.valid = false;
+  const std::string pt = as_text(render(part, 131, 50, kNow, &demo, view::gpu));
+  for (const char* v : {"n/a  device · NVML", "n/a  WSL VM", "n/a  Windows ·", "n/a  GPU memory", "n/a  power"}) check(has(pt, v), std::string("has_* false: ") + v);
+  part = busy();
+  part.gpu_device.power_limit_w = 0;
+  part.unix_ms = kNow;
+  history nl;
+  nl.push(part);
+  check(has(as_text(render(part, 131, 50, kNow, &nl, view::gpu)), "187 W") && std::isnan(nl.samples().back().gpu_power_pct), "no limit: watts printed, no height invented");
+
+  // Blank with little history.
+  const std::string eg = as_text(render(full, 131, 50, kNow, &empty, view::gpu));
+  check(count_braille(graph_rows(eg)) == 0 && has(eg, "-60s") && has(eg, "91%"), "an empty history is blank graphs and the live number");
+
+  // Short windows: graphs shrink, then lower blocks go, the footer stays.
+  const std::string tall = as_text(render(full, 131, 50, kNow, &demo, view::gpu));
+  check(has(tall, "device  util") && has(tall, "PROCESSES") && !has(tall, "window too short"), "a tall window shows everything");
+  const std::string mid = as_text(render(full, 131, 12, kNow, &demo, view::gpu));
+  check(has(mid, "100│") && has(mid, "window too short") && has(mid, "[q] quit"), "a short window says what it dropped");
+  const std::string low = as_text(render(full, 131, 6, kNow, &demo, view::gpu));
+  check(has(low, "91%  device · NVML") && has(low, "52%  WSL VM") && has(low, "[q] quit") && !has(low, "100│"), "a very short window keeps the values and labels");
+  const std::string narrow_low = as_text(render(full, 50, 12, kNow, &demo, view::gpu));
+  check(has(narrow_low, "100│") && has(narrow_low, "36%  Windows ·") && has(narrow_low, "… hidden"), "a stack that cannot fit keeps every value it can");
+  const std::string cpu_low = as_text(render(full, 80, 24, kNow, &demo, view::cpu));
+  check(has(cpu_low, "svchost.exe") || has(cpu_low, "vmmemWSL"), "at 80x24 the CPU panel's Windows list has rows");
+  const std::string gpu_low = as_text(render(full, 80, 24, kNow, &demo, view::gpu));
+  check(has(gpu_low, "vmwp.exe") && has(gpu_low, "python3") && has(gpu_low, "dxg_denied"), "at 80x24 the GPU panel's lists have names");
+
+  // Names, as a Windows GPU user and as a /dev/dxg holder.
+  snapshot evil = busy();
+  evil.gpu_engines.push_back({9003, "3D", 60});
+  const std::string pids = "\"dxg_pids\":[4121,4388";
+  evil.wsl_json.replace(evil.wsl_json.find(pids), pids.size(), pids + ",4400");
+  for (const view v : {view::overall, view::gpu, view::cpu}) {
+    check(vt_clean(vt_frame(render(evil, 131, 50, kNow, &demo, v), 50)), "names stay safe in every panel");
+    check(vt_clean(vt_frame(render(evil, 60, 66, kNow, &demo, v), 66)), "names stay safe when stacked");
+  }
+  check(has(as_text(render(evil, 131, 50, kNow, &demo, view::gpu)), "bad.exe"), "the hostile name is on the panel");
+}
+
+// 1, 1 + step, ... and top itself.
+std::vector<int> sizes(int top, int step) {
+  std::vector<int> out;
+  for (int n = 1; n < top; n += step) out.push_back(n);
+  out.push_back(top);
+  return out;
+}
+
+// Widths 1 to 300 and heights 1 to 66, every view: one check a frame. A frame costs about 0.4 ms, and
+// layout turns on the size and the width of the numbers, not on the shape of the history. So every size
+// goes to the hostile numbers, and every third size to the rest.
+void check_sweep(const snapshot& s, const history& h, const char* name, int step = 3) {
+  for (const view v : {view::overall, view::gpu, view::cpu}) {
+    for (const int w : sizes(300, step)) {
+      for (const int rows : sizes(66, step)) {
+        const auto frame = render(s, w, rows, kNow, &h, v);
+        bool fits = static_cast<int>(frame.size()) <= rows && !frame.empty();
+        for (const line& l : frame) {
+          int cols = 0;
+          for (const span& p : l) cols += display_width(p.text);
+          fits = fits && cols <= w;
+        }
+        check(fits, std::string(name) + " view " + std::to_string(static_cast<int>(v)) + " " + std::to_string(w) + "x" + std::to_string(rows));
+      }
+    }
+  }
+}
+
+void check_sizes_with_history() {
+  const snapshot full = busy();
+  const history empty, demo = demo_minute(full);
+  check_sweep(full, empty, "empty history");
+  check_sweep(bare(), demo_minute(bare()), "bare, nothing to graph");
+
+  history partial;
+  for (int age = 4; age >= 0; --age) partial.push(sample_at(full, kNow - age * 1000, 30, 40, 5));
+  check_sweep(full, partial, "partial history");
+
+  history gaps;
+  for (const int age : {59, 58, 40, 39, 12, 3, 0}) gaps.push(sample_at(full, kNow - age * 1000, 30, 40, 5));
+  check_sweep(full, gaps, "gaps");
+
+  snapshot s = busy();
+  s.gpu_device.util_pct = kNaN;
+  s.gpu_device.power_w = kInf;
+  s.gpu_device.power_limit_w = 1e-300;
+  s.gpu_split = {true, 1e308, kNaN, 1, 1};
+  s.cpu.busy_pct = kNaN;
+  s.cpu.core_pct[0] = kInf;
+  s.interval_s = 1e308;
+  s.wsl_age_s = 1e308;
+  s.memory.available = s.memory.total * 2;
+  s.nets[0].in_bytes_s = -1;
+  s.gpu_engines.push_back({9001, "3D", kNaN});
+  s.gpu_engines.push_back({9002, "3D", 1e308});
+  s.gpu_device.mem_used = ~0ull;
+  history wild;
+  for (int age = 30; age >= 0; --age) {
+    snapshot t = s;
+    t.unix_ms = kNow - age * 1000;
+    t.gpu_device.util_pct = age % 3 == 0 ? kNaN : age % 3 == 1 ? 1e308 : -1e308;
+    t.gpu_split.vm_pct = age % 2 ? kInf : -kInf;
+    wild.push(t);
+  }
+  check_sweep(s, wild, "hostile numbers", 1);
+}
+
+#ifdef _WIN32
+// Puts real events in the console's input buffer, where there is one; a piped run has none.
+void check_console() {
+  HANDLE in = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+  DWORD before = 0;
+  if (in == INVALID_HANDLE_VALUE || !GetConsoleMode(in, &before)) {
+    console c;
+    check(c.poll_key() == 0, "no console, no key");
+    printf("console input: no console here, key checks skipped\n");
+    if (in != INVALID_HANDLE_VALUE) CloseHandle(in);
+    return;
+  }
+  {
+    console c;
+    DWORD during = 0;
+    GetConsoleMode(in, &during);
+    check(!(during & ENABLE_ECHO_INPUT) && !(during & ENABLE_LINE_INPUT), "echo and line input off");
+    check((during & ENABLE_PROCESSED_INPUT) != 0, "Ctrl+C stays processed");
+    FlushConsoleInputBuffer(in);
+    check(c.poll_key() == 0, "no key waiting, no wait");
+    const auto key = [](WCHAR ch, BOOL down) {
+      INPUT_RECORD r{};
+      r.EventType = KEY_EVENT;
+      r.Event.KeyEvent.bKeyDown = down;
+      r.Event.KeyEvent.wRepeatCount = 1;
+      r.Event.KeyEvent.uChar.UnicodeChar = ch;
+      return r;
+    };
+    INPUT_RECORD other{};
+    other.EventType = FOCUS_EVENT;
+    const INPUT_RECORD events[] = {other, key(L'q', TRUE), key(L'q', FALSE), key(0, TRUE), key(0xD55C, TRUE), key(L'2', TRUE), key(L'2', FALSE)};
+    DWORD put = 0;
+    WriteConsoleInputW(in, events, 7, &put);
+    check(put == 7, "events written");
+    check(c.poll_key() == 'q', "a key comes back");
+    check(c.poll_key() == '2', "releases, focus, arrows and non-ASCII are passed over");
+    check(c.poll_key() == 0, "then nothing");
+  }
+  DWORD after = 0;
+  GetConsoleMode(in, &after);
+  check(after == before, "the input mode is restored");
+  CloseHandle(in);
+  printf("console input: key checks ran\n");
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -250,6 +719,23 @@ int main(int argc, char** argv) {
   { console c; int w = 0, h = 0; check(!c.is_terminal() || c.size(w, h), "console opens"); }
 #endif
 #ifdef _WIN32
+  if (argc == 3) {  // The panels on the real console, keys as the program has them
+    const snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
+    const history demo = demo_minute(s);
+    console c;
+    view v = view::overall;
+    int w = 131, h = 40;
+    for (char k = 0; k != 'q' && !console::stop_requested(); k = c.poll_key()) {
+      if (k == '1') v = view::overall;
+      if (k == '2') v = view::gpu;
+      if (k == '3') v = view::cpu;
+      c.size(w, h);
+      c.draw(render(s, w, h, kNow, &demo, v));
+      if (!c.is_terminal()) break;
+      Sleep(50);
+    }
+    return 0;
+  }
   if (argc == 2) {  // A frame on the real console, until Ctrl+C
     const snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
     console c;
@@ -263,18 +749,27 @@ int main(int argc, char** argv) {
     return 0;
   }
 #endif
-  if (argc == 4) {
+  if (argc == 4 || argc == 5) {
     const snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
-    const std::string t = as_text(render(s, atoi(argv[2]), atoi(argv[3]), kNow));
+    const history demo = demo_minute(s);
+    const view v = argc == 4 || strcmp(argv[4], "overall") == 0 ? view::overall : strcmp(argv[4], "gpu") == 0 ? view::gpu : view::cpu;
+    const std::string t = as_text(render(s, atoi(argv[2]), atoi(argv[3]), kNow, argc == 5 ? &demo : nullptr, v));
     fwrite(t.data(), 1, t.size(), stdout);
     return 0;
   }
+#ifdef _WIN32
+  check_console();
+#endif
   check_width();
   check_reader();
   check_size(busy(), "busy");
   check_size(bare(), "bare");
   check_honesty();
   check_edges();
+  check_time_axis();
+  check_scale();
+  check_panels();
+  check_sizes_with_history();
   printf("%d checks, %d failed\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
 }

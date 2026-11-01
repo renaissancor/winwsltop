@@ -36,6 +36,18 @@ void write_utf8(HANDLE out, std::string_view s) {
 }  // namespace
 
 console::console() {
+  // Input first, on its own: a redirected stdout does not take the keyboard away. Echo needs line
+  // input, so both go; ENABLE_PROCESSED_INPUT stays so that Ctrl+C still reaches on_ctrl.
+  HANDLE in = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+  DWORD in_mode = 0;
+  if (in != INVALID_HANDLE_VALUE && GetConsoleMode(in, &in_mode) &&
+      SetConsoleMode(in, (in_mode | ENABLE_PROCESSED_INPUT) & ~static_cast<DWORD>(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT))) {
+    in_ = in;
+    saved_in_mode_ = in_mode;
+  } else if (in != INVALID_HANDLE_VALUE) {
+    CloseHandle(in);
+  }
+
   out_ = GetStdHandle(STD_OUTPUT_HANDLE);
   DWORD mode = 0;
   if (!GetConsoleMode(out_, &mode)) return;
@@ -47,6 +59,10 @@ console::console() {
 }
 
 console::~console() {
+  if (in_) {
+    SetConsoleMode(in_, saved_in_mode_);
+    CloseHandle(in_);
+  }
   if (!terminal_) return;
   write_utf8(out_, "\x1b[0m\x1b[?7h\x1b[?25h\x1b[?1049l");
   SetConsoleMode(out_, saved_mode_);
@@ -74,5 +90,19 @@ void console::draw(const std::vector<line>& lines) {
 }
 
 bool console::stop_requested() { return g_stop; }
+
+char console::poll_key() {
+  if (!in_) return 0;
+  DWORD waiting = 0;
+  while (GetNumberOfConsoleInputEvents(in_, &waiting) && waiting > 0) {  // Only then can a read not block
+    INPUT_RECORD e;
+    DWORD got = 0;
+    if (!ReadConsoleInputW(in_, &e, 1, &got) || got == 0) return 0;
+    if (e.EventType != KEY_EVENT || !e.Event.KeyEvent.bKeyDown) continue;  // Releases, resizes, the mouse
+    const WCHAR c = e.Event.KeyEvent.uChar.UnicodeChar;
+    if (c > 0 && c < 0x80) return static_cast<char>(c);
+  }
+  return 0;
+}
 
 }  // namespace wwt

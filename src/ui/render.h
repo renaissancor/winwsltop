@@ -1,5 +1,6 @@
-// The terminal screen as data. render() does no I/O and reads nothing but the snapshot, so it can be
-// checked anywhere; console.h puts its result on a Windows console.
+// The terminal screen as data. render() does no I/O and reads the snapshot and, for the graphs, the
+// history kept in memory from earlier snapshots, so it can be checked anywhere; console.h puts its
+// result on a Windows console.
 #pragma once
 #include "core/snapshot.h"
 #include <cstdint>
@@ -19,10 +20,18 @@ struct span {
 };
 using line = std::vector<span>;
 
+class history;
+
+// The panels of the live screen. Keys choose one; only main.cpp acts on a key.
+enum class view : uint8_t { overall, gpu, cpu };
+
 // At most `height` lines of at most `width` columns, wide characters counted as 2. Names from either
 // system are made safe here: control characters and malformed UTF-8 never reach the terminal.
 // now_ms is the wall clock when drawing; 0 means unknown, and the title then gives no data age.
-std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms = 0);
+// Without hist there are no panels: the one overall screen, v ignored and no key footer. With hist,
+// the panel v and a key footer as the last of the `height` rows.
+std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms = 0, const history* hist = nullptr,
+                         view v = view::overall);
 
 std::string as_text(const std::vector<line>& lines);
 
