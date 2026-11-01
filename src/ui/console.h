@@ -18,8 +18,9 @@ class console {
   // Ctrl+C or a closing window asked to end. Poll it, so that the destructor runs.
   static bool stop_requested();
   // The next key this program uses: '1', '2', '3' or 'q'. 0 when none is waiting or there is no
-  // console; every other key is passed over. Keys are told by virtual key code, so q still works in
-  // Hangul input mode. Never blocks. Reads CONIN$, so it works when stdin is not the console.
+  // console; every other key is passed over. Keys are told by virtual key code, so q should work in
+  // Hangul input mode; not tried with a real IME. Never blocks. Reads CONIN$, so it works when stdin
+  // is not the console.
   char poll_key();
 
  private:

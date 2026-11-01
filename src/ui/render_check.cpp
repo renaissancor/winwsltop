@@ -340,7 +340,7 @@ snapshot with_holders(snapshot s, int n) {
   return s;
 }
 
-snapshot no_cpu_or_wsl() {
+snapshot no_wsl() {
   snapshot s = busy();
   s.wsl_json.clear();
   return s;
@@ -456,6 +456,10 @@ void check_time_axis() {
   h.push(sample_at(base, kNow - 1600, 40, 1, 1));
   h.push(sample_at(base, kNow, 40, 1, 1));
   check(known_columns(util_columns(h)) == 2, "samples 1.6 s apart do not");
+  h = history();
+  h.push(sample_at(base, kNow - 1501, 40, 1, 1));
+  h.push(sample_at(base, kNow, 40, 1, 1));
+  check(known_columns(util_columns(h)) == 2, "samples 1.501 s apart do not");
 
   // Highest in a column, in either order.
   for (const double first : {10.0, 90.0}) {
@@ -473,6 +477,21 @@ void check_time_axis() {
   check(!std::isnan(h.samples().back().gpu_util), "and only for the WSL figure");
   h.push(sample_at(base, kNow, 40, 1, 1, 12));
   check(!std::isnan(h.samples().back().wsl_cpu), "a new line is a sample again");
+  h.push(sample_at(base, kNow + 1000, 40, 1, 1, 12));
+  check(std::isnan(h.samples().back().wsl_cpu), "a repeat after a change is a gap too");
+  h.push(sample_at(base, kNow + 2000, 40, 1, 1, 11));
+  check(!std::isnan(h.samples().back().wsl_cpu), "an older line coming back is compared with the last one only");
+
+  // The 5 s stale boundary, on lines that are all new.
+  h = history();
+  snapshot aged = sample_at(base, kNow, 40, 1, 1, 21);
+  aged.wsl_age_s = 4.99;
+  h.push(aged);
+  check(!std::isnan(h.samples().back().wsl_cpu), "a line just under 5 s old is a sample");
+  aged = sample_at(base, kNow + 1000, 40, 1, 1, 22);
+  aged.wsl_age_s = 5;
+  h.push(aged);
+  check(std::isnan(h.samples().back().wsl_cpu), "a line 5 s old is a gap");
 
   // has_* and the unreadable line, in the graph cells as well as the text.
   h = history();
@@ -737,10 +756,42 @@ void check_panels() {
       check(!has(text, "top 0 of 22"), "a drawn list has a name in it" + at);
     }
   }
-  check(!has(as_text(render(no_cpu_or_wsl(), 131, 50, kNow, &demo, view::gpu)), "dxg_denied"), "no WSL line, no warning row");
+  check(!has(as_text(render(no_wsl(), 131, 50, kNow, &demo, view::gpu)), "dxg_denied"), "no WSL line, no warning row");
   bool no_room_cut = false;
   const wsl_view many_view = read_wsl(many.wsl_json);
   check(has(as_text(dxg_holder_list(many_view, 60, 0, no_room_cut)), "dxg_denied 36") && no_room_cut, "the warning needs no name row");
+
+  // An unreadable line that names dxg_denied is no WSL data: it reserves no warning row.
+  snapshot unread = busy();
+  unread.wsl_json = R"({"schema":2,"busy_pct":1,"memory":{},"dxg_denied":36})";
+  for (const int w : {60, 131}) {
+    for (int rows = 1; rows <= 66; ++rows) {
+      const bool drawn = has(as_text(render(unread, w, rows, kNow, &demo, view::gpu)), "PROCESSES");
+      check(drawn == has(as_text(render(no_wsl(), w, rows, kNow, &demo, view::gpu)), "PROCESSES"), "no warning row without WSL data, " + std::to_string(w) + "x" + std::to_string(rows));
+    }
+  }
+
+  // More GPU users than rows: a cut Windows list is marked, and stacked lists split the rows.
+  snapshot users = with_holders(full, 22);
+  users.gpu_engines.clear();
+  for (uint32_t i = 0; i < 15; ++i) users.gpu_engines.push_back({10000 + i * 4, "3D", 50.0 - i});
+  snapshot few_holders = users;
+  few_holders.wsl_json = full.wsl_json;
+  const auto cut_users = render(few_holders, 131, 50, kNow, &demo, view::gpu);
+  check(has(as_text(cut_users), "of 15 by GPU%") && has(as_text(cut_users), "top 2 of 2") && marks_hidden(cut_users), "a cut Windows list is marked");
+  const auto top_of = [](const std::string& t, const char* tail) {
+    const size_t end = t.find(tail);
+    return end == std::string::npos ? -1 : atoi(t.c_str() + t.rfind("top ", end) + 4);
+  };
+  int odd = 0;
+  for (int rows = 1; rows <= 66; ++rows) {
+    const std::string t = as_text(render(users, 60, rows, kNow, &demo, view::gpu));
+    const int windows = top_of(t, " of 15 by GPU%"), holders = top_of(t, " of 22");
+    if (windows < 0 || holders < 0) continue;
+    check(windows - holders == 0 || windows - holders == 1, "stacked lists split the rows evenly at 60x" + std::to_string(rows) + ": " + std::to_string(windows) + "," + std::to_string(holders));
+    odd += windows - holders;
+  }
+  check(odd > 0, "an odd row goes to the first list");
 
   // A process at zero is no GPU use.
   snapshot zero = busy();

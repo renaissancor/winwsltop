@@ -33,8 +33,9 @@ void write_utf8(HANDLE out, std::string_view s) {
   write_wide(out, w);
 }
 
-// The key pressed, not the character it made: under Hangul input mode q arrives as U+3142, and Delete
-// has no character worth reading. Shift stays allowed, because some layouts need it for the digits.
+// The key pressed, not the character it made. Under Hangul input mode q should arrive as U+3142 with
+// its usual key code, so it should work; not tried with a real IME. Delete has no character worth
+// reading. Shift stays allowed, because some layouts need it for the digits.
 char key_of(const KEY_EVENT_RECORD& k) {
   if (k.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED | LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) return 0;
   switch (k.wVirtualKeyCode) {
