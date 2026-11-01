@@ -1,6 +1,9 @@
 // Checks the renderer on hand-built snapshots. render_check <busy|bare> W H prints a frame as text,
 // the one overall screen with no history; add overall, gpu or cpu for that panel over a made-up minute.
 // render_check <busy|bare> draws on the console until Ctrl+C; add live for the panels, keys 1 2 3 q.
+// render_check <contended|idle|stale|noisy> W H [span_s] prints the large layout of panel 3.
+// render_check vt <fixture> W H FILE [span_s] writes one frame's VT bytes to FILE, to render as an image.
+// render_check measure prints frame bytes and the time to build a frame.
 // render_check quick runs everything but the size sweeps, about a second, for mutating the renderer.
 // Build: scripts/build.sh src/ui/render_check.cpp   (it includes the sources it tests)
 #include "ui/render.cpp"
@@ -9,9 +12,11 @@
 #ifdef _WIN32
 #include "ui/console.cpp"
 #endif
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iterator>
 #include <limits>
 
@@ -101,6 +106,7 @@ snapshot bare() {
 }
 
 bool has(const std::string& text, const char* what) { return text.find(what) != std::string::npos; }
+bool has(const std::string& text, const std::string& what) { return text.find(what) != std::string::npos; }
 
 void check_size(const snapshot& s, const char* name) {
   for (const int w : {1, 2, 3, 10, 40, 80, 100, 118, 131, 132, 200, 300}) {
@@ -432,7 +438,7 @@ void check_time_axis() {
   h = history();
   h.push(sample_at(stale, kNow, 40, 1, 1));
   check(std::isnan(h.samples().back().wsl_cpu), "a stale collector line is a gap, not a flat line");
-  const std::string t = as_text(render(stale, 131, 40, kNow, &h, view::cpu));
+  const std::string t = as_text(render(stale, 99, 40, kNow, &h, view::cpu));
   check(has(t, "23%  WSL CPU") && has(t, "collector line 8.0 s old"), "a stale figure is printed with its age");
 
   // The clock steps back: spacing survives, nothing lands ahead of now, a graph is still sane.
@@ -524,7 +530,7 @@ void check_time_axis() {
   check(known_columns(plot_columns(h, &history_sample::wsl_cpu, kNow, kDots)) == 0, "an unreadable line is not a sample");
   snapshot unreadable = base;
   unreadable.wsl_json = "{\"schema\":1,\"busy";
-  const std::string cells = graph_rows(as_text(render(unreadable, 131, 30, kNow, &h, view::cpu)));
+  const std::string cells = graph_rows(as_text(render(unreadable, 99, 30, kNow, &h, view::cpu)));
   check(count_braille(panel_cells(cells, 0)) > 0, "the Windows CPU graph is drawn");
   check(count_braille(panel_cells(cells, 1)) == 0, "an unreadable line draws no cell in the WSL graph");
 
@@ -820,7 +826,7 @@ void check_scale() {
   check(has(as_text(render(s, 131, 50, kNow, &huge, view::gpu)), "1e+300%"), "a huge number is printed, short enough to fit");
 
   for (const view v : {view::gpu, view::cpu}) {
-    for (const auto& [w, h2] : {std::pair{131, 50}, std::pair{80, 24}}) {
+    for (const auto& [w, h2] : {std::pair{99, 50}, std::pair{80, 24}}) {
       const history demo = demo_minute(busy());
       const std::string f = as_text(render(busy(), w, h2, kNow, &demo, v));
       const std::string n = " " + std::to_string(w) + "x" + std::to_string(h2);
@@ -905,8 +911,8 @@ void check_panels() {
   const std::string stacked = as_text(render(full, 60, 66, kNow, &demo, view::gpu));
   check(stacked.rfind("vmwp.exe") < stacked.find("한글추론기", stacked.find("PROCESSES")), "stacked GPU lists do not interleave");
 
-  // The CPU panel.
-  for (const int w : {80, 131, 200}) {
+  // The CPU panel's small layout, which is every window under 100 columns.
+  for (const int w : {80, 90, 99}) {
     const std::string t = as_text(render(full, w, 60, kNow, &demo, view::cpu));
     const std::string where = " at " + std::to_string(w);
     check(has(t, "whole machine, includes the WSL VM") && has(t, "guest view, inside the VM"), "CPU graphs name their source" + where);
@@ -915,8 +921,8 @@ void check_panels() {
     check(has(t, "top ") && has(t, "ollama") && has(t, "svchost.exe"), "both process lists" + where);
   }
   // The title rows themselves: the WINDOWS and WSL rule rows hold the same words.
-  for (const int w : {131, 200}) {
-    const auto f = render(full, w, 60, kNow, &demo, view::cpu);
+  for (const int w : {131, 200}) {  // 26 rows are under the large layout's floor, at any width
+    const auto f = render(full, w, 26, kNow, &demo, view::cpu);
     const std::string title = line_with(f, "%  Windows CPU");
     check(has(title, "Windows CPU · whole machine, includes the WSL VM"), "the Windows graph title names its source");
     check(has(title, "WSL CPU · guest view, inside the VM"), "the WSL graph title names its source");
@@ -925,7 +931,7 @@ void check_panels() {
   const auto wrapped = render(full, 80, 60, kNow, &demo, view::cpu);
   const std::string second = line_with(wrapped, "%  Windows CPU", 1);
   check(has(second, "includes the WSL VM") && has(second, "guest view, inside the VM"), "wrapped titles keep their source");
-  const auto cpu = render(full, 131, 60, kNow, &demo, view::cpu);
+  const auto cpu = render(full, 131, 26, kNow, &demo, view::cpu);
   for (const line& l : cpu) {
     const std::string t = as_text({l});
     if (has(t, "ollama")) check(t.find("ollama") > t.find(" │ "), "CPU panel: Linux names right of the divider");
@@ -939,12 +945,12 @@ void check_panels() {
   check(has(bg, "device  unavailable") && has(bg, "unavailable: no GPU engine data") && has(bg, "unavailable: no WSL data"), "bare GPU panel says what is missing");
   check(!has(bg.substr(0, bg.find("PROCESSES")), " 0%"), "the GPU panel shows no zero");
 
-  const std::string bc = as_text(render(bare(), 131, 50, kNow, &demo_bare, view::cpu));
+  const std::string bc = as_text(render(bare(), 99, 50, kNow, &demo_bare, view::cpu));
   check(has(bc, "n/a  WSL CPU") && has(bc, "WSL data unavailable"), "no WSL line is n/a");
   check(!has(bc, "  0%  WSL"), "no WSL line is not 0");
   snapshot no_cpu = bare();
   no_cpu.cpu = {};
-  check(has(as_text(render(no_cpu, 131, 50, kNow, &demo_bare, view::cpu)), "n/a  Windows CPU"), "a failed CPU read is n/a");
+  check(has(as_text(render(no_cpu, 99, 50, kNow, &demo_bare, view::cpu)), "n/a  Windows CPU"), "a failed CPU read is n/a");
   const std::string no_cpu_screen = as_text(render(no_cpu, 131, 50, kNow));
   const std::string windows_block = no_cpu_screen.substr(no_cpu_screen.find("WINDOWS"));
   check(has(windows_block, "CPU   n/a") && !has(windows_block.substr(0, windows_block.find("cores")), "0%"), "a failed CPU read is n/a on the overall screen too");
@@ -1202,7 +1208,7 @@ void check_holder_wording() {
       for (const view v : {view::overall, view::cpu}) {
         const std::string t = as_text(render(*s, w, 66, kNow, &demo, v)), at = " at " + std::to_string(w) + " view " + std::to_string(static_cast<int>(v));
         const std::string head = after_bar(row_of(t, " of 64,"));
-        if (head.empty()) continue;  // The panel has no room for the list
+        if (head.empty() || has(t, "vCPUs, not Windows cores")) continue;  // No room for the list; the large layout has its own check
         check(head.size() >= 18 && head.compare(head.size() - 18, 18, " no usage measured") == 0, "the WSL list says no usage is measured" + at);
         const std::string below = t.substr(t.find(" of 64,"));
         const std::string cols = after_bar(row_of(below, "RSS GiB"));
@@ -1277,6 +1283,1224 @@ void check_sizes_with_history() {
     wild.push(t);
   }
   check_sweep(s, wild, "hostile numbers", 1);
+}
+
+// ---- Fixtures for the large layout of panel 3 ------------------------------------------------------
+//
+// contended is section 3 of docs/design/cpu-panel.md, from both-win-20. Each sample of a history has a new
+// guest line, as a healthy collector gives: a line that does not change is a repeat.
+
+struct guest_figures {
+  double busy = 100, user = 99, sys = 1, iowait = 0, load = 19.8;
+  double used_gib = 12.3;
+  int seq = 0;
+};
+
+constexpr const char* kCpuProcesses =
+    R"({"pid":4121,"name":"cpu_burn","state":"R","rss":107374182,"cores":19.72,"threads":21,"on_gpu":false},)"
+    R"({"pid":4388,"name":"python3","state":"S","rss":2147483648,"cores":0.1,"threads":12,"on_gpu":true},)"
+    R"({"pid":2000,"name":"node","state":"S","rss":429496729,"cores":0.04,"threads":11,"on_gpu":false},)"
+    R"({"pid":2001,"name":"sshd","state":"S","rss":10000000,"cores":0.03,"threads":1,"on_gpu":false},)"
+    R"({"pid":2002,"name":"systemd","state":"S","rss":10000000,"cores":0.02,"threads":1,"on_gpu":false},)"
+    R"({"pid":2003,"name":"dbus-daemon","state":"S","rss":10000000,"cores":0.01,"threads":1,"on_gpu":false})";
+
+std::string guest_line(const std::vector<double>& cores, const guest_figures& g, const std::string& processes = kCpuProcesses) {
+  std::string list;
+  for (size_t i = 0; i < cores.size(); ++i) list += std::to_string(cores[i]) + (i + 1 < cores.size() ? "," : "");
+  const uint64_t total = static_cast<uint64_t>(31.2 * static_cast<double>(kG));
+  const uint64_t available = total - static_cast<uint64_t>(g.used_gib * static_cast<double>(kG));
+  return "{\"schema\":1,\"distro\":\"Ubuntu-24.04\",\"mono_s\":" + std::to_string(g.seq) + ",\"busy_pct\":" + std::to_string(g.busy) + ",\"core_pct\":[" + list +
+         "],\"cpu_split\":{\"user\":" + std::to_string(g.user) + ",\"sys\":" + std::to_string(g.sys) + ",\"iowait\":" + std::to_string(g.iowait) +
+         "},\"load\":[" + std::to_string(g.load) + ",1,1],\"steal_pct\":0,\"memory\":{\"total\":" + std::to_string(total) + ",\"available\":" + std::to_string(available) +
+         ",\"cached\":0,\"swap_used\":0},\"pressure\":{\"cpu\":4,\"memory\":0,\"io\":0},\"process_count\":64,\"processes\":[" + processes + "],\"dxg_pids\":[4388],\"dxg_denied\":0}";
+}
+
+// docs/measurable.md, "CPU layout": 6 P-cores of two threads, then 8 E-cores of one.
+cpu_layout_view layout_13600k() {
+  cpu_layout_view l;
+  l.known = true;
+  for (uint32_t c = 0; c < 6; ++c) {
+    l.rows.push_back({c, 0, 1});
+    l.rows.push_back({c, 1, 1});
+  }
+  for (uint32_t c = 6; c < 14; ++c) l.rows.push_back({c, 0, 0});
+  return l;
+}
+
+snapshot contended(int threads = 20, int vcpus = 0) {
+  if (vcpus == 0) vcpus = threads;
+  snapshot s;
+  s.unix_ms = kNow - 400;
+  s.interval_s = 1.0;
+  s.cpu.core_pct.assign(static_cast<size_t>(threads), 100.0);
+  s.cpu.busy_pct = 100;
+  s.cpu.user_pct = 65;
+  s.cpu.kernel_pct = 35;
+  if (threads == 20) s.cpu_layout = layout_13600k();
+  s.memory.total = static_cast<uint64_t>(63.7 * static_cast<double>(kG));
+  s.memory.available = static_cast<uint64_t>(22.5 * static_cast<double>(kG));
+  s.vm = {7120, 11736, static_cast<uint64_t>(10.1 * static_cast<double>(kG)), 5.76, true};
+  s.ready_threads = 41;
+  s.vm_ready_threads = 13;
+  s.cpu_derived = {28.8, 6.2, 41.2, 13.1};
+  s.lost = {lost_state::known, 13.96};
+  const auto proc = [&](uint32_t pid, const char* name, double cores, uint32_t thr, double ws) {
+    process_row p;
+    p.pid = pid; p.name = name; p.cores = cores; p.threads = thr; p.working_set = static_cast<uint64_t>(ws * static_cast<double>(kG));
+    s.processes.push_back(p);
+  };
+  proc(0, "Idle", 0, 20, 0);
+  proc(31000, "cpu_burn.exe", 13.25, 21, 0.1);
+  proc(7120, "vmmemWSL", 5.76, 22, 10.1);
+  proc(4, "System", 0.42, 310, 0.04);
+  proc(11736, "vmwp.exe", 0.31, 40, 0.1);
+  proc(9001, "카카오톡.exe", 0.22, 60, 0.4);
+  proc(10000, "svchost.exe", 0.20, 12, 0.04);
+  for (uint32_t i = 0; i < 40; ++i) proc(20000 + i * 4, "svchost.exe", 0.01, 8, 0.01);
+  s.wsl_json = guest_line(std::vector<double>(static_cast<size_t>(vcpus), 100.0), {});
+  s.wsl_age_s = 0.2;
+  return s;
+}
+
+// The same machine at rest, for the part of a history before a load, and for the idle fixture.
+void quiet_moment(snapshot& s, int seq) {
+  const size_t threads = std::max<size_t>(s.cpu.core_pct.size(), 1), vcpus = read_wsl(s.wsl_json).core_pct.size();
+  s.cpu.core_pct.assign(threads, 3.0);
+  s.cpu.busy_pct = 4;
+  s.cpu.user_pct = 3;
+  s.cpu.kernel_pct = 1;
+  s.cpu_derived.vm_cpu_pct = 0.3;
+  s.cpu_derived.own_kernel_pct = 0.7;
+  s.cpu_derived.ready_threads_mean = 2;
+  s.cpu_derived.vm_ready_threads_mean = 0;
+  s.ready_threads = 2;
+  s.vm_ready_threads = 0;
+  s.vm.vmmem_cores = 0.06;
+  s.lost = {lost_state::guest_under_99, kNaN};
+  guest_figures g;
+  g.busy = 3;
+  g.user = 2;
+  g.iowait = 0.5;
+  g.load = 2.1;
+  g.seq = seq;
+  s.wsl_json = guest_line(std::vector<double>(vcpus, 2.0), g);
+}
+
+// Samples up to the newest, each changed by moment(snapshot, seconds ago, sample number).
+template <class F> history build_history(const snapshot& base, int seconds, F moment) {
+  history h;
+  for (int age = seconds; age >= 0; --age) {
+    snapshot s = base;
+    s.unix_ms = base.unix_ms - age * 1000;
+    moment(s, age, seconds - age + 1);
+    h.push(s);
+  }
+  return h;
+}
+
+// One onset, 42% of the way along, as section 3 draws it.
+history contended_history(const snapshot& base, int seconds = 60) {
+  return build_history(base, seconds, [&](snapshot& s, int age, int seq) {
+    if (age * 100 > seconds * 58) {
+      quiet_moment(s, seq);
+      return;
+    }
+    guest_figures g;
+    g.seq = seq;
+    s.wsl_json = guest_line(read_wsl(base.wsl_json).core_pct, g);
+  });
+}
+
+snapshot idle_now(int threads = 20) {
+  snapshot s = contended(threads);
+  quiet_moment(s, 1000);
+  return s;
+}
+
+history idle_history(const snapshot& base, int seconds = 60) {
+  return build_history(base, seconds, [](snapshot& s, int, int seq) { quiet_moment(s, seq); });
+}
+
+// The collector went silent half a minute ago, an hour's worth of age on the newest line.
+snapshot stale_now() {
+  snapshot s = contended();
+  s.wsl_age_s = 3600;
+  s.lost = {lost_state::no_data, kNaN};
+  return s;
+}
+
+history stale_history(const snapshot& base) {
+  return build_history(base, 60, [&](snapshot& s, int age, int seq) {
+    if (age < 30) {
+      s.wsl_age_s = 3600;
+      s.lost = {lost_state::no_data, kNaN};
+    } else {
+      guest_figures g;
+      g.seq = seq;
+      s.wsl_json = guest_line(read_wsl(base.wsl_json).core_pct, g);
+      s.wsl_age_s = 0.2;
+    }
+  });
+}
+
+// The worst case for the bytes of a frame: every cell of every row a different colour from its neighbours.
+uint32_t next_noise(uint32_t& state) {
+  state = state * 1664525u + 1013904223u;  // A fixed sequence: the check must not move from run to run
+  return state >> 16;
+}
+
+snapshot noisy_now(int threads = 20) { return contended(threads); }
+
+history noisy_history(const snapshot& base, int seconds = 60) {
+  uint32_t noise = 12345;
+  const auto pct = [&] { return static_cast<double>(next_noise(noise) % 1000) / 10.0; };
+  return build_history(base, seconds, [&](snapshot& s, int, int seq) {
+    for (double& c : s.cpu.core_pct) c = pct();
+    s.cpu.busy_pct = pct();
+    s.cpu_derived.vm_cpu_pct = pct();
+    s.cpu_derived.own_kernel_pct = pct();
+    s.memory.available = static_cast<uint64_t>(pct() / 100.0 * static_cast<double>(s.memory.total));
+    s.lost.vcpus = pct() / 5.0;
+    std::vector<double> cores = read_wsl(base.wsl_json).core_pct;
+    for (double& c : cores) c = pct();
+    guest_figures g;
+    g.seq = seq;
+    g.busy = pct();
+    g.iowait = pct();
+    g.used_gib = pct() / 100.0 * 31.0;
+    s.wsl_json = guest_line(cores, g);
+  });
+}
+
+// A fixture by name, with the history that goes with it. seconds is how much of one to build.
+bool cpu_fixture(const std::string& name, int seconds, snapshot& s, history& h) {
+  if (name == "contended") { s = contended(); h = contended_history(s, seconds); }
+  else if (name == "idle") { s = idle_now(); h = idle_history(s, seconds); }
+  else if (name == "stale") { s = stale_now(); h = stale_history(s); }
+  else if (name == "noisy") { s = noisy_now(); h = noisy_history(s, seconds); }
+  else return false;
+  return true;
+}
+
+render_options options_for(int span_s) {
+  render_options o;
+  o.span_ms = span_s * 1000;
+  o.span_key = true;
+  return o;
+}
+
+// ---- The large layout of panel 3, against docs/design/cpu-panel.md -----------------------------------
+
+std::vector<line> large(const snapshot& s, const history& h, int w = 100, int rows = 34, const render_options& o = {}) {
+  return render(s, w, rows, kNow, &h, view::cpu, o);
+}
+
+// Text of a row from column `from`, `cols` wide; wide characters count as they are drawn.
+std::string columns(const std::string& text, int from, int cols = 1000) {
+  std::string out;
+  int at = 0;
+  for (size_t i = 0; i < text.size() && text[i] != '\n';) {
+    const char32_t c = next_cp(text, i);
+    if (at >= from && at < from + cols) put_cp(out, c);
+    at += cp_width(c);
+  }
+  return out;
+}
+
+struct painted { std::string glyph; int fg, bg; };
+
+// One entry per column of a row, with its colours.
+std::vector<painted> cells_of(const line& l) {
+  std::vector<painted> out;
+  for (const span& p : l) {
+    for (size_t i = 0; i < p.text.size();) {
+      const char32_t c = next_cp(p.text, i);
+      std::string g;
+      put_cp(g, c);
+      for (int k = 0; k < cp_width(c); ++k) out.push_back({g, p.fg256, p.bg256});
+    }
+  }
+  if (out.empty()) out.assign(300, {" ", -1, -1});  // A row that was not found: the check that looked for it says so
+  return out;
+}
+
+int row_at(const std::vector<line>& f, int col, const std::string& start) {
+  for (size_t i = 0; i < f.size(); ++i) {
+    if (columns(as_text({f[i]}), col, display_width(start)) == start) return static_cast<int>(i);
+  }
+  return -1;
+}
+
+// That row, and a failed check rather than a bad index when it is not there.
+const line& line_at(const std::vector<line>& f, int col, const std::string& start) {
+  static const line kNone;
+  const int i = row_at(f, col, start);
+  check(i >= 0, "no row starts with " + start);
+  return i < 0 ? kNone : f[static_cast<size_t>(i)];
+}
+
+int kRight(int width) { return (width - 3) / 2 + 3; }  // Column where the right side starts
+
+bool is_large(const std::vector<line>& f) { return has(as_text(f), "vCPUs, not Windows cores"); }
+
+bool frame_fits(const std::vector<line>& f, int w, int rows) {
+  bool fits = static_cast<int>(f.size()) <= rows && !f.empty();
+  for (const line& l : f) {
+    int cols = 0;
+    for (const span& p : l) cols += display_width(p.text);
+    fits = fits && cols <= w;
+  }
+  return fits;
+}
+
+void check_large_mockup() {
+  const snapshot s = contended();
+  const history h = contended_history(s);
+  const auto f = large(s, h);
+  const std::string text = as_text(f);
+  check(f.size() == 34 && frame_fits(f, 100, 34), "100 by 34 is 34 rows, none over 100");
+
+  // Section 3's rows, character for character where the design gives the characters.
+  const auto row_is = [&](size_t i, const std::string& want) {
+    std::string got = as_text({f[i]});
+    got.pop_back();
+    while (!got.empty() && got.back() == ' ') got.pop_back();
+    check(got == want, "row " + std::to_string(i) + ": " + got);
+  };
+  check(has(as_text({f[0]}), "winwsltop") && has(as_text({f[0]}), "data 0.4 s old  every 1.0 s"), "the title gives the age and the interval");
+  check(has(as_text({f[1]}), "two systems' own views of overlapping work, never added"), "the rule says the views overlap");
+  row_is(2, "100%  WINDOWS  user 65 · kernel 6 · VM 29        │ 100%  WSL  user 99 · sys 1 · iowait 0, as idle");
+  row_is(3, "      whole machine, includes the WSL VM         │       guest view, inside the VM · Ubuntu-24.04");
+  row_is(4, "VM ran 5.76 of 20 threads · ≈41 ready, 13 VM     │ WSL short ≈14 of 20 vCPUs, inferred · load 19.8");
+  row_is(5, "RAM 41.2/63.7 GiB  free 22.5 GiB                 │ RAM 12.3/31.2 GiB · pressure cpu 4 mem 0 io 0");
+  check(columns(as_text({f[6]}), 0, 5) == "100 │" && columns(as_text({f[6]}), 51, 5) == "100 │", "the busy plots start where the heads end");
+  check(columns(as_text({f[8]}), 0, 5) == "  0 │" && columns(as_text({f[8]}), 51, 5) == "  0 │", "busy is 3 rows at 34");
+  check(columns(as_text({f[9]}), 0, 5) == "RAM │" && columns(as_text({f[10]}), 0, 5) == "    │", "RAM is 2 rows at 34");
+  check(columns(as_text({f[11]}), 0, 5) == "kern│" && columns(as_text({f[12]}), 0, 5) == "VM  │", "the Windows lanes");
+  check(columns(as_text({f[11]}), 51, 5) == "iowt│" && columns(as_text({f[12]}), 51, 5) == "lost≈", "the WSL lanes, and lost's gutter is ≈");
+  check(columns(as_text({f[13]}), 0, 24) == "threads · 20 of 20 ≥90% " && has(as_text({f[13]}), "idle █████ ≥90%"), "the caption's count and its five swatches");
+  check(columns(as_text({f[13]}), 51) == "vCPUs, not Windows cores · 20 of 20 ≥90%", "the block says a vCPU is not a core");
+  check(columns(as_text({f[9]}), 5, 1) == "⣀" && columns(as_text({f[10]}), 5, 1) == "⣿", "the Windows RAM plot is 65%, 5 dots of 8");
+  check(columns(as_text({f[9]}), 56, 1) == " " && columns(as_text({f[10]}), 56, 1) == "⣶", "the WSL RAM plot is its own 39%, 3 dots of 8");
+  int n = 14;
+  for (const char* left : {"P0", "P1", "P2", "P3", "P4", "P5", "E0", "E2", "E4", "E6"}) {
+    check(columns(as_text({f[static_cast<size_t>(n)]}), 0, 2) == left, std::string("row ") + left);
+    ++n;
+  }
+  for (int r = 0; r < 10; ++r) check(columns(as_text({f[static_cast<size_t>(14 + r)]}), 51, 5) == pad("v" + std::to_string(2 * r), 4) + "│", "row v" + std::to_string(2 * r));
+  check(columns(as_text({f[24]}), 5) == "-60s ──────── each cell 1.4 s ───────── now │      -60s ──────── each cell 1.4 s ───────── now", "the axis under both blocks");
+  row_is(25, "Windows  top 6 of 46 by cores                    │ WSL  top 6 of 64 by cores, dxg: no usage measured");
+  row_is(26, " cores     pid name            thr WS GiB        │  cores     pid name        thr RSS GiB st dxg");
+  row_is(27, " 13.25   31000 cpu_burn.exe     21    0.1        │  19.72    4121 cpu_burn     21     0.1  R");
+  row_is(28, "  5.76    7120 vmmemWSL         22   10.1 WSL VM │   0.10    4388 python3      12     2.0  S holder");
+  row_is(29, "  0.42       4 System          310    0.0        │   0.04    2000 node         11     0.4  S");
+  row_is(30, "  0.31   11736 vmwp.exe         40    0.1 WSL VM │   0.03    2001 sshd          1     0.0  S");
+  row_is(31, "  0.22    9001 카카오톡.exe     60    0.4        │   0.02    2002 systemd       1     0.0  S");
+  row_is(32, "  0.20   10000 svchost.exe      12    0.0        │   0.01    2003 dbus-daemon   1     0.0  S");
+  row_is(33, "[1] overall  [2] gpu  [3] cpu  [q] quit");
+
+  // Both plots are as wide as the smaller column, whichever side is wider, and share the axis.
+  for (const int w : {100, 101, 131, 132, 200}) {
+    const auto g = large(s, h, w, 34);
+    const int cells = (w - 3) / 2 - 5, right = kRight(w);
+    check(static_cast<int>(cells_of(g[14]).size()) == right + 5 + cells, "the plots use the smaller width at " + std::to_string(w));
+    check(columns(as_text({g[14]}), cells + 5, 3) == " │ ", "the divider sits where the left column ends at " + std::to_string(w));
+  }
+
+  // One onset: quiet to the left, amber to the right, on both sides and in the same cell of each.
+  const auto left = cells_of(f[14]), right = cells_of(f[14]);
+  check(left[5].fg == 236 && left[5].bg == 236 && left[47].fg == 179 && left[47].bg == 179, "the heat shows the onset");
+  int onset_left = -1, onset_right = -1;
+  for (int c = 0; c < 43; ++c) {
+    if (onset_left < 0 && left[static_cast<size_t>(5 + c)].fg == 179) onset_left = c;
+    if (onset_right < 0 && right[static_cast<size_t>(56 + c)].fg == 179) onset_right = c;
+  }
+  check(onset_left > 10 && onset_left == onset_right, "one onset lines up across the two blocks");
+  check(left[5].glyph == "▀", "a heat cell is a half block");
+  check(cells_of(f[11])[47].fg == 60 || cells_of(f[11])[47].fg == 67, "the kernel lane is a ramp colour");
+  check(cells_of(f[12])[47].glyph == "█", "a lane is one full cell");
+  check(cells_of(f[12])[56 + 42].fg == 179 && cells_of(f[12])[56 + 42].glyph == "█", "the lost lane is amber from 1 vCPU");
+  check(columns(as_text({f[12]}), 56, 1) == " ", "a gated lost is a gap in its lane, not a cell");
+  check(cells_of(f[11])[56 + 42].fg == 236, "the iowait lane is the iowait, 0 under a full guest");
+}
+
+void check_large_allocation() {
+  struct want { int height, heat, busy, lanes, ram, lists; };
+  for (const want& e : std::initializer_list<want>{{26, 0, 0, 0, 0, 0},  // Below the floor
+                                                   {27, 10, 3, 0, 0, 3}, {28, 10, 3, 0, 0, 4}, {29, 10, 3, 2, 0, 3}, {30, 10, 3, 2, 1, 3},
+                                                   {31, 10, 3, 2, 2, 3}, {32, 10, 3, 2, 2, 4}, {34, 10, 3, 2, 2, 6}, {35, 10, 4, 2, 2, 6},
+                                                   {40, 10, 9, 2, 2, 6}, {43, 10, 12, 2, 2, 6}, {44, 10, 12, 2, 2, 7}, {66, 10, 12, 2, 2, 29}}) {
+    cpu_rows p;
+    const bool fits = plan_cpu_rows(10, e.height, p);
+    const std::string at = " at " + std::to_string(e.height);
+    if (e.heat == 0) { check(!fits, "below the floor" + at); continue; }
+    check(fits && p.heat == e.heat && p.busy == e.busy && p.lanes == e.lanes && p.ram == e.ram && p.lists == e.lists, "the allocation" + at);
+  }
+  // More threads than rows: the lists get their 6 before the heat block takes more than 10.
+  cpu_rows p;
+  check(plan_cpu_rows(20, 27, p) && p.heat == 10 && p.lanes == 0, "20 natural rows have the same floor");
+  check(plan_cpu_rows(20, 34, p) && p.heat == 10 && p.lists == 6, "and the same 34");
+  check(plan_cpu_rows(20, 39, p) && p.heat == 15 && p.busy == 3 && p.lists == 6, "the heat block takes the next rows");
+  check(plan_cpu_rows(20, 44, p) && p.heat == 20 && p.busy == 3, "up to 20 rows");
+  check(plan_cpu_rows(32, 66, p) && p.heat == 20 && p.busy == 12, "never more");
+  check(plan_cpu_rows(2, 19, p) && p.heat == 2 && !plan_cpu_rows(2, 18, p), "4 threads have a floor of 19");
+  check(plan_cpu_rows(0, 17, p) && p.heat == 0, "no rows to draw leaves the fixed rows");
+
+  const snapshot s = contended();
+  const history h = contended_history(s);
+  for (const int rows : {27, 28, 29, 30, 31, 34, 40, 43, 44, 50, 66}) {
+    const auto f = large(s, h, 120, rows);
+    const std::string at = " at 120x" + std::to_string(rows);
+    check(static_cast<int>(f.size()) == rows && frame_fits(f, 120, rows), "the frame fills its rows" + at);
+    check(has(as_text({f.back()}), "[q] quit"), "the footer is the last row" + at);
+    check(is_large(f), "this layout" + at);
+    check(has(as_text({f.back()}), "some rows hidden") == (rows < 30), "the footer says when lanes or RAM went" + at);
+  }
+  // Windows Terminal's default, from memory: all of it, with the RAM lane and 3 list rows.
+  const auto wt = large(s, h, 120, 30);
+  const std::string t = as_text(wt);
+  check(has(t, "kern│") && has(t, "lost≈") && has(t, "top 3 of 46") && has(t, "top 3 of 64"), "120 by 30 keeps the lanes and 3 list rows");
+  const int ram = row_at(wt, 0, "RAM │");
+  check(ram > 0 && cells_of(wt[static_cast<size_t>(ram)])[8].glyph == "█" && cells_of(wt[static_cast<size_t>(ram)])[8].fg == 110, "at 30 rows RAM is a one-row lane on the ramp: 65% is the high step");
+  check(row_at(wt, 0, "    │") == row_at(wt, 0, "100 │") + 1, "the only blank gutter is inside the busy plot");
+  check(!has(as_text(large(s, h, 120, 29)), "RAM │"), "at 29 rows it has gone");
+  check(has(as_text(large(s, h, 120, 29)), "kern│"), "and the lanes are still there");
+  check(!has(as_text(large(s, h, 120, 28)), "kern│"), "at 28 the lanes have gone too");
+  const auto at40 = large(s, h, 131, 40);
+  check(row_at(at40, 0, "RAM │") - row_at(at40, 0, "100 │") == 9, "at 40 the busy graph is 9 rows");
+}
+
+void check_large_floors() {
+  struct size_case { int threads, rows; bool highest; };
+  // Numbered rows, two threads each, so the natural count is half the threads, rounded up.
+  for (const auto& c : std::initializer_list<size_case>{{4, 2, false}, {8, 4, false}, {14, 7, false}, {20, 10, false}, {21, 10, true}, {40, 10, true}, {64, 10, true}}) {
+    snapshot s = contended(c.threads);
+    s.cpu_layout = {};
+    const history h = contended_history(s);
+    const int floor = 17 + c.rows;
+    const std::string at = " at " + std::to_string(c.threads) + " threads";
+    const auto f = large(s, h, 100, floor);
+    check(is_large(f), "the floor is 17 plus heat rows" + at);
+    check(!is_large(large(s, h, 100, floor - 1)), "one row less is the small layout" + at);
+    check(!is_large(large(s, h, 99, 66)), "99 columns are the small layout" + at);
+    check(has(as_text(large(s, h, 100, floor - 1)), "[q] quit"), "the small layout has its footer" + at);
+    check(!has(as_text(large(s, h, 100, floor - 1)), "[t]"), "and no [t]" + at);
+    check(frame_fits(f, 100, floor), "the floor fits" + at);
+    check(has(as_text(f), "highest of each row") == c.highest, "the caption says when rows hold more" + at);
+    for (const char* label : {"whole machine, includes the WSL VM", "guest view, inside the VM", "no usage measured", "WSL VM", "vCPUs, not Windows cores", "inferred"}) {
+      check(has(as_text(f), label), std::string("labelled at the floor: ") + label + at);
+      check(has(as_text(large(s, h, 131, 40)), label), std::string("labelled at 131 by 40: ") + label + at);
+      check(has(as_text(large(s, h, 200, 66)), label), std::string("labelled at 200 by 66: ") + label + at);
+    }
+    check(frame_fits(large(s, h, 131, 40), 131, 40) && frame_fits(large(s, h, 300, 66), 300, 66), "wide windows fit" + at);
+  }
+  // With room, every row a pair, up to 20 rows; past 40 threads a row holds more, and says so.
+  const auto tall = [](int threads) {
+    snapshot s = contended(threads);
+    s.cpu_layout = {};
+    return large(s, contended_history(s), 131, 66);
+  };
+  check(row_at(tall(40), 0, "38") >= 0 && !has(as_text(tall(40)), "highest of each row"), "40 threads are 20 rows of pairs when there is room");
+  check(row_at(tall(21), 0, "20") >= 0 && !has(as_text(tall(21)), "highest of each row"), "21 threads are 11 rows, the last half blank");
+  check(has(as_text(tall(64)), "highest of each row") && row_at(tall(64), 0, "0 ") >= 0 && row_at(tall(64), 0, "62") < 0, "64 threads share 20 rows");
+  check(row_at(tall(64), kRight(131), "v0 ") >= 0 && row_at(tall(64), kRight(131), "v3 ") >= 0, "and a shared row is named for its first thread");
+  check(has(as_text(tall(64)), "vCPUs, not Windows cores · 64 of 64 ≥90% · highest of each row"), "the WSL caption says all of it where it fits");
+  // A row shows its highest thread, however many it holds.
+  snapshot hot_one = contended(64);
+  hot_one.cpu_layout = {};
+  hot_one.cpu.core_pct.assign(64, 2.0);
+  hot_one.cpu.core_pct[1] = 95;
+  history one_sample;
+  one_sample.push(hot_one);
+  const std::vector<line> hf = large(hot_one, one_sample, 131, 66);
+  const std::vector<painted> shared_row = cells_of(line_at(hf, 0, "0 "));
+  check(std::any_of(shared_row.begin(), shared_row.begin() + 64, [](const painted& c) { return c.fg == 179 || c.bg == 179; }), "a shared half shows the highest of its threads");
+  // Fewer threads than pixels, more groups than rows: in order, each once, no blank pixel between.
+  thread_order singles;
+  for (int i = 0; i < 11; ++i) {
+    singles.groups.push_back({i});
+    singles.label.push_back(std::to_string(i));
+  }
+  bool shared = false;
+  const std::vector<heat_row> packed = heat_rows(singles, 10, shared);
+  check(packed.size() == 6 && packed[0].top == std::vector<int>{0} && packed[0].bottom == std::vector<int>{1} && packed[5].top == std::vector<int>{10} && packed[5].bottom.empty() && !shared, "threads that fit the pixels go in order");
+  // Equal shares of 64 threads: 40 lines of pixels, each one or two threads, and every thread in one.
+  bool highest = false;
+  const std::vector<heat_row> rows = heat_rows(numbered_threads(64, "v"), 20, highest);
+  std::vector<int> seen(64, 0);
+  size_t most = 0;
+  for (const heat_row& r : rows) {
+    for (const int t : r.top) ++seen[static_cast<size_t>(t)];
+    for (const int t : r.bottom) ++seen[static_cast<size_t>(t)];
+    most = std::max({most, r.top.size(), r.bottom.size()});
+  }
+  check(rows.size() == 20 && highest && most == 2 && std::all_of(seen.begin(), seen.end(), [](int n) { return n == 1; }), "every thread is in exactly one half");
+  const auto no_read = heat_rows(numbered_threads(0, "v"), 10, highest);
+  check(no_read.empty() && !highest, "no threads, no rows");
+}
+
+void check_large_layouts() {
+  const auto labels = [](const cpu_layout_view& l, int n) {
+    std::string out;
+    const thread_order o = windows_order(l, n);
+    for (const auto& g : o.groups) {
+      out += o.label[static_cast<size_t>(g[0])];
+      for (const int t : g) out += ":" + std::to_string(t);
+      out += " ";
+    }
+    return out;
+  };
+  check(labels(layout_13600k(), 20) == "P0:0:1 P1:2:3 P2:4:5 P3:6:7 P4:8:9 P5:10:11 E0:12:13 E2:14:15 E4:16:17 E6:18:19 ", "P rows are siblings, E rows neighbours");
+  check(labels(cpu_layout_view{}, 5) == "0:0:1 2:2:3 4:4 ", "layout unknown: rows like the guest, no P or E");
+  check(labels(layout_13600k(), 16) == "0:0:1 2:2:3 4:4:5 6:6:7 8:8:9 10:10:11 12:12:13 14:14:15 ", "a layout of another size is not used");
+
+  cpu_layout_view sibs;  // No hybrid cores, siblings not next to each other: bits, never index arithmetic
+  sibs.known = true;
+  for (uint32_t i = 0; i < 4; ++i) sibs.rows.push_back({i, 0, 0});
+  for (uint32_t i = 0; i < 4; ++i) sibs.rows.push_back({i, 1, 0});
+  check(labels(sibs, 8) == "C0:0:4 C1:1:5 C2:2:6 C3:3:7 ", "no hybrid cores: C, numbered by core, siblings by the layout");
+  cpu_layout_view swapped;  // The first logical CPU of a core need not be its first thread
+  swapped.known = true;
+  swapped.rows = {{0, 1, 0}, {0, 0, 0}};
+  check(labels(swapped, 2) == "C0:1:0 ", "a sibling's place comes from `thread`");
+  cpu_layout_view flat;  // No SMT
+  flat.known = true;
+  for (uint32_t i = 0; i < 5; ++i) flat.rows.push_back({i, 0, 0});
+  check(labels(flat, 5) == "C0:0:1 C2:2:3 C4:4 ", "no SMT: C, two neighbours a row");
+  cpu_layout_view hybrid_flat;
+  hybrid_flat.known = true;
+  hybrid_flat.rows = {{0, 0, 0}, {1, 0, 0}, {2, 0, 1}, {3, 0, 1}};
+  check(labels(hybrid_flat, 4) == "C0:2:3 C2:0:1 ", "hybrid with no SMT is C too, the fast cores first");
+  cpu_layout_view three;  // Three classes, the highest not at the lowest numbers
+  three.known = true;
+  three.rows = {{0, 0, 0}, {1, 0, 1}, {2, 0, 2}, {2, 1, 2}, {3, 0, 2}, {3, 1, 2}, {4, 0, 1}};
+  check(labels(three, 7) == "P0:2:3 P1:4:5 E0:1:6 E2:0 ", "three classes: P is the highest and E all others");
+
+  // The frame reads the same order: the hot thread 4 is core 0's second thread, so row C0's bottom half.
+  snapshot s = contended(8);
+  s.cpu_layout = sibs;
+  s.cpu.core_pct.assign(8, 1.0);
+  s.cpu.core_pct[4] = 95;
+  history h;
+  h.push(s);
+  const auto f = large(s, h, 100, 34);
+  const std::vector<painted> c = cells_of(line_at(f, 0, "C0"));
+  check(c[47].glyph == "▀" && c[47].fg == 236 && c[47].bg == 179, "the first thread is the top half and its sibling the bottom");
+  check(row_at(f, 0, "C3") > 0 && row_at(f, 0, "P") < 0 && row_at(f, 0, "E") < 0, "no P or E on a machine without them");
+
+  // Past the rows, labels still come from the layout, for the first thread of the row.
+  snapshot small_room = contended(20);
+  cpu_layout_view twenty_two = layout_13600k();
+  small_room.cpu.core_pct.assign(22, 50.0);
+  for (uint32_t c2 = 14; c2 < 16; ++c2) twenty_two.rows.push_back({c2, 0, 0});
+  small_room.cpu_layout = twenty_two;
+  const history h2 = contended_history(small_room);
+  const auto f2 = large(small_room, h2, 100, 27);
+  check(has(as_text(f2), "highest of each row") && row_at(f2, 0, "P0") > 0 && row_at(f2, 0, "E") > 0, "22 threads in 10 rows keep P and E");
+}
+
+// Cells of a block, from a history of known values.
+void check_heat_cells() {
+  // Blank never takes a colour: half a history, on a block with an odd thread, and a side with no data.
+  const snapshot base = contended(21, 5);
+  history h;
+  for (int age = 20; age >= 0; --age) {
+    snapshot s = base;
+    s.unix_ms = kNow - age * 1000;
+    guest_figures g;
+    g.seq = age;
+    s.wsl_json = guest_line(std::vector<double>(5, 50.0), g);
+    h.push(s);
+  }
+  const std::vector<line> f = large(base, h, 131, 66);
+  int blank = 0, coloured = 0;
+  static const std::vector<int> kRamp = {236, 60, 67, 110, 179};
+  const auto in_ramp = [](int c) { return std::find(kRamp.begin(), kRamp.end(), c) != kRamp.end(); };
+  for (const line& l : f) {
+    for (const span& p : l) {
+      const bool spaces = p.text.find_first_not_of(' ') == std::string::npos;
+      if (spaces) check(p.fg256 < 0 && p.bg256 < 0, "a blank cell is no ramp colour");
+      if (p.fg256 >= 0) check(in_ramp(p.fg256), "only ramp colours are painted");
+      if (p.bg256 >= 0) check(in_ramp(p.bg256), "only ramp colours fill a background");
+      blank += spaces ? 1 : 0;
+      coloured += p.fg256 >= 0 ? 1 : 0;
+    }
+  }
+  check(blank > 0 && coloured > 0, "that frame had both");
+
+  // Odd counts: the last thread has its top half and a blank below.
+  const std::vector<painted> odd = cells_of(line_at(f, 0, "20"));
+  check(odd[60].glyph == "▀" && odd[60].fg == 179 && odd[60].bg == -1, "an odd thread leaves a blank half");
+  const std::vector<painted> odd_guest = cells_of(line_at(f, kRight(131), "v4"));
+  check(odd_guest.back().glyph == "▀" && odd_guest.back().fg == 67 && odd_guest.back().bg == -1, "and so does an odd vCPU");
+
+  // Only the second thread known: the lower half, in its colour, on nothing.
+  snapshot second = contended(20);
+  second.cpu.core_pct[0] = kNaN;
+  second.cpu.core_pct[2] = 40;
+  history one;
+  one.push(second);
+  const std::vector<line> g = large(second, one, 100, 34);
+  std::vector<painted> c = cells_of(line_at(g, 0, "P0"));
+  const size_t edge = 47;
+  check(c[edge].glyph == "▄" && c[edge].fg == 179 && c[edge].bg == -1, "only the second known is the lower half");
+  c = cells_of(line_at(g, 0, "P1"));
+  check(c[edge].glyph == "▀" && c[edge].fg == 67 && c[edge].bg == 179, "both known: foreground first thread, background second");
+  check(c[6].glyph == " " && c[6].fg == -1, "a cell with no sample is blank");
+
+  // Neither known, by repeated lines: one carries, a second is a gap.
+  const snapshot guest = contended();
+  const auto with_repeats = [&](int repeats) {
+    return build_history(guest, 5, [&](snapshot& s, int age, int seq) {
+      guest_figures fig;
+      fig.seq = age <= repeats ? 99 : seq;
+      s.wsl_json = guest_line(read_wsl(guest.wsl_json).core_pct, fig);
+    });
+  };
+  const auto newest = [&](const history& hist) {
+    const std::vector<line> frame = large(guest, hist, 100, 34);
+    return cells_of(line_at(frame, kRight(100), "v0")).back().glyph;
+  };
+  check(newest(with_repeats(0)) == "▀", "a new line is drawn");
+  check(newest(with_repeats(1)) == "▀", "a repeated line carries for one sample: 13 of 58 under contention must not stripe");
+  check(newest(with_repeats(2)) == " ", "two repeats in a row are a gap");
+
+  // The block follows the newest sample, and a stall is blank cells.
+  history stalled;
+  for (const int age : {50, 49, 48, 3, 2, 1, 0}) {
+    snapshot s = guest;
+    s.unix_ms = kNow - age * 1000;
+    guest_figures fig;
+    fig.seq = age;
+    s.wsl_json = guest_line(read_wsl(guest.wsl_json).core_pct, fig);
+    stalled.push(s);
+  }
+  const std::vector<line> sf = large(guest, stalled, 100, 34);
+  c = cells_of(line_at(sf, 0, "P0"));
+  check(c[5 + 7].glyph == "▀" && c[5 + 25].glyph == " " && c[5 + 42].glyph == "▀", "a stall is a blank stretch in the block");
+
+  // The clock steps back: the block survives.
+  history stepped = contended_history(guest);
+  snapshot back = guest;
+  back.unix_ms = kNow - 3600000;
+  back.interval_s = 1;
+  stepped.push(back);
+  const std::vector<line> bf = render(back, 100, 34, kNow - 3600000, &stepped, view::cpu);
+  c = cells_of(line_at(bf, 0, "P0"));
+  check(c[5 + 40].glyph == "▀" && c[5 + 42].fg == 179, "a clock that steps back keeps the block");
+
+  // A busy cell's scale is fixed: 50 fills half, and over 100 reaches the top without changing the head.
+  snapshot over = contended();
+  over.cpu.busy_pct = 112;
+  over.vm.vmmem_cores = 21.5;
+  history oh;
+  oh.push(over);
+  const std::vector<line> of = large(over, oh, 100, 34);
+  check(has(as_text(of), "112%  WINDOWS") && has(as_text(of), "VM ran 21.50 of 20 threads"), "over 100 is printed as measured");
+  check(columns(as_text({line_at(of, 0, "100 ")}), 47, 1) == "⣿", "and the plot stops at its top");
+
+  // Lanes: the kernel lane leaves the VM out, and a RAM plot is 2 rows of 0-100.
+  snapshot lanes = contended();
+  lanes.cpu_derived.own_kernel_pct = 2;
+  lanes.cpu_derived.vm_cpu_pct = 70;
+  lanes.memory.available = lanes.memory.total / 4;
+  history lh;
+  lh.push(lanes);
+  const std::vector<line> lf = large(lanes, lh, 100, 34);
+  check(cells_of(line_at(lf, 0, "kern"))[47].fg == 236, "the kern lane is kernel less the VM");
+  check(cells_of(line_at(lf, 0, "VM  "))[47].fg == 110, "the VM lane is the VM");
+  const int ram = row_at(lf, 0, "RAM │");
+  check(columns(as_text({lf[static_cast<size_t>(ram)]}), 47, 1) == "⣤" && columns(as_text({lf[static_cast<size_t>(ram) + 1]}), 47, 1) == "⣿", "75% of 8 dots is 6");
+  bool steel = false;
+  for (const span& p : lf[static_cast<size_t>(ram)]) steel = steel || (has(p.text, "⣤") && p.color == tone::bar);
+  check(steel, "RAM is steel");
+  lanes.memory.available = lanes.memory.total / 50;
+  bool red = false;
+  const std::vector<line> low_ram = large(lanes, lh, 100, 34);
+  for (const span& p : low_ram[5]) red = red || (has(p.text, "/63.7 GiB") && p.color == tone::act);
+  check(red, "RAM uses left_tone");
+
+  // The count is at 90%, the same line the top colour starts on.
+  snapshot count = contended();
+  count.cpu.core_pct.assign(20, 50.0);
+  count.cpu.core_pct[0] = 89.9;
+  count.cpu.core_pct[1] = 90;
+  count.cpu.core_pct[2] = 112;
+  check(has(as_text(large(count, one)), "threads · 2 of 20 ≥90%"), "the count is of threads at 90% or more");
+
+  const std::vector<line> calm = large(idle_now(), idle_history(idle_now()), 100, 34);
+  for (const line& l : calm) {
+    for (const span& p : l) check(!(has(p.text, "▀") && p.fg256 == 179), "an idle block has no hot cell");
+  }
+}
+
+void check_lost_text() {
+  const auto third = [](const snapshot& s, const history& h) { return columns(as_text({large(s, h)[4]}), 51); };
+  snapshot s = contended();
+  const history h = contended_history(s);
+  check(third(s, h) == "WSL short ≈14 of 20 vCPUs, inferred · load 19.8", "the contended head");
+
+  const auto watch_on = [&](const snapshot& t) {
+    const std::vector<line> f = large(t, h);
+    for (const span& p : f[4]) {
+      if (has(p.text, "WSL short")) return p.color == tone::watch;
+    }
+    return false;
+  };
+  check(watch_on(s), "WSL short is watch from 1 vCPU");
+  s.lost.vcpus = 1;
+  check(has(third(s, h), "≈1 of 20") && watch_on(s), "at exactly 1 vCPU too");
+  s.lost.vcpus = 0.99;
+  check(third(s, h) == "WSL short <1 vCPU, inferred · load 19.8", "under 1 vCPU it prints <1");
+  check(!watch_on(s), "and is not watch");
+
+  s = contended();
+  s.lost = {lost_state::collecting, kNaN};
+  check(third(s, h) == "load 19.8 · lost CPU collecting", "until 5 samples it says so");
+  s.lost = {lost_state::guest_under_99, kNaN};
+  check(third(s, h) == "load 19.8 · lost CPU n/a under 99% busy", "under 99% guest busy, n/a and why");
+  s.lost = {lost_state::windows_under_95, kNaN};
+  check(third(s, h) == "load 19.8 · lost CPU n/a, Windows under 95%", "under 95% Windows busy, n/a and why");
+  s.lost = {lost_state::no_data, kNaN};
+  check(third(s, h) == "load 19.8 · lost CPU n/a", "with a stale line or a reset, n/a");
+  for (const lost_state state : {lost_state::collecting, lost_state::guest_under_99, lost_state::windows_under_95, lost_state::no_data}) {
+    s.lost = {state, 3.5};  // Only known has a figure, whatever vcpus holds
+    const std::string t = as_text(large(s, h));
+    check(!has(t, "WSL short") && !has(t, "inferred"), "a gated lost prints no figure and no claim");
+  }
+  s.lost = {lost_state::known, kNaN};
+  check(!has(as_text(large(s, h)), "WSL short"), "known with no figure is no figure");
+  s = contended(20, 4);
+  s.lost = {lost_state::no_data, kNaN};
+  check(has(third(s, h), "lost CPU n/a, vCPUs differ"), "a guest with fewer vCPUs than Windows has threads is outside the evidence");
+
+  // When a load stops the figure is gone at once and the lane holds nothing new: never a 0.
+  snapshot stopped = contended();
+  stopped.lost = {lost_state::guest_under_99, kNaN};
+  const history fading = build_history(stopped, 60, [&](snapshot& t, int age, int seq) {
+    guest_figures g;
+    g.seq = seq;
+    t.wsl_json = guest_line(read_wsl(stopped.wsl_json).core_pct, g);
+    t.lost = age > 10 ? lost_view{lost_state::known, 13.96} : lost_view{lost_state::guest_under_99, kNaN};
+  });
+  const std::vector<line> f = large(stopped, fading);
+  const std::vector<painted> lane_cells = cells_of(line_at(f, kRight(100), "lost≈"));
+  check(lane_cells[56 + 20].fg == 179 && lane_cells.size() > 56 + 40 && lane_cells[56 + 42].glyph == " " && lane_cells[56 + 42].fg == -1, "a stopped load leaves a gap in the lane");
+  check(!has(as_text(f), "WSL short"), "and the head says nothing about it");
+
+  // The lane under the floor is quiet, however large its share of a small guest.
+  snapshot few = contended(4);
+  few.lost = {lost_state::known, 0.9};
+  history fh;
+  fh.push(few);
+  const std::vector<line> ff = large(few, fh);
+  check(cells_of(line_at(ff, kRight(100), "lost≈")).back().fg == 236, "under 1 vCPU the lane is quiet");
+  few.lost.vcpus = 1;
+  fh = history();
+  fh.push(few);
+  const std::vector<line> at_one = large(few, fh);
+  check(cells_of(line_at(at_one, kRight(100), "lost≈")).back().fg == 179, "at 1 vCPU it is amber");
+  bool mark = false;
+  for (const span& p : line_at(f, kRight(100), "lost≈")) mark = mark || (p.text == "≈" && p.color == tone::watch);
+  check(mark, "the gutter marks the lane as inferred");
+
+  // What gives way on a tight row: the load, the ready figure.
+  s = contended();
+  s.lost.vcpus = 128;
+  s.wsl_json = guest_line(std::vector<double>(128, 100.0), [] { guest_figures g; g.load = 123456.7; return g; }());
+  check(!has(as_text(large(s, h)), "load 123") && has(as_text(large(s, h)), "≈128 of 128 vCPUs, inferred"), "the head drops load, never the label");
+  check(has(as_text(large(s, h, 131, 34)), "load 123456.7"), "a wider head keeps it");
+  s = contended();
+  s.cpu_derived.ready_threads_mean = 123456;
+  s.cpu_derived.vm_ready_threads_mean = 123456;
+  check(columns(as_text({large(s, h)[4]}), 0, 48).find("VM ran 5.76 of 20 threads · ≈123456 ready") == 0, "the ready line loses its VM count first");
+  s = contended();
+  s.cpu_derived.ready_threads_mean = s.cpu_derived.vm_ready_threads_mean = kNaN;
+  check(has(as_text(large(s, h)), " · ready collecting"), "ready needs 5 samples and says so");
+  s.ready_threads.reset();
+  check(has(as_text(large(s, h)), " · ready n/a"), "an unread count is n/a");
+  s = contended();
+  s.cpu_derived.vm_ready_threads_mean = kNaN;
+  check(has(as_text(large(s, h, 131, 34)), "≈41 ready, VM collecting"), "the VM's count can lag the machine's");
+  s.vm_ready_threads.reset();
+  check(has(as_text(large(s, h)), "≈41 ready, VM n/a"), "with no vmmem the machine's count stands alone");
+}
+
+void check_large_states() {
+  const snapshot base = contended();
+  const history full = contended_history(base);
+  const auto axis_of = [](const std::vector<line>& f) {
+    const int at = row_at(f, 0, "E6");
+    return at < 0 ? std::string() : columns(as_text({f[static_cast<size_t>(at + 1)]}), 0, 48);
+  };
+
+  // Fresh launch.
+  history young = build_history(base, 8, [&](snapshot& s, int, int seq) {
+    guest_figures g;
+    g.seq = seq;
+    s.wsl_json = guest_line(read_wsl(base.wsl_json).core_pct, g);
+  });
+  snapshot launch = base;
+  launch.unix_ms = base.unix_ms;
+  launch.lost = {lost_state::collecting, kNaN};
+  std::vector<line> f = large(launch, young);
+  check(has(axis_of(f), "collecting: 8 s of 60 s"), "the axis counts up to the span");
+  check(has(as_text(f), "lost CPU collecting") && has(as_text(f), "100%  WINDOWS") && has(as_text(f), "VM ran 5.76"), "instant figures are valid from the first sample");
+  check(has(as_text(large(launch, history())), "collecting: 0 s of 60 s"), "no history yet");
+  check(!has(axis_of(large(base, full)), "collecting"), "a full span has done collecting");
+  check(has(as_text(large(base, full, 100, 34, options_for(300))), "collecting: 60 s of 300 s"), "a longer span collects longer");
+  const history nearly = contended_history(base, 899);
+  check(!has(as_text(large(base, nearly, 100, 34, options_for(900))), "collecting"), "a ring just short of 15 minutes is full: the axis must not count for ever");
+
+  // WSL starting.
+  snapshot starting = base;
+  starting.wsl_json.clear();
+  starting.wsl_age_s = -1;
+  starting.lost = {lost_state::no_data, kNaN};
+  const history waiting = build_history(starting, 4, [](snapshot&, int, int) {});
+  f = large(starting, waiting);
+  check(has(as_text(f), "WSL starting, no data yet: 4 s") && !has(as_text(f), "lost CPU"), "WSL starting says how long");
+  check(has(as_text(f), "n/a   WSL  user n/a · sys n/a · iowait n/a"), "and every guest figure is n/a");
+  check(has(as_text(f), "100%  WINDOWS"), "Windows carries on");
+
+  // WSL stopped, or the collector failed.
+  snapshot gone = base;
+  gone.wsl_json.clear();
+  gone.wsl_age_s = -1;
+  gone.wsl_restarts = 2;
+  gone.lost = {lost_state::no_data, kNaN};
+  const history before_gone = build_history(gone, 60, [](snapshot&, int, int) {});
+  f = large(gone, before_gone);
+  std::string t = as_text(f);
+  check(has(t, "WSL unavailable: the collector sent nothing") && has(t, "collector restarted 2 times"), "the head says why");
+  check(!has(t, "lost CPU") && !has(t, "WSL short") && !has(t, "inferred"), "lost is not shown");
+  check(row_at(f, kRight(100), "100 │") > 0 && columns(as_text({f[8]}), 56) == std::string(43, ' '), "the guest plots are gaps");
+  check(has(t, "WSL  ") && has(t, "guest view, inside the VM"), "the descriptor stays");
+  snapshot unread = base;
+  unread.wsl_json = "{\"schema\":1,\"busy";
+  unread.lost = {lost_state::no_data, kNaN};
+  check(has(as_text(large(unread, before_gone)), "WSL unavailable: unreadable collector line"), "an unreadable line says so");
+  unread.wsl_json = R"({"schema":2,"busy_pct":1,"memory":{}})";
+  check(has(as_text(large(unread, before_gone)), "WSL unavailable: newer schema than this screen"), "a newer schema says so");
+  unread.wsl_json = R"({"schema":2,"distro":"Refused","busy_pct":77,"core_pct":[77,77,77,77,77,77],"cpu_split":{"user":66,"sys":11,"iowait":3},"memory":{"total":1000,"available":10}})";
+  t = as_text(large(unread, before_gone));
+  check(!has(t, "66") && !has(t, "77") && !has(t, "Refused") && has(t, "n/a   WSL"), "a refused line lends the head nothing");
+  check(row_at(large(unread, before_gone), kRight(100), "v0") < 0, "nor the block its rows");
+
+  // Stale: appended to the second row, in watch, and the descriptor stays.
+  const snapshot stale = stale_now();
+  const history sh = stale_history(stale);
+  f = large(stale, sh);
+  t = columns(as_text({f[3]}), 51);
+  check(t == "      guest view, inside the VM · 3600 s old", "the age is on the descriptor's row, and the distro gave way: " + t);
+  check(has(as_text({large(stale, sh, 131, 34)[3]}), "guest view, inside the VM · Ubuntu-24.04 · 3600 s old"), "with room it stays");
+  bool watched = false;
+  for (const span& p : f[3]) watched = watched || (has(p.text, "3600 s old") && p.color == tone::watch);
+  check(watched, "in watch");
+  const std::vector<painted> stale_cells = cells_of(line_at(f, kRight(100), "v0"));
+  check(stale_cells[56 + 10].glyph == "▀" && stale_cells.back().glyph == " ", "stale cells are blank, older ones stay");
+  check(has(as_text(f), "lost CPU n/a") && !has(as_text(f), "WSL short"), "lost resets");
+  check(has(as_text({line_at(f, 0, "threads")}), "vCPUs, not Windows cores · n/a ≥90%"), "an old line is not counted as now");
+  snapshot just = contended();
+  just.wsl_age_s = 4.99;
+  check(!has(as_text({large(just, full)[3]}), " s old"), "under 5 s there is no age");
+  just.wsl_age_s = 5;
+  check(has(as_text({large(just, full)[3]}), "· 5 s old"), "at 5 s there is");
+  just.wsl_age_s = -1;
+  check(has(as_text({large(just, full)[3]}), "age unknown"), "unknown age says so");
+  snapshot steal = contended();
+  steal.wsl_json.replace(steal.wsl_json.find("\"steal_pct\":0"), 13, "\"steal_pct\":0.3");
+  check(has(as_text({large(steal, full, 131, 34)[3]}), "· steal 0.3%"), "steal is shown above 0");
+  check(!has(as_text({large(contended(), full, 131, 34)[3]}), "steal"), "and only above 0");
+  snapshot long_name = stale_now();
+  const std::string key = "\"distro\":\"Ubuntu-24.04\"";
+  long_name.wsl_json.replace(long_name.wsl_json.find(key), key.size(), "\"distro\":\"\\u001b]0;pwned\\u0007\\u202e" + std::string(60, 'd') + "\"");
+  t = as_text({large(long_name, full)[3]});
+  check(has(t, "guest view, inside the VM ·") && has(t, "· 3600 s old"), "the distro is cut first");
+  check(vt_clean(vt_frame(large(long_name, full), 34)), "a hostile distro stays safe");
+
+  // Windows CPU read failed.
+  snapshot failed = contended();
+  failed.cpu = {};
+  failed.cpu_derived = {};
+  failed.lost = {lost_state::no_data, kNaN};
+  const history fh = build_history(failed, 3, [](snapshot&, int, int) {});
+  f = large(failed, fh);
+  t = as_text(f);
+  check(has(t, "n/a   WINDOWS  user n/a · kernel n/a · VM n/a"), "a failed Windows read is n/a");
+  check(has(t, "100%  WSL") && has(t, "lost CPU n/a"), "the guest carries on, lost n/a");
+  check(!has(columns(as_text({line_at(f, 0, "threads")}), 0, 40), "0 of"), "no count is made up");
+  // Failing after a good minute keeps the rows: the gap is in the cells.
+  history failing = contended_history(base);
+  snapshot one_fail = failed;
+  one_fail.unix_ms = base.unix_ms + 1000;
+  failing.push(one_fail);
+  f = render(one_fail, 100, 34, kNow + 1000, &failing, view::cpu);
+  check(row_at(f, 0, "P0") > 0, "a failed read keeps the block in place");
+  check(cells_of(line_at(f, 0, "P0")).back().fg == -1 || cells_of(line_at(f, 0, "P0"))[47].glyph == " ", "and its newest cell is blank");
+
+  // vmmem not found, or the first sample of a new one: a bare 0 is never a number.
+  snapshot no_vm = contended();
+  no_vm.vm.vmmem_cores = 0;
+  no_vm.vm.vmmem_cores_known = false;
+  no_vm.cpu_derived.vm_cpu_pct = no_vm.cpu_derived.own_kernel_pct = kNaN;
+  no_vm.lost = {lost_state::no_data, kNaN};
+  t = as_text(large(no_vm, full));
+  check(has(t, "user 65 · kernel n/a · VM n/a"), "VM n/a");
+  check(has(t, "VM ran n/a of 20 threads") && !has(t, "VM ran 0"), "the VM's cores are n/a, not 0");
+  check(has(t, "  n/a    7120 vmmemWSL"), "and its row in the list");
+  no_vm.vm.vmmem_pid = 0;
+  no_vm.vm.vmwp_pid = 0;
+  check(has(as_text(large(no_vm, full)), "VM ran n/a"), "not found reads the same");
+  history vh;
+  snapshot first_vm = contended();
+  first_vm.vm.vmmem_cores_known = false;  // The figures are stale leftovers, and must not be believed
+  vh.push(first_vm);
+  check(has(as_text(large(first_vm, vh)), "VM n/a"), "vmmem_cores_known decides, not whether the number looks real");
+  const std::vector<line> vf = large(first_vm, vh);
+  check(cells_of(line_at(vf, 0, "VM  "))[47].glyph == " ", "and the lane is a gap");
+
+  // Layout unknown, on the frame.
+  snapshot unknown = contended();
+  unknown.cpu_layout = {};
+  f = large(unknown, full);
+  check(row_at(f, 0, "0   ") > 0 && row_at(f, 0, "18  ") > 0 && row_at(f, 0, "P0") < 0, "layout unknown: numbered rows");
+  unknown.cpu_layout = layout_13600k();
+  unknown.cpu_layout.rows.pop_back();
+  check(row_at(large(unknown, full), 0, "P0") < 0, "a layout that is one short is not trusted");
+
+  // .wslconfig limits vCPUs: fewer rows, top-aligned, blank below, and the count says of 4.
+  snapshot limited = contended(20, 4);
+  limited.lost = {lost_state::no_data, kNaN};
+  const history lh = contended_history(limited);
+  f = large(limited, lh);
+  t = as_text(f);
+  check(row_at(f, kRight(100), "v0") == row_at(f, 0, "P0") && row_at(f, kRight(100), "v2") == row_at(f, 0, "P1") && row_at(f, kRight(100), "v4") < 0, "fewer rows, top-aligned");
+  check(has(t, "4 of 4 ≥90%") && has(t, "20 of 20 ≥90%"), "each caption counts its own");
+  check(columns(as_text({line_at(f, 0, "E6")}), 51).empty(), "blank below");
+  check(has(axis_of(f), "now"), "and the axis is still both sides'");
+
+  // vCPU count changes: rows follow the newest sample, and a vCPU that is gone is blank, not 0.
+  snapshot grew = contended(20, 8);
+  const history gh = build_history(grew, 20, [&](snapshot& s, int age, int seq) {
+    guest_figures g;
+    g.seq = seq;
+    s.wsl_json = guest_line(std::vector<double>(age > 10 ? 4 : 8, 100.0), g);
+  });
+  f = large(grew, gh);
+  std::vector<painted> c = cells_of(line_at(f, kRight(100), "v6"));
+  check(c.back().fg == 179 && c[c.size() - 16].glyph == " ", "a new vCPU has no past");
+  snapshot shrank = contended(20, 4);
+  const history sk = build_history(shrank, 20, [&](snapshot& s, int age, int seq) {
+    guest_figures g;
+    g.seq = seq;
+    s.wsl_json = guest_line(std::vector<double>(age > 10 ? 8 : 4, 100.0), g);
+  });
+  check(row_at(large(shrank, sk), kRight(100), "v4") < 0, "a lost vCPU's row goes");
+
+  // More than 64 logical CPUs: Windows reports one group, and the head says only what it knows.
+  snapshot sixty_four = contended(64);
+  t = as_text(large(sixty_four, contended_history(sixty_four)));
+  check(has(t, "VM ran 5.76 of 64 threads") && !has(t, "of 128"), "one group: no machine-wide count is in the snapshot");
+  snapshot many_vcpus = contended(64, 128);
+  many_vcpus.lost = {lost_state::no_data, kNaN};
+  check(frame_fits(large(many_vcpus, contended_history(many_vcpus), 131, 40), 131, 40), "more vCPUs than a sample keeps still fit");
+}
+
+void check_large_lists() {
+  snapshot s = contended();
+  s.processes.clear();
+  const auto proc = [&](uint32_t pid, double cores) {
+    process_row p;
+    p.pid = pid; p.name = "p" + std::to_string(pid); p.cores = cores; p.threads = 3;
+    s.processes.push_back(p);
+  };
+  proc(900, 0.24);   // 0.2 once rounded, the same as the next two
+  proc(800, 0.21);
+  proc(700, 0.16);
+  proc(600, 0.14);   // 0.1
+  proc(100, 2.5);
+  proc(0, 11.0);     // Idle
+  proc(500, kNaN);   // A number that is not one sorts last
+  const history h = contended_history(s);
+  const std::string t = as_text(large(s, h, 100, 40));
+  const size_t a = t.find("p100"), b = t.find("p700"), c = t.find("p800"), d = t.find("p900"), e = t.find("p600"), f = t.find("p500");
+  check(a < b && b < c && c < d && d < e && e < f, "strict on cores rounded to 0.1, then PID");
+  check(!has(t, "Idle") && has(t, "top 6 of 6 by cores"), "the idle process is not listed");
+  check(cores_key(0.149) == 1 && cores_key(0.151) == 2 && cores_key(kNaN) == -1 && cores_key(kInf) == -1 && cores_key(1e300) == 10000000000, "the sort key is 0.1 cores");
+
+  snapshot w = contended();
+  w.wsl_json = guest_line(std::vector<double>(20, 100.0), {},
+                          R"({"pid":30,"name":"zeta","state":"R","rss":1,"cores":0.24,"threads":2,"on_gpu":false},)"
+                          R"({"pid":20,"name":"beta","state":"D","rss":1,"cores":0.16,"threads":null,"on_gpu":true},)"
+                          R"({"pid":10,"name":"한글추론기","state":"S","rss":1,"cores":0.01,"on_gpu":false},)"
+                          R"({"pid":40,"name":"]0;pwned[31mevil","state":"S","rss":1,"cores":3,"threads":1,"on_gpu":false})");
+  const std::vector<line> frame = large(w, h, 100, 40);
+  const std::string wt = as_text(frame);
+  check(wt.find("pwned") < wt.find("beta") && wt.find("beta") < wt.find("zeta"), "the guest sorts the same way: rounded cores, then PID, and a holder has no place of its own");
+  check(has(wt, "20 beta        n/a"), "a null thread count is n/a");
+  check(has(wt, " holder") && !has(wt, "on GPU"), "a holder is a holder");
+  check(vt_clean(vt_frame(frame, 40)), "hostile names stay safe");
+  bool sides = false;
+  for (const line& l : frame) {
+    const std::string row_text = as_text({l});
+    if (has(row_text, "svchost.exe")) { sides = true; check(columns(row_text, 0, 48).find("svchost") != std::string::npos, "Windows names stay left"); }
+    if (has(row_text, "한글추론기")) check(columns(row_text, 51).find("한글추론기") != std::string::npos, "Linux names stay right");
+  }
+  check(!has(wt, "cpu_burn.exe") || wt.find("Windows  top") < wt.find("WSL  top"), "two lists");
+  check(sides || has(wt, "p100") || has(wt, "cpu_burn.exe"), "the Windows list was drawn");
+
+  // A long count keeps the label: `by cores` is the part that gives way.
+  snapshot big = contended();
+  big.wsl_json.replace(big.wsl_json.find("\"process_count\":64"), 18, "\"process_count\":1280");
+  check(has(as_text(large(big, h)), "WSL  top 6 of 1280, dxg: no usage measured"), "the WSL head keeps no usage measured");
+  check(has(as_text(large(big, h, 131, 34)), "WSL  top 6 of 1280 by cores, dxg: no usage measured"), "with room it keeps both");
+
+  snapshot empty = contended();
+  empty.processes.clear();
+  const std::vector<line> sparse = large(empty, h, 100, 66);
+  check(sparse.size() == 66 && has(as_text({sparse.back()}), "[q] quit") && has(as_text({sparse[60]}), "│ ") == false, "a short list leaves the footer on the last row");
+  check(has(as_text(large(empty, h)), "Windows  ") && has(as_text(large(empty, h)), "unavailable"), "an empty list is unavailable");
+  check(frame_fits(large(empty, h), 100, 34), "and fits");
+
+  // More rows than processes: the footer stays on the last row.
+  const auto tall = large(contended(), h, 100, 66);
+  check(tall.size() == 66 && has(as_text({tall.back()}), "[q] quit"), "short lists leave the footer in place");
+}
+
+// Windows and WSL describe overlapping work, and no figure here adds them.
+void check_no_sums() {
+  snapshot s = contended();
+  s.cpu.busy_pct = 37;
+  s.cpu.user_pct = 21;
+  s.cpu_derived = {13, 4, 7, 3};
+  s.vm.vmmem_cores = 2.60;
+  s.memory.total = 40 * kG;
+  s.memory.available = 30 * kG;
+  guest_figures g;
+  g.busy = 41;
+  g.user = 40;
+  g.used_gib = 7;
+  s.wsl_json = guest_line(std::vector<double>(20, 41.0), g);
+  s.lost = {lost_state::guest_under_99, kNaN};
+  const history h = idle_history(s);
+  for (const int w : {100, 131}) {
+    const std::string t = as_text(large(s, h, w, 40));
+    for (const char* sum : {"78", "61", "17.0", "71.2", "9.60"}) check(!has(t, sum), std::string("no sum of the two sides: ") + sum);
+  }
+}
+
+void check_large_bytes() {
+  const snapshot noisy = noisy_now(), calm = contended();
+  const history nh = noisy_history(noisy), ch = contended_history(calm);
+  const std::string vt = vt_frame(large(noisy, nh, 131, 40), 40), quiet = vt_frame(large(calm, ch, 131, 40), 40);
+  printf("frame bytes at 131 by 40: noisy %zu, contended %zu\n", vt.size(), quiet.size());
+  check(vt.size() < 48 * 1024, "a noisy frame is under 48 KiB: " + std::to_string(vt.size()));
+  check(quiet.size() < vt.size() / 2 + 2000, "a calm one is far under it: equal cells are merged");
+  check(vt.size() > 24 * 1024, "the noisy fixture is noisy, or this check proves nothing");
+  // That fixture has a colour change in most cells.
+  const auto rows = large(noisy, nh, 131, 40);
+  const std::vector<painted> c = cells_of(line_at(rows, 0, "P0"));
+  int changes = 0;
+  std::vector<int> colours;
+  for (size_t i = 6; i < 64 && i < c.size(); ++i) {
+    changes += c[i].fg != c[i - 1].fg || c[i].bg != c[i - 1].bg ? 1 : 0;
+    colours.push_back(c[i].fg);
+    colours.push_back(c[i].bg);
+  }
+  for (const int colour : {236, 60, 67, 110, 179}) check(std::count(colours.begin(), colours.end(), colour) > 0, "every step of the ramp: " + std::to_string(colour));
+  check(changes > 40, "changing in nearly every cell: " + std::to_string(changes));
+  const snapshot forty = noisy_now(40);
+  const history fh = noisy_history(forty);
+  check(vt_frame(large(forty, fh, 131, 40), 40).size() < 48 * 1024, "40 noisy threads are under it too");
+  check(vt_clean(vt), "a noisy frame is only our own sequences");
+}
+
+void check_span_key() {
+  const snapshot s = contended();
+  const history h = contended_history(s, 900);
+  render_options wired;
+  wired.span_key = true;
+
+  check(next_span(60000) == 300000 && next_span(300000) == 900000 && next_span(900000) == 60000, "t steps 60 s, 5 min, 15 min, and wraps");
+  check(next_span(12345) == 60000, "a span it does not know starts over");
+
+  // Only when the caller says the key is wired, and only where it does something.
+  check(!has(as_text(large(s, h, 100, 34)), "[t]"), "no dead key: without the option the footer has no [t]");
+  check(has(as_text({large(s, h, 100, 34, wired).back()}), "[1] overall  [2] gpu  [3] cpu  [t] span 60s  [q] quit"), "the footer of section 6");
+  for (const int span_s : {300, 900}) {
+    render_options o = options_for(span_s);
+    const std::string t = as_text(large(s, h, 100, 34, o));
+    const std::string name = span_s == 300 ? "5m" : "15m";
+    check(has(t, "[t] span " + name), "the footer says the span");
+    check(has(t, "-" + name + " ─"), "the axis says the span");
+    check(has(t, span_s == 300 ? "peak over mean · 7 s" : "peak over mean · 21 s"), "past 60 s the axis says what a cell is");
+    check(!has(t, "each cell"), "and not the 60 s wording");
+  }
+  for (const view v : {view::overall, view::gpu}) {
+    check(!has(as_text(render(s, 131, 40, kNow, &h, v, wired)), "[t]"), "t is absent from the other panels");
+    check(!span_key_acts(s, h, v, 131, 40), "and does nothing there");
+    check(as_text(render(s, 131, 40, kNow, &h, v, options_for(900))) != "" , "those panels ignore a span");
+  }
+  const std::string plain = as_text(render(s, 131, 40, kNow, &h, view::gpu));
+  render_options unwired;
+  unwired.span_ms = 900000;
+  check(as_text(render(s, 131, 40, kNow, &h, view::gpu, unwired)) == plain, "panel 2 stays at 60 s whatever the span");
+  check(!has(as_text(render(s, 99, 40, kNow, &h, view::cpu, wired)), "[t]") && !span_key_acts(s, h, view::cpu, 99, 40), "t does nothing in the small layout");
+  check(!has(as_text(render(s, 100, 26, kNow, &h, view::cpu, wired)), "[t]") && !span_key_acts(s, h, view::cpu, 100, 26), "nor below the height floor");
+  check(span_key_acts(s, h, view::cpu, 100, 27) && has(as_text(render(s, 100, 27, kNow, &h, view::cpu, wired)), "[t]"), "at the floor it acts");
+  check(span_key_acts(s, h, view::cpu, 100, 34), "and at the design's size");
+
+  // A span shows the samples it covers: 15 minutes reach back past the 60 s the default shows.
+  const std::vector<line> shortest = large(s, h, 100, 34), longest = large(s, h, 100, 34, options_for(900));
+  check(cells_of(line_at(shortest, 0, "P0"))[5].fg == 179, "60 s of a long load are all hot");
+  check(cells_of(line_at(longest, 0, "P0"))[5].fg == 236, "15 minutes reach back past its onset");
+  // Peak over mean: a burst shows in the plot, not in the block.
+  snapshot burst = contended();
+  const history bh = build_history(burst, 900, [&](snapshot& t, int age, int seq) {
+    quiet_moment(t, seq);
+    if (age % 40 == 20) {
+      t.cpu.busy_pct = 100;
+      t.cpu.core_pct.assign(20, 100.0);
+    }
+  });
+  const std::vector<line> bf = large(burst, bh, 100, 34, options_for(900));
+  check(has(as_text({line_at(bf, 0, "100 ")}), "⣿"), "a one-second burst reaches the top of a 21 s plot cell");
+  const std::vector<painted> burst_row = cells_of(line_at(bf, 0, "P0"));
+  check(std::none_of(burst_row.begin(), burst_row.begin() + 48, [](const painted& c) { return c.fg == 179; }), "and does not paint 20 seconds hot");
+
+  // Peak in every plot, mean in every lane: one bucket of 21 s, one sample high among quiet ones.
+  const auto spike = [&](snapshot& t, int age, int seq) {
+    quiet_moment(t, seq);
+    const bool high = age == 200;  // In the middle of a full bucket
+    t.cpu.busy_pct = high ? 100 : 4;
+    guest_figures g;
+    g.seq = seq;
+    g.busy = high ? 100 : 3;
+    g.iowait = high ? 95 : 3;
+    g.used_gib = high ? 30.0 : 3.0;
+    t.wsl_json = guest_line(read_wsl(burst.wsl_json).core_pct, g);
+    t.memory.available = t.memory.total / (high ? 20 : 2);
+    t.cpu_derived.own_kernel_pct = high ? 95 : 3;
+  };
+  const history sh = build_history(burst, 900, spike);
+  const std::vector<line> sf = large(burst, sh, 100, 40, options_for(900)), lean = large(burst, sh, 120, 30, options_for(900));
+  const auto reaches_top = [&](const char* start, int side) { return has(columns(as_text({line_at(sf, side, start)}), side + 5, 43), "⣿"); };
+  const auto any_hot = [](const line& l, int from, int cells_wide = 43) {
+    const std::vector<painted> cells = cells_of(l);
+    return std::any_of(cells.begin() + from, cells.begin() + from + cells_wide, [](const painted& c) { return c.fg == 179; });
+  };
+  check(reaches_top("100 │", 0), "the Windows busy plot takes the peak");
+  check(reaches_top("100 │", kRight(100)), "the WSL busy plot takes the peak");
+  check(reaches_top("RAM │", 0), "the Windows RAM plot takes the peak");
+  check(reaches_top("RAM │", kRight(100)), "the WSL RAM plot takes the peak");
+  check(!any_hot(line_at(sf, 0, "kern"), 5), "the kern lane takes the mean");
+  check(!any_hot(line_at(sf, kRight(100), "iowt"), kRight(100) + 5), "the iowait lane takes the mean");
+  check(!any_hot(line_at(lean, 0, "RAM │"), 5, 53), "a RAM lane takes the mean");
+  check(!any_hot(line_at(lean, kRight(120), "RAM │"), kRight(120) + 5, 53), "on both sides");
+}
+
+void check_large_captions() {
+  snapshot s = contended();
+  const history h = contended_history(s);
+  std::vector<line> f = large(s, h);
+  const line caption = line_at(f, 0, "threads");
+  int swatch = 0;
+  for (const span& p : caption) swatch += p.fg256 >= 0 ? display_width(p.text) : 0;
+  const std::vector<painted> c = cells_of(caption);
+  std::vector<int> ramp;
+  for (const painted& p : c) {
+    if (p.fg >= 0) ramp.push_back(p.fg);
+  }
+  check(swatch == 5 && ramp == std::vector<int>({236, 60, 67, 110, 179}), "five swatches, in ramp order");
+
+  // Legend first, then the count. The name and "highest" stay.
+  const line narrow = heat_caption("threads", "64 of 64 ≥90%", true, true, 48);
+  check(as_text({narrow}) == "threads · 64 of 64 ≥90% · highest of each row\n", "highest leaves no room for the legend");
+  check(as_text({heat_caption("vCPUs, not Windows cores", "64 of 64 ≥90%", true, false, 49)}) == "vCPUs, not Windows cores · highest of each row\n", "the count goes before the label");
+  check(has(as_text({heat_caption("vCPUs, not Windows cores", "64 of 64 ≥90%", true, false, 62)}), "64 of 64"), "with room both stay");
+  check(!has(as_text({heat_caption("threads", "20 of 20 ≥90%", false, true, 42)}), "idle"), "the legend needs its whole width");
+  check(has(as_text({heat_caption("threads", "20 of 20 ≥90%", false, true, 43)}), "idle"), "and has it at 43");
+
+  // Pressure: short, then n/a where the kernel has none.
+  const auto fourth = [&](const snapshot& t, int w = 100) { return columns(as_text({large(t, h, w, 34)[5]}), kRight(w)); };
+  const std::string psi = "\"pressure\":{\"cpu\":4,\"memory\":0,\"io\":0}";
+  snapshot p = contended();
+  p.wsl_json.replace(p.wsl_json.find(psi), psi.size(), "\"pressure\":{\"cpu\":100,\"memory\":100,\"io\":100}");
+  check(has(fourth(p), "· psi 100/100/100") && !has(fourth(p), "pressure"), "a tight row has the short form: " + fourth(p));
+  check(has(fourth(p, 131), "· pressure cpu 100 mem 100 io 100"), "a wide one the long form: " + fourth(p, 131));
+  snapshot none = contended();
+  none.wsl_json.replace(none.wsl_json.find(psi), psi.size(), "\"pressure\":{\"cpu\":null,\"memory\":null,\"io\":null}");
+  check(has(fourth(none), "RAM 12.3/31.2 GiB · pressure n/a"), "no PSI at all is n/a");
+  snapshot part = contended();
+  part.wsl_json.replace(part.wsl_json.find(psi), psi.size(), "\"pressure\":{\"cpu\":4,\"memory\":null,\"io\":0}");
+  check(has(fourth(part), "pressure cpu 4 mem n/a io 0"), "one missing figure is n/a");
+  snapshot high = contended();
+  high.wsl_json.replace(high.wsl_json.find(psi), psi.size(), "\"pressure\":{\"cpu\":20,\"memory\":0,\"io\":0}");
+  bool watched = false;
+  const std::vector<line> high_frame = large(high, h);
+  for (const span& q : high_frame[5]) watched = watched || (has(q.text, "cpu 20") && q.color == tone::watch);
+  check(watched, "high pressure is watch");
+
+  // Missing guest figures: an older collector's line.
+  snapshot old_line = contended();
+  old_line.wsl_json = busy_json();
+  old_line.lost = {lost_state::no_data, kNaN};
+  const std::string t = as_text(large(old_line, h));
+  check(has(t, "user n/a · sys n/a · iowait n/a") && has(t, "load n/a"), "a line without the new keys is n/a, not 0");
+  check(has(t, "thr") && has(t, " n/a "), "and its processes have no thread count");
+
+  snapshot no_mem = contended();
+  no_mem.memory = {};
+  const std::string nm = as_text(large(no_mem, h));
+  check(has(nm, "RAM n/a") && !has(nm, "free"), "unread memory is n/a");
+}
+
+void check_large_sweep() {
+  for (const char* name : {"contended", "idle", "stale", "noisy"}) {
+    snapshot s;
+    history h;
+    cpu_fixture(name, 60, s, h);
+    for (const int span_s : {60, 900}) {
+      const render_options o = options_for(span_s);
+      for (int w = 100; w <= 300; w += 7) {
+        for (int rows = 17; rows <= 66; ++rows) {
+          check(frame_fits(render(s, w, rows, kNow, &h, view::cpu, o), w, rows), std::string(name) + " " + std::to_string(w) + "x" + std::to_string(rows));
+        }
+      }
+    }
+  }
+  // The labels at every width this layout has, however the rows fall.
+  const snapshot labelled = contended();
+  const history lh = contended_history(labelled);
+  for (int w = 100; w <= 300; ++w) {
+    for (const int rows : {27, 34, 66}) {
+      const std::string at = " at " + std::to_string(w) + "x" + std::to_string(rows);
+      const std::vector<line> f = large(labelled, lh, w, rows);
+      const std::string t = as_text(f);
+      for (const char* label : {"whole machine, includes the WSL VM", "guest view, inside the VM", "no usage measured", "WSL VM", "vCPUs, not Windows cores", "inferred", "two systems' own views"}) {
+        check(has(t, label), std::string("labelled: ") + label + at);
+      }
+      check(has(t, " st dxg\n") && has(t, "  S holder"), "a holder is named as one" + at);
+    }
+  }
+  for (const int threads : {4, 8, 14, 20, 21, 40, 64}) {
+    snapshot s = contended(threads);
+    const history h = contended_history(s);
+    snapshot hostile = s;
+    hostile.cpu.user_pct = 1e308;
+    hostile.cpu.busy_pct = kInf;
+    hostile.cpu_derived = {kInf, -1e308, 1e300, -kInf};
+    hostile.vm.vmmem_cores = 1e308;
+    hostile.wsl_age_s = 1e308;
+    hostile.lost = {lost_state::known, 1e300};
+    for (const int w : {100, 101, 113, 131, 300}) {
+      for (int rows = 17; rows <= 66; rows += 3) {
+        check(frame_fits(large(s, h, w, rows), w, rows), "threads " + std::to_string(threads) + " at " + std::to_string(w) + "x" + std::to_string(rows));
+        check(frame_fits(large(hostile, h, w, rows), w, rows), "hostile numbers, " + std::to_string(threads) + " threads at " + std::to_string(w) + "x" + std::to_string(rows));
+      }
+    }
+  }
 }
 
 #ifdef _WIN32
@@ -1435,6 +2659,32 @@ void check_console() {
 
 }  // namespace
 
+// Frame bytes, and the time to build one from a snapshot: render() and vt_frame(), no terminal.
+int measure_frames() {
+  for (const char* name : {"contended", "idle", "stale", "noisy"}) {
+    for (const int span_s : {60, 900}) {
+      for (const auto& [w, rows] : {std::pair{131, 40}, std::pair{100, 34}}) {
+        snapshot s;
+        history h;
+        const render_options o = options_for(span_s);
+        cpu_fixture(name, span_s, s, h);
+        size_t bytes = 0;
+        constexpr int kFrames = 300;
+        const auto from = std::chrono::steady_clock::now();
+        for (int i = 0; i < kFrames; ++i) bytes = vt_frame(render(s, w, rows, kNow, &h, view::cpu, o), rows).size();
+        const std::chrono::duration<double, std::milli> took = std::chrono::steady_clock::now() - from;
+        printf("%-10s %3d s %dx%d  %6zu bytes  %.3f ms a frame\n", name, span_s, w, rows, bytes, took.count() / kFrames);
+      }
+    }
+  }
+  for (const int threads : {40, 64}) {
+    const snapshot s = noisy_now(threads);
+    const history h = noisy_history(s);
+    printf("noisy, %d threads, 131x40  %zu bytes\n", threads, vt_frame(render(s, 131, 40, kNow, &h, view::cpu), 40).size());
+  }
+  return 0;
+}
+
 int main(int argc, char** argv) {
   const bool quick = argc == 2 && strcmp(argv[1], "quick") == 0;
 #ifdef _WIN32
@@ -1471,6 +2721,30 @@ int main(int argc, char** argv) {
     return 0;
   }
 #endif
+  if (argc >= 2 && strcmp(argv[1], "measure") == 0) return measure_frames();
+  if (argc >= 6 && strcmp(argv[1], "vt") == 0) {  // render_check vt <fixture> W H FILE [span_s]: one frame's VT bytes
+    const render_options o = options_for(argc >= 7 ? atoi(argv[6]) : 60);
+    snapshot s;
+    history h;
+    if (!cpu_fixture(argv[2], static_cast<int>(o.span_ms / 1000), s, h)) return 2;
+    const int rows = atoi(argv[4]);
+    const std::string vt = vt_frame(render(s, atoi(argv[3]), rows, kNow, &h, view::cpu, o), rows);
+    std::ofstream out(argv[5], std::ios::binary);
+    out.write(vt.data(), static_cast<std::streamsize>(vt.size()));
+    out.close();
+    printf("%zu bytes\n", vt.size());
+    return out ? 0 : 1;
+  }
+  if (argc >= 4) {  // render_check <contended|idle|stale|noisy> W H [span_s]: the large layout of panel 3
+    const render_options o = options_for(argc >= 5 ? atoi(argv[4]) : 60);
+    snapshot s;
+    history h;
+    if (cpu_fixture(argv[1], static_cast<int>(o.span_ms / 1000), s, h)) {
+      const std::string t = as_text(render(s, atoi(argv[2]), atoi(argv[3]), kNow, &h, view::cpu, o));
+      fwrite(t.data(), 1, t.size(), stdout);
+      return 0;
+    }
+  }
   if (argc == 4 || argc == 5) {
     const snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
     const history demo = demo_minute(s);
@@ -1497,10 +2771,23 @@ int main(int argc, char** argv) {
   check_buckets();
   check_scale();
   check_panels();
+  check_large_mockup();
+  check_large_allocation();
+  check_large_floors();
+  check_large_layouts();
+  check_heat_cells();
+  check_lost_text();
+  check_large_states();
+  check_large_lists();
+  check_no_sums();
+  check_large_bytes();
+  check_span_key();
+  check_large_captions();
   if (!quick) {
     check_denied_note();
     check_holder_wording();
     check_sizes_with_history();
+    check_large_sweep();
   }
   printf("%d checks, %d failed\n", g_checks, g_failed);
   return g_failed ? 1 : 0;
