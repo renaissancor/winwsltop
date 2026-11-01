@@ -79,6 +79,7 @@ std::string to_json_line(const snapshot& s) {
     key(o, "name", r.name); key(o, "in_bytes_s", r.in_bytes_s); key(o, "out_bytes_s", r.out_bytes_s);
     key(o, "link_bits_s", r.link_bits_s); key(o, "hardware", r.hardware);
   });
+  key(o, "gpu_engines_known", s.gpu_engines_known);  // An empty list is idle only when this is true
   list(o, "gpu_engines", s.gpu_engines, [&](const gpu_engine_row& r) {
     key(o, "pid", r.pid); key(o, "engine", r.engine); key(o, "pct", r.pct);
     key(o, "source", std::string("pdh"));

@@ -15,6 +15,8 @@ exe=$(wslpath -u "$win_exe")
 win_root=${win_exe%\\build\\release\\winwsltop.exe}
 fail() { echo "REFUSED: $1" >&2; exit 1; }
 
+[ "$("$exe" --version | tr -d '\r')" = "winwsltop ${version#v}" ] || fail "--version does not say ${version#v}: change kVersion in src/main.cpp"
+
 # Only DLLs every supported Windows ships. NVML is loaded at run time and is optional.
 deps=$(cd /mnt/c && cmd.exe /c "cd /d $win_root && scripts\\msvc.cmd dependents $win_exe" | tr -d '\r' | grep -i -E '^ +[a-z0-9_.-]+\.dll$' | tr -d ' ' | tr 'A-Z' 'a-z' | sort -u)
 [ -n "$deps" ] || fail "no import list from dumpbin"

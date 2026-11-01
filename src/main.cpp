@@ -6,6 +6,7 @@
 #include "ui/console.h"
 #include "ui/history.h"
 #include "wsl/bridge.h"
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -46,6 +47,26 @@ template <class F> double timed(F f) {
   return (wwt::seconds_now() - t) * 1000.0;
 }
 
+constexpr const char* kVersion = "0.1.0";  // scripts/release.sh refuses a tag that differs
+
+void print_help(FILE* to) {
+  fprintf(to,
+    "winwsltop %s: read-only monitor for Windows and WSL2 sharing one GPU\n"
+    "\n"
+    "usage: winwsltop [--text | --once | --record N] [--distro NAME]\n"
+    "\n"
+    "  (no option)    live screen: 1 overall, 2 GPU, 3 CPU, q quit\n"
+    "  --text         print one text frame and exit\n"
+    "  --once         print one JSON line and exit; takes about 3 s\n"
+    "  --record N     print N JSON lines, one a second, N at least 1\n"
+    "  --distro NAME  read this WSL distro instead of the default\n"
+    "  --version      print the version\n"
+    "  --help         print this\n"
+    "\n"
+    "JSON fields: https://github.com/renaissancor/winwsltop/blob/main/docs/json-output.md\n",
+    kVersion);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -54,10 +75,19 @@ int main(int argc, char** argv) {
   std::wstring distro;
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--once") == 0) run = mode::json;
-    else if (strcmp(argv[i], "--record") == 0 && i + 1 < argc) { run = mode::json; lines = atoi(argv[++i]); }
+    else if (strcmp(argv[i], "--record") == 0 && i + 1 < argc) {
+      // A typo must not look like success: atoi turned "abc" into 0, which printed nothing and exited 0.
+      char* end = nullptr;
+      const long n = strtol(argv[++i], &end, 10);
+      if (*end != '\0' || end == argv[i] || n < 1 || n > INT_MAX) { print_help(stderr); return 2; }
+      run = mode::json;
+      lines = static_cast<int>(n);
+    }
     else if (strcmp(argv[i], "--text") == 0) run = mode::text;
     else if (strcmp(argv[i], "--distro") == 0 && i + 1 < argc) distro = wide(argv[++i]);
-    else { fprintf(stderr, "usage: winwsltop [--text | --once | --record N] [--distro NAME]\n"); return 2; }
+    else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) { print_help(stdout); return 0; }
+    else if (strcmp(argv[i], "--version") == 0) { printf("winwsltop %s\n", kVersion); return 0; }
+    else { print_help(stderr); return 2; }
   }
 
   wwt::cpu_collector cpu;

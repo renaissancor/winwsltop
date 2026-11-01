@@ -18,6 +18,7 @@ missing from this list or a link below does not resolve.
 | [`TODO.md`](TODO.md) | Known defects and their status, with the decision on each | core, the owner of each item | before fixing anything |
 | [`ROADMAP.md`](ROADMAP.md) | What is proposed next and why. Everything in it is PROPOSED until a contract records a decision | orchestrator, the user | planning |
 | [`../wsl-collector/PROTOCOL.md`](../wsl-collector/PROTOCOL.md) | The collector's line, field by field, and the clock-alignment pings | collect, ui, core | before changing the collector or the parser |
+| [`json-output.md`](json-output.md) | Every field of `--once` and `--record`, exit codes, and how not to misread them | scripts and agents using the tool, core | before parsing the output or changing `src/record` |
 | [`releases/v0.1.0.md`](releases/v0.1.0.md) | Release notes for v0.1.0, used by `gh release create` | whoever publishes it | when releasing |
 | [`../experiments/01-gpu-attribution/README.md`](../experiments/01-gpu-attribution/README.md) | Can Windows tell WSL's GPU work from its own? Procedure and verdict; numbers are in the ledger | evidence | repeating or extending experiment 01 |
 | [`../experiments/02-gpu-device/README.md`](../experiments/02-gpu-device/README.md) | Do the GPU device and memory collectors read true? Procedure and verdict | evidence | repeating or extending experiment 02 |

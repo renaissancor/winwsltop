@@ -79,10 +79,31 @@ The binary isn't code-signed, so Windows SmartScreen may warn you the first time
 ```text
 winwsltop                  the live screen
 winwsltop --text           print one frame
-winwsltop --once           print one JSON snapshot
-winwsltop --record 60      print 60 snapshots, one a second
+winwsltop --once           print one JSON line, takes about 3 s
+winwsltop --record 60      print 60 JSON lines, one a second
 winwsltop --distro NAME    read this WSL distro instead of the default
+winwsltop --help           all options, and --version
 ```
+
+## For agents and scripts
+
+It's safe to run unattended: it only reads, starts no GPU load, and ends its own collector when it exits.
+Use `--once` or `--record N`, not the live screen. Stdout carries one JSON object per line and nothing else.
+
+```bash
+# From WSL or Git Bash. Any folder works, including the Linux filesystem.
+curl -fsSL -o winwsltop.exe https://github.com/renaissancor/winwsltop/releases/latest/download/winwsltop.exe
+chmod +x winwsltop.exe
+
+# Who is using the GPU right now?
+./winwsltop.exe --once | jq '{util: .gpu_device.util_pct, split: .gpu_split, wsl_holders: .wsl.data.dxg_pids}'
+```
+
+Exit 0 means it ran, not that every reading succeeded, and exit 2 means bad arguments. Before trusting a
+figure, check `gpu_split.valid`, `gpu_engines_known` and whether `wsl.data` is null.
+[`docs/json-output.md`](docs/json-output.md) has every field, its units and how not to misread it.
+
+To change the code rather than run it, start at [`AGENTS.md`](AGENTS.md).
 
 ## Requirements
 

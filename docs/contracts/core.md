@@ -44,7 +44,8 @@ the one inferred value, and keep the build, the checks and the ownership documen
   `.md` indexed, every relative link resolves, every result file the ledger cites exists.
 - `scripts/check.sh --windows`: `winwsltop.exe` and `render_check.exe` build with `/W4 /WX`;
   `render_check` reports zero failures.
-- `winwsltop --once` prints one line that a JSON parser accepts (manual; a check is a TARGET).
+- `winwsltop --once` prints one line that a JSON parser accepts, and every key is in
+  `docs/json-output.md` (`scripts/check.sh --windows`).
 
 ## Current state (2026-11-01)
 
@@ -91,3 +92,7 @@ the one inferred value, and keep the build, the checks and the ownership documen
 - 2026-11-01. Releases are built by `scripts/release.sh`, never from the normal build: `/Zi` embeds the
   absolute `.pdb` path, which holds the builder's user name, so the release build has no debug
   information. The script publishes nothing. A person merges, then runs `gh release create`.
+- 2026-11-01. The JSON output is a public interface for scripts and agents, documented in
+  `docs/json-output.md`. Adding a key keeps `schema` at 1; a change of meaning raises it. `gpu_engines_known`
+  was added to it, because an empty `gpu_engines` could mean idle or a failed read. A bad `--record` is now
+  exit 2: `atoi` made a typo print nothing and exit 0.

@@ -124,6 +124,20 @@ if [ "${1:-}" = "--windows" ]; then
     out=$("$(wslpath -u "$chk")" 2>&1 | tr -d '\r' | tail -1)
     case "$out" in *", 0 failed") pass "render_check: $out" ;; *) fail "render_check: $out" ;; esac
   fi
+
+  # 9. What scripts and agents rely on: exit codes, one JSON line, and every key documented.
+  if [ -n "${exe:-}" ]; then
+    w=$(wslpath -u "$exe")
+    "$w" --help | grep -q 'usage: winwsltop' && pass "--help prints usage, exit 0" || fail "--help"
+    "$w" --version | grep -q '^winwsltop ' && pass "--version" || fail "--version"
+    code=0; "$w" --record abc >/dev/null 2>&1 || code=$?
+    [ "$code" -eq 2 ] && pass "a bad --record is exit 2" || fail "a bad --record exited $code"
+    if "$w" --once | tr -d '\r' | python3 scripts/check_json.py docs/json-output.md; then
+      pass "--once is one JSON line, every key documented"
+    else
+      fail "--once output, or a key missing from docs/json-output.md"
+    fi
+  fi
 fi
 
 [ "$failed" -eq 0 ] && echo "all checks passed" || { echo "some checks failed"; exit 1; }
