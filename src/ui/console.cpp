@@ -43,6 +43,7 @@ char key_of(const KEY_EVENT_RECORD& k) {
     case '2': case VK_NUMPAD2: return '2';
     case '3': case VK_NUMPAD3: return '3';
     case 'Q': return 'q';
+    case 'T': return 't';
     default: return 0;
   }
 }

@@ -1,6 +1,7 @@
 // Checks the renderer on hand-built snapshots. render_check <busy|bare> W H prints a frame as text,
 // the one overall screen with no history; add overall, gpu or cpu for that panel over a made-up minute.
-// render_check <busy|bare> draws on the console until Ctrl+C; add live for the panels, keys 1 2 3 q.
+// render_check <busy|bare|contended|idle|stale|noisy> live draws the panels on the console, keys 1 2 3 t q.
+// render_check <busy|bare> draws the plain screen on the console until Ctrl+C.
 // render_check <contended|idle|stale|noisy> W H [span_s] prints the large layout of panel 3.
 // render_check vt <fixture> W H FILE [span_s] writes one frame's VT bytes to FILE, to render as an image.
 // render_check measure prints frame bytes and the time to build a frame.
@@ -2621,6 +2622,7 @@ void check_console() {
         other, key('Q', L'q'), key('Q', L'q', FALSE),
         key(VK_LEFT, 0), key(0, 0xD55C), key('2', L'2'), key('2', L'2', FALSE),
         key('Q', 0x3142),                                       // q under Hangul input mode
+        key('T', L't'), key('T', 0x3145), key('T', 0x14, TRUE, LEFT_CTRL_PRESSED),  // t, t under Hangul input mode, Ctrl+T
         key(VK_DELETE, 0x7F), key(VK_PACKET, 0xD83D), key(VK_PACKET, 0xDE00),  // Delete, a surrogate pair
         key(0, L'q'), key('X', L'x'), key('Q', 0x11, TRUE, LEFT_CTRL_PRESSED),  // A character alone, another key, Ctrl+Q
         key(VK_NUMPAD3, L'3'), key('1', L'!', TRUE, SHIFT_PRESSED), key('Q', L'Q', TRUE, SHIFT_PRESSED)};
@@ -2631,6 +2633,8 @@ void check_console() {
     check(c.poll_key() == 'q', "a key comes back");
     check(c.poll_key() == '2', "releases, focus, arrows and non-ASCII are passed over");
     check(c.poll_key() == 'q', "q under Hangul input mode");
+    check(c.poll_key() == 't', "t, for the span");
+    check(c.poll_key() == 't', "t under Hangul input mode");
     check(c.poll_key() == '3', "Delete, a surrogate pair, Ctrl+Q and a bare character are passed over; the numeric keypad counts");
     check(c.poll_key() == '1', "Shift on a digit, for the layouts that need it");
     check(c.poll_key() == 'q', "Shift on q");
@@ -2692,17 +2696,20 @@ int main(int argc, char** argv) {
 #endif
 #ifdef _WIN32
   if (argc == 3) {  // The panels on the real console, keys as the program has them
-    const snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
-    const history demo = demo_minute(s);
+    snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
+    history demo = demo_minute(s);
+    const bool fixture = cpu_fixture(argv[1], 900, s, demo);
     console c;
-    view v = view::overall;
+    view v = fixture ? view::cpu : view::overall;
     int w = 131, h = 40;
+    render_options o = options_for(60);
     for (char k = 0; k != 'q' && !console::stop_requested(); k = c.poll_key()) {
       if (k == '1') v = view::overall;
       if (k == '2') v = view::gpu;
       if (k == '3') v = view::cpu;
       c.size(w, h);
-      c.draw(render(s, w, h, kNow, &demo, v));
+      if (k == 't' && span_key_acts(s, demo, v, w, h)) o.span_ms = next_span(o.span_ms);
+      c.draw(render(s, w, h, kNow, &demo, v, o));
       if (!c.is_terminal()) break;
       Sleep(50);
     }
