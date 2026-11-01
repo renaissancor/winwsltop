@@ -20,7 +20,8 @@ reads schema 1 of the collector's line.
 
 ## What does not belong here
 
-- Reading a counter, a file or a process. The screen reads the snapshot and nothing else.
+- Reading a counter, a file or a process. The screen reads the snapshot and its own history of earlier
+  snapshots, and nothing else.
 - Deriving a number that is not in the snapshot. The history holds only earlier snapshots' values and
   is never written to disk. Summing engines, adding Windows to WSL, or guessing
   a per-process GPU share are all forbidden.
@@ -55,8 +56,8 @@ reads schema 1 of the collector's line.
 
 | item | value |
 |---|---|
-| source | `src/ui` 2570 lines, of which `render_check.cpp` 775 |
-| checks | 92004, 0 failed, run on Windows 2026-11-01 |
+| source | `src/ui` 2825 lines, of which `render_check.cpp` 982 |
+| checks | 93526, 0 failed, run on Windows 2026-11-01; 44 mutants of the new behaviour, 41 caught, the 3 survivors cannot change the output |
 | sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66 |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once; conhost not checked |
@@ -74,6 +75,7 @@ reads schema 1 of the collector's line.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.
+  Superseded 2026-11-01: it also takes the optional history, and still does no I/O.
 - 2026-10-31. The parser is hand-written and strict (depth 16, `from_chars`, surrogate handling)
   rather than a library, to keep the build at one `cl` call with no dependencies.
 - 2026-10-31. `Local Usage` is the per-process GPU memory column, labelled `LOCAL` (core decision log).
@@ -86,10 +88,18 @@ reads schema 1 of the collector's line.
   is the old screen plus a key footer. `--text` passes no history, so it is byte-identical.
 - 2026-11-01. Panels keep at least 36 columns: three to a row from 112 columns, two from 74. On a short
   window the lists go first, then the device line, then a panel's plot, keeping its value and label;
-  the footer says when something is hidden.
+  the footer says when something is hidden, and a cut holder list counts itself (`top N of M`).
+  `dxg_denied` has a reserved row whenever the holders block is drawn.
 - 2026-11-01. Samples more than 1.5 s apart are a gap. Where several samples share a column the highest
   is drawn, and a measured 0 draws its bottom dot, so it differs from a gap. A WSL line 5 s or older
-  and an empty `core_pct` are gaps. A WSL value is plotted at the Windows sample time. A backward clock
-  step shifts the stored samples using `interval_s`; a forward step reads as a stall.
+  and an empty `core_pct` are gaps, and so is a repeated line, which also happens with a healthy
+  collector when the two 1 Hz loops slip (1 of 90 samples in one run). A WSL value is plotted at the
+  Windows sample time. A backward clock step shifts the stored samples using `interval_s`, and clears
+  them at a stall of 60 s or more; a forward step reads as a stall.
+- 2026-11-01. Keys are decided on the virtual key code, so Delete does nothing and `q` should work
+  under Hangul input. Not tried with a real IME: if it delivers `VK_PROCESSKEY`, `q` does not quit in
+  that mode. Ctrl+C always does.
+- 2026-11-01. A failed CPU read prints `n/a` on the overall screen too (rule 2). This is the one case
+  where the frame without a history differs from before.
 - 2026-11-01. The size sweep covers every third size for four cases, because all sizes for all cases
   took about 2 minutes on Windows; layout depends on size and number width, not on the history's shape.

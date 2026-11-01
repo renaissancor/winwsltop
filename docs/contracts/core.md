@@ -50,7 +50,7 @@ the one inferred value, and keep the build, the checks and the ownership documen
 
 | item | value |
 |---|---|
-| source under core | `src/core` 243 lines, `src/main.cpp` 122, `src/record` 129, `src/analysis` 33 |
+| source under core | `src/core` 243 lines, `src/main.cpp` 147, `src/record` 129, `src/analysis` 33 |
 | JSON schema | 1 |
 | collection cost per sample | about 9 ms on this machine, ledger "Windows collector checked" |
 | checks that exist | the two `check.sh` modes above |
