@@ -81,7 +81,9 @@ int main(int argc, char** argv) {
   const auto draw = [&] {
     int w = 131, h = 40;
     screen->size(w, h);
-    screen->draw(wwt::render(s, w, h, unix_ms(), &hist, panel));
+    // A redirected live run has no panels to switch, so it gets the plain frame.
+    if (screen->is_terminal()) screen->draw(wwt::render(s, w, h, unix_ms(), &hist, panel));
+    else screen->draw(wwt::render(s, w, h, unix_ms()));
   };
   // Called inside the wait, so a switch redraws the last snapshot at once instead of up to a second later.
   const auto handle_keys = [&] {
@@ -102,6 +104,7 @@ int main(int argc, char** argv) {
       // of being caught up with back-to-back samples (docs/TODO.md item 2).
       next += 1.0;
       if (const double t = wwt::seconds_now(); next < t) next = t;
+      handle_keys();  // A pass that overran skips the wait below, and keys must still work.
       for (double left = next - wwt::seconds_now(); left > 0 && !quit && !wwt::console::stop_requested(); left = next - wwt::seconds_now()) {
         Sleep(left < 0.05 ? static_cast<DWORD>(left * 1000) + 1 : 50);
         handle_keys();
@@ -124,7 +127,7 @@ int main(int argc, char** argv) {
     s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
     s.wsl_clock_known = wsl.clock_offset(s.wsl_clock_offset_s);
     if (!i) continue;
-    hist.push(s);
+    if (screen) hist.push(s);  // only the live screen draws it
     have_frame = true;
     if (run == mode::json) {
       const std::string line = wwt::to_json_line(s);
