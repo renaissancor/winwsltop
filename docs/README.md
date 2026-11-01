@@ -14,6 +14,7 @@ missing from this list or a link below does not resolve.
 | [`contracts/collect.md`](contracts/collect.md) | Windows and WSL collectors: same sections | collect agent | before touching `src/host`, `src/gpu`, `src/wsl`, the collector |
 | [`contracts/ui.md`](contracts/ui.md) | The screen and the line parser: same sections | ui agent | before touching `src/ui` |
 | [`contracts/evidence.md`](contracts/evidence.md) | How an experiment becomes a ledger row; what the ledger may and may not claim | evidence agent | before running or recording an experiment |
+| [`design/cpu-panel.md`](design/cpu-panel.md) | The CPU panel: the job, layout, evidence for each figure, the `lost` inference, states, costs, build order | ui, core and collect agents | before changing the CPU panel |
 | [`measurable.md`](measurable.md) | What this machine can measure, with the raw file for every number. The evidence ledger | everyone | before building on any counter |
 | [`TODO.md`](TODO.md) | Known defects and their status, with the decision on each | core, the owner of each item | before fixing anything |
 | [`ROADMAP.md`](ROADMAP.md) | What is proposed next and why. Everything in it is PROPOSED until a contract records a decision | orchestrator, the user | planning |
