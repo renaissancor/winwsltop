@@ -1,6 +1,6 @@
 // Which key the screen was given, from one Windows key record. Header-only and pure, so scripts/msvc.cmd
 // builds nothing new and render_check runs it on Linux too. docs/design/panel-grammar.md part 2; the keys
-// follow machtop's (src/keys.cpp on grammar-tab), which reads bytes where this reads key records.
+// follow machtop's (src/keys.cpp at 246c2cb on main), which reads bytes where this reads key records.
 #pragma once
 #include <cstdint>
 

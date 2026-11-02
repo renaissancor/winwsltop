@@ -44,11 +44,11 @@ std::string busy_json() {
   static const char* const names[] = {"python3", "ollama", "node", "cargo", "clang++", "rustc", "ld.lld", "sshd", "systemd", "dbus-daemon"};
   for (int i = 0; i < 26; ++i) {
     p += "{\"pid\":" + std::to_string(2000 + i) + ",\"name\":\"" + names[i % 10] + "\",\"state\":\"" + (i == 7 ? "D" : "S") +
-         "\",\"rss\":" + std::to_string((27 - i) * 90000000ll) + ",\"cores\":" + std::to_string((26 - i) * 0.04) + ",\"on_gpu\":false},";
+         "\",\"rss\":" + std::to_string((27 - i) * 90000000ll) + ",\"cores\":" + std::to_string((26 - i) * 0.04) + ",\"rated\":true,\"on_gpu\":false},";
   }
-  p += R"({"pid":4121,"name":"python3","state":"R","rss":6442450944,"cores":3.21,"on_gpu":true},)"
-       R"({"pid":4388,"name":"한글추론기","state":"S","rss":2147483648,"cores":0.1,"on_gpu":true},)"
-       R"({"pid":4400,"name":"\u001b]0;pwned\u0007\u001b[31mevil","state":"S","rss":1000,"cores":0.0,"on_gpu":false})";
+  p += R"({"pid":4121,"name":"python3","state":"R","rss":6442450944,"cores":3.21,"rated":true,"on_gpu":true},)"
+       R"({"pid":4388,"name":"한글추론기","state":"S","rss":2147483648,"cores":0.1,"rated":true,"on_gpu":true},)"
+       R"({"pid":4400,"name":"\u001b]0;pwned\u0007\u001b[31mevil","state":"S","rss":1000,"cores":0.0,"rated":true,"on_gpu":false})";
   std::string cores;
   for (int i = 0; i < 20; ++i) cores += std::to_string(i == 6 ? 97.0 : (i * 7) % 40 + 2.0) + (i < 19 ? "," : "");
   return R"({"schema":1,"distro":"Ubuntu-24.04","unix_s":1793450631.8,"mono_s":812.1,"kernel":"6.6.114.1","busy_pct":23.4,"core_pct":[)" + cores +
@@ -67,7 +67,7 @@ snapshot busy() {
   s.vm = {7120, 11736, 10898438144, 3.1, true};
   const auto proc = [&](uint32_t pid, const char* name, double cores, uint64_t ws) {
     process_row p;
-    p.pid = pid; p.name = name; p.cores = cores; p.working_set = ws;
+    p.pid = pid; p.name = name; p.cores = cores; p.working_set = ws; p.cores_known = true;
     s.processes.push_back(p);
   };
   proc(0, "Idle", 11.6, 8192);
@@ -101,7 +101,7 @@ snapshot bare() {
   s.cpu.busy_pct = 7.5;
   s.memory = {16 * kG, 11 * kG, 6 * kG, 20 * kG, 3 * kG};
   process_row p;
-  p.pid = 812; p.name = "explorer.exe"; p.cores = 0.06; p.working_set = 180000000;
+  p.pid = 812; p.name = "explorer.exe"; p.cores = 0.06; p.working_set = 180000000; p.cores_known = true;
   s.processes.push_back(p);
   s.disks = {{"0 C:", 0, 4096, 1}};
   s.nets = {{"이더넷", 0, 0, 1000000000, true}};
@@ -282,7 +282,16 @@ void check_reader() {
   check(!v.processes[1].rated && !v.processes[1].start, "rated false, and a null start is no identity");
   check(!v.processes[2].rated, "a null rated is not rated");
   check(!v.processes[3].rated && !v.processes[3].start, "absent, neither: an older collector's row is not rated");
-  check(!read_wsl(busy_json()).processes[0].rated && !read_wsl(busy_json()).processes[0].start, "the busy line, which has neither, reads them as unknown");
+  check(read_wsl(busy_json()).processes[0].rated && !read_wsl(busy_json()).processes[0].start, "the busy line, rated with no start, reads no identity beyond pid");
+  // start is an identity: out of range, fractional or null leaves it empty and the line still reads; a string refuses it.
+  for (const char* empty : {"-5", "1e300", "1.5", "18446744073709551616", "null"}) {
+    const wsl_view e = read_wsl(std::string(R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"start":)") + empty + "}]}");
+    check(e.ok && e.processes.size() == 1 && !e.processes[0].start, std::string("start ") + empty + " is no identity, and the line is read");
+  }
+  for (const auto& [text, value] : {std::pair<const char*, uint64_t>{"0", 0}, {"616497", 616497}, {"9223372036854775808", 9223372036854775808ull}}) {
+    const wsl_view e = read_wsl(std::string(R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"start":)") + text + "}]}");
+    check(e.ok && e.processes.size() == 1 && e.processes[0].start == value, std::string("start ") + text + " is kept");
+  }
   for (const char* bad : {R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"rated":1}]})", R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"rated":"true"}]})",
                           R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"rated":tru}]})", R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"start":"5"}]})",
                           R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"start":true}]})"}) {
@@ -425,8 +434,11 @@ void check_time_axis() {
 
   h = history();
   h.push(sample_at(base, kNow - 60000, 40, 1, 1));
+  check(known_columns(util_columns(h)) == 0, "60 s ago is outside: a sample stands for the second before it");
+  h = history();
+  h.push(sample_at(base, kNow - 59900, 40, 1, 1));
   c = util_columns(h);
-  check(!std::isnan(c[0]) && known_columns(c) == 1, "60 s ago is the left edge exactly");
+  check(!std::isnan(c[0]) && known_columns(c) == 1, "just inside is the left edge");
   check(known_columns(util_columns(h, kNow + 1000)) == 0, "61 s ago is off the graph");
 
   h = history();
@@ -807,12 +819,12 @@ void check_buckets() {
   h = bucket_history({{0, 300}});
   check(bucket_cells(make_axis(h, kNow, 60000, 60), windows_busy)[59] == 100, "over 100 clamps in a cell");
 
-  // Cells narrower than a second: what is between two close samples takes the earlier one.
+  // Cells narrower than a second: what is between two close samples takes the later one, which stands for it.
   h = bucket_history({{1000, 70}, {0, 30}});
   a = make_axis(h, kNow, 60000, 240);
   check(a.bucket_ms == 250, "4 cells a second");
   std::vector<double> cells = bucket_cells(a, windows_busy);
-  check(cells[239] == 30 && cells[238] == 70 && cells[236] == 70 && cells[235] == 70 && std::isnan(cells[234]), "a wide terminal does not stripe");
+  check(cells[239] == 30 && cells[238] == 30 && cells[236] == 30 && cells[235] == 70 && std::isnan(cells[234]), "a wide terminal does not stripe, and the cells between take the later sample");
   h = bucket_history({{1500, 70}, {0, 30}});
   check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy)) == 7, "samples kGapMs apart join");
   h = bucket_history({{1501, 70}, {0, 30}});
@@ -827,12 +839,17 @@ void check_buckets() {
   h = bucket_history({{20000, 70}, {16000, 70}});
   check(known_columns(bucket_cells(make_axis(h, kNow, 900000, 45), windows_busy)) == 1, "a gap inside a 20 s cell is not visible");
 
-  // The left edge: the sample before it joins, and nothing is drawn from it.
+  // The left edge: the sample before it joins, and nothing is drawn from it; the first sample inside covers it.
   h = bucket_history({{60500, 70}, {59500, 20}});
   cells = bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy);
-  check(cells[0] == 70 && cells[1] == 20 && known_columns(cells) == 2, "the left edge starts from the sample before it");
+  check(cells[0] == 20 && cells[1] == 20 && known_columns(cells) == 2, "the left edge takes the first sample inside, joined to the one before");
   h = bucket_history({{61500, 10}, {60500, 70}, {59500, 20}});
-  check(bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy)[0] == 70, "the newest sample before it, not the oldest");
+  check(bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy)[0] == 20, "joined through the newest sample before it");
+  h = bucket_history({{61500, 10}, {59500, 20}});
+  check(std::isnan(bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy)[0]), "a sample before it too far back to join leaves the edge blank");
+  h = bucket_history({{60000, 99}, {1000, 30}});
+  const time_axis edge_axis = make_axis(h, kNow, 60000, 60);
+  check(bucket_stats(edge_axis, windows_busy).max == 30 && known_columns(bucket_cells(edge_axis, windows_busy)) == 1, "a sample at exactly -60 s is outside the large layout's window too");
   h = bucket_history({{120000, 70}, {119000, 70}, {1000, 30}});
   a = make_axis(h, kNow, 60000, 60);
   check(a.samples.size() == 2 && a.cell[0] < 0, "one sample before the left edge is kept, no more");
@@ -1602,12 +1619,12 @@ struct guest_figures {
 };
 
 constexpr const char* kCpuProcesses =
-    R"({"pid":4121,"name":"cpu_burn","state":"R","rss":107374182,"cores":19.72,"threads":21,"on_gpu":false},)"
-    R"({"pid":4388,"name":"python3","state":"S","rss":2147483648,"cores":0.1,"threads":12,"on_gpu":true},)"
-    R"({"pid":2000,"name":"node","state":"S","rss":429496729,"cores":0.04,"threads":11,"on_gpu":false},)"
-    R"({"pid":2001,"name":"sshd","state":"S","rss":10000000,"cores":0.03,"threads":1,"on_gpu":false},)"
-    R"({"pid":2002,"name":"systemd","state":"S","rss":10000000,"cores":0.02,"threads":1,"on_gpu":false},)"
-    R"({"pid":2003,"name":"dbus-daemon","state":"S","rss":10000000,"cores":0.01,"threads":1,"on_gpu":false})";
+    R"({"pid":4121,"name":"cpu_burn","state":"R","rss":107374182,"cores":19.72,"threads":21,"rated":true,"on_gpu":false},)"
+    R"({"pid":4388,"name":"python3","state":"S","rss":2147483648,"cores":0.1,"threads":12,"rated":true,"on_gpu":true},)"
+    R"({"pid":2000,"name":"node","state":"S","rss":429496729,"cores":0.04,"threads":11,"rated":true,"on_gpu":false},)"
+    R"({"pid":2001,"name":"sshd","state":"S","rss":10000000,"cores":0.03,"threads":1,"rated":true,"on_gpu":false},)"
+    R"({"pid":2002,"name":"systemd","state":"S","rss":10000000,"cores":0.02,"threads":1,"rated":true,"on_gpu":false},)"
+    R"({"pid":2003,"name":"dbus-daemon","state":"S","rss":10000000,"cores":0.01,"threads":1,"rated":true,"on_gpu":false})";
 
 std::string guest_line(const std::vector<double>& cores, const guest_figures& g, const std::string& processes = kCpuProcesses) {
   std::string list;
@@ -1651,7 +1668,7 @@ snapshot contended(int threads = 20, int vcpus = 0) {
   s.lost = {lost_state::known, 13.96};
   const auto proc = [&](uint32_t pid, const char* name, double cores, uint32_t thr, double ws) {
     process_row p;
-    p.pid = pid; p.name = name; p.cores = cores; p.threads = thr; p.working_set = static_cast<uint64_t>(ws * static_cast<double>(kG));
+    p.pid = pid; p.name = name; p.cores = cores; p.threads = thr; p.working_set = static_cast<uint64_t>(ws * static_cast<double>(kG)); p.cores_known = true;
     s.processes.push_back(p);
   };
   proc(0, "Idle", 0, 20, 0);
@@ -2520,7 +2537,7 @@ void check_large_lists() {
   s.processes.clear();
   const auto proc = [&](uint32_t pid, double cores) {
     process_row p;
-    p.pid = pid; p.name = "p" + std::to_string(pid); p.cores = cores; p.threads = 3;
+    p.pid = pid; p.name = "p" + std::to_string(pid); p.cores = cores; p.threads = 3; p.cores_known = true;
     s.processes.push_back(p);
   };
   proc(900, 0.24);   // 0.2 once rounded, the same as the next two
@@ -2539,10 +2556,10 @@ void check_large_lists() {
 
   snapshot w = contended();
   w.wsl_json = guest_line(std::vector<double>(20, 100.0), {},
-                          R"({"pid":30,"name":"zeta","state":"R","rss":1,"cores":0.24,"threads":2,"on_gpu":false},)"
-                          R"({"pid":20,"name":"beta","state":"D","rss":1,"cores":0.16,"threads":null,"on_gpu":true},)"
-                          R"({"pid":10,"name":"한글추론기","state":"S","rss":1,"cores":0.01,"on_gpu":false},)"
-                          R"({"pid":40,"name":"]0;pwned[31mevil","state":"S","rss":1,"cores":3,"threads":1,"on_gpu":false})");
+                          R"({"pid":30,"name":"zeta","state":"R","rss":1,"cores":0.24,"threads":2,"rated":true,"on_gpu":false},)"
+                          R"({"pid":20,"name":"beta","state":"D","rss":1,"cores":0.16,"threads":null,"rated":true,"on_gpu":true},)"
+                          R"({"pid":10,"name":"한글추론기","state":"S","rss":1,"cores":0.01,"rated":true,"on_gpu":false},)"
+                          R"({"pid":40,"name":"]0;pwned[31mevil","state":"S","rss":1,"cores":3,"threads":1,"rated":true,"on_gpu":false})");
   const std::vector<line> frame = large(w, h, 100, 40);
   const std::string wt = as_text(frame);
   check(wt.find("pwned") < wt.find("beta") && wt.find("beta") < wt.find("zeta"), "the guest sorts the same way: rounded cores, then PID, and a holder has no place of its own");
@@ -3211,7 +3228,29 @@ void check_view_keys() {
   v = {};
   apply_key(v, digit(3), windows_unread);
   apply_key(v, tab, windows_unread);
-  check(v.panels[3].focus == 0, "nor with the Windows list empty");
+  check(v.panels[3].focus == 1, "with the Windows list empty, tab moves focus to the list that has rows");
+  apply_key(v, tab, windows_unread);
+  check(v.panels[3].focus == 1, "and keeps it there");
+  // Focus never sticks on a list with nothing to select: WSL gone, unreadable or stale, from focus on it.
+  for (const snapshot& gone_wsl : {no_wsl(), [] { snapshot t = busy(); t.wsl_json = "{\"schema\":2}"; return t; }(), [] { snapshot t = busy(); t.wsl_age_s = 3600; return t; }()}) {
+    view_state w;
+    press(w, {digit(3), tab});
+    check(w.panels[3].focus == 1, "WSL focused while it has rows");
+    apply_key(w, tab, gone_wsl);
+    check(w.panels[3].focus == 0, "tab from a WSL list that is gone, unreadable or stale moves focus to Windows");
+    w = {};
+    press(w, {digit(3), tab});
+    apply_key(w, down, gone_wsl);
+    check(w.panels[3].focus == 0 && w.panels[3].rows[0].pid == windows_cpu_order(gone_wsl)[1]->pid, "↓ there does too, and moves in Windows");
+    w = {};
+    press(w, {digit(3), tab});
+    apply_key(w, up, gone_wsl);
+    check(w.panels[3].focus == 0 && w.panels[3].rows[0].pid == windows_cpu_order(gone_wsl)[0]->pid, "and ↑");
+  }
+  view_state stale_view;
+  apply_key(stale_view, digit(3), stale_now());
+  apply_key(stale_view, tab, stale_now());
+  check(stale_view.panels[3].focus == 0, "tab on panel 3 with a stale WSL line changes nothing (stale_now)");
 
   // Panels, quitting, and Alt.
   v = {};
@@ -3298,6 +3337,55 @@ void check_view_keys() {
     for (int p = 1; p <= 8; ++p) check(as_text(render(t, 131, 50, kNow, nullptr, state_for(p))) == as_text(render(t, 131, 50, kNow)), "--text is unchanged: no history, no panel, no footer");
   }
   check(vt_clean(vt_frame(render(s, 131, 40, kNow, &demo, state_for(7)), 40)), "a page not built is only our own sequences");
+}
+
+// The audit of commits 1 to 5: ←→ only where a graph is drawn, the caption's * only with its label, and n/a
+// for a process's first reading.
+void check_audit_fixes() {
+  const snapshot s = busy();
+  const history demo = demo_minute(s);
+  for (int p = 2; p <= 3; ++p) {
+    for (int w = 1; w <= 200; w += 3) {
+      for (int rows = 1; rows <= 50; rows += 1) {
+        const std::vector<line> f = render(s, w, rows, kNow, &demo, state_for(p));
+        const std::string body = as_text({f.begin(), f.end() - 1}), foot = as_text({f.back()});
+        const bool graph = has(body, "-60s") || has(body, "100│") || has(body, "100 │");
+        const std::string at = " panel " + std::to_string(p) + " at " + std::to_string(w) + "x" + std::to_string(rows);
+        if (has(foot, "←→")) check(graph, "←→ is offered only where a graph is drawn" + at);
+        if (!graph) check(!has(foot, "←→"), "no graph, no ←→" + at);
+        if (p == 2) check(has(body, "shares*") == has(body, "112%*"), "the caption's * comes and goes with its label" + at);
+        if (p == 2 && has(body, "max 112%")) check(has(body, "max 112%*") == has(body, "shares*"), "a label whose caption cannot carry * prints the number without it" + at);
+      }
+    }
+  }
+  // The window's edge in the labels: a sample at exactly -60 s is outside, one just inside is in.
+  history edge;
+  edge.push(rule_sample(kNow - 60000, 99, 0));
+  edge.push(rule_sample(kNow - 1000, 10, 1));
+  edge.push(rule_sample(kNow, 20, 2));
+  window_stats es = series_stats(edge, &history_sample::gpu_util, kNow, 60000);
+  check(es.max == 20 && es.avg == 15, "series_stats leaves out the sample at exactly -span");
+  check(plot_series(edge, &history_sample::gpu_util, kNow, 240, 60000).stats.max == 20, "and plot_series agrees");
+  es = series_stats(edge, &history_sample::gpu_util, kNow - 1, 60000);
+  check(es.max == 99, "a millisecond earlier it is inside");
+  view_state short_view = state_for(2);
+  apply_key(short_view, key_event{key::left}, s);
+  check(short_view.range == 1, "the range still changes on a panel too short to draw it");
+  check(has(as_text(render(s, 131, 40, kNow, &demo, state_for(2))), "shares*"), "with room, the caption has its *");
+
+  // n/a where a process has no earlier reading, on panels 1 and 3, both sides.
+  snapshot first = busy();
+  for (process_row& p : first.processes) {
+    if (p.name == "System") p.cores_known = false;
+  }
+  const std::string four = "\"pid\":4121,\"name\":\"python3\",\"state\":\"R\",\"rss\":6442450944,\"cores\":3.21,\"rated\":true";
+  first.wsl_json.replace(first.wsl_json.find(four), four.size(), "\"pid\":4121,\"name\":\"python3\",\"state\":\"R\",\"rss\":6442450944,\"cores\":0,\"rated\":false");
+  const std::string one = as_text(render(first, 200, 66, kNow)), three = as_text(render(first, 200, 66, kNow, &demo, state_for(3)));
+  check(has(one, "   n/a       4 System") && has(one, "   n/a    4121 python3"), "panel 1: a first reading is n/a on both sides, not 0.00");
+  check(has(three, "   n/a       4 System") || has(three, "System"), "panel 3 shows System");
+  check(line_with(render(first, 200, 66, kNow, &demo, state_for(3)), "4 System").find("0.42") == std::string::npos, "panel 3: a first reading's cores are not printed");
+  check(!has(line_with(render(first, 200, 66, kNow), " 4121 python3"), "0.00"), "nor the guest's");
+  check(cores_text(true, 0) == "0.00" && cores_text(false, 3) == "n/a" && cores_text(true, kNaN) == "n/a", "a measured 0 is 0.00; unmeasured or missing is n/a");
 }
 
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
@@ -3526,10 +3614,9 @@ int measure_frames() {
       }
     }
   }
-  for (const int span_s : {60, 600}) {  // Panel 2: five graphs, each with its label and the maximum's dot
-    snapshot s;
-    history h;
-    cpu_fixture("noisy", span_s, s, h);
+  for (const int span_s : {60, 600}) {  // Panel 2 on busy's GPU: five graphs, each with its label and the maximum's dot
+    const snapshot s = busy();
+    const history h = demo_minute(s);
     const view_state o = state_for(2, span_s);
     size_t bytes = 0;
     constexpr int kFrames = 300;
@@ -3652,6 +3739,7 @@ int main(int argc, char** argv) {
   check_graph_labels();
   check_keys();
   check_view_keys();
+  check_audit_fixes();
   if (!quick) {
     check_denied_note();
     check_holder_wording();

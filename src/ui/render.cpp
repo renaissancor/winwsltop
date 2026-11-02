@@ -585,6 +585,15 @@ std::map<uint32_t, double> busiest_engine(const snapshot& s) {  // The busiest e
   return gpu_pct;
 }
 
+// A process's cores as printed: n/a on its first reading, when there was no earlier time to subtract and the
+// 0 read was not measured (cores_known, the collector's rated).
+std::string cores_text(bool known, double cores) {
+  if (!known || !std::isfinite(cores)) return "n/a";
+  return std::fabs(cores) < 1e6 ? fmt("%.2f", cores) : fmt("%.3g", cores);
+}
+
+bool windows_cores_known(const snapshot& s, const process_row& p) { return p.cores_known && !(p.pid == s.vm.vmmem_pid && !s.vm.vmmem_cores_known); }
+
 // Each list is built on its own, in its own units, and they only ever sit next to each other.
 std::vector<line> windows_list(const snapshot& s, int col, int rows) {
   std::vector<line> out;
@@ -629,7 +638,7 @@ std::vector<line> windows_list(const snapshot& s, int col, int rows) {
     const double g = gpu_of(p.pid);
     const auto v = vram.find(p.pid);
     row r;
-    r.add(pad_left(fmt("%.2f", p.cores), 6)).add(" ");
+    r.add(pad_left(cores_text(windows_cores_known(s, p), p.cores), 6)).add(" ");
     if (pids) r.add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
     r.add(pad(p.name, name_w), is_vm ? tone::title : tone::text).add(pad_left(fmt("%.1f", gib(p.working_set)), 7));
     r.add(pad_left(g < 0 ? "-" : fmt("%.0f", g), 5)).add(pad_left(v == vram.end() ? "-" : fmt("%.1f", gib(v->second)), 6));
@@ -681,7 +690,7 @@ std::vector<line> wsl_list(const wsl_view& w, int col, int rows) {
   for (size_t i = 0; i < shown; ++i) {
     const wsl_process& p = *list[i];
     row r;
-    r.add(pad_left(fmt("%.2f", p.cores), 6)).add(" ");
+    r.add(pad_left(cores_text(p.rated, p.cores), 6)).add(" ");
     if (pids) r.add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
     r.add(pad(p.name, name_w), p.on_gpu ? tone::title : tone::text).add(pad_left(fmt("%.1f", gib(p.rss)), 8));
     r.add("  ").add(pad(p.state, 1), p.state == "D" ? tone::watch : tone::dim);
@@ -847,9 +856,11 @@ plotted plot_series(const history& h, double history_sample::*series, int64_t en
   for (const history_sample& p : h.samples()) {
     const double t = static_cast<double>(p.unix_ms), value = p.*series;
     const bool known = std::isfinite(value);
-    if (known && t <= end && end - t <= span) {
+    if (known && t <= end && end - t < span) {  // A sample stands for the second before it: one at -span is outside
       const long x = x_of(t);
-      const long from = joined && t - before <= kGapMs ? std::min(x, std::max(0L, x_of(before) + 1)) : x;
+      // Joined, it covers the columns since the one before; that one outside the window, from the left edge.
+      const long after = end - before >= span ? 0L : std::max(0L, x_of(before) + 1);
+      const long from = joined && t - before <= kGapMs ? std::min(x, after) : x;
       const double v = std::clamp(value, 0.0, 100.0);
       for (long k = from; k <= x; ++k) {
         sum[static_cast<size_t>(k)] += v;
@@ -881,7 +892,7 @@ window_stats series_stats(const history& h, double history_sample::*series, int6
   int n = 0;
   for (const history_sample& p : h.samples()) {
     const double value = p.*series;
-    if (std::isfinite(value) && p.unix_ms <= end_ms && end_ms - p.unix_ms <= span_ms) add_to(st, total, n, value, 0);
+    if (std::isfinite(value) && p.unix_ms <= end_ms && end_ms - p.unix_ms < span_ms) add_to(st, total, n, value, 0);
   }
   if (n > 0) st.avg = total / n;
   return st;
@@ -962,7 +973,7 @@ time_axis make_axis(const history& h, int64_t end_ms, int64_t span_ms, int cells
   for (size_t i = 0; i < all.size(); ++i) {
     const int64_t back = last - floor_div(all[i].unix_ms, a.bucket_ms);  // Cells left of the right edge
     if (back < 0) break;                                                 // Ahead of the axis, and so is the rest
-    const bool on_axis = back < a.cells;
+    const bool on_axis = back < a.cells && end_ms - all[i].unix_ms < span_ms;  // The window, as plot_series has it
     if (!on_axis && !a.samples.empty()) {  // Only the newest sample before the left edge is kept
       a.samples.back() = &all[i];
       continue;
@@ -975,14 +986,14 @@ time_axis make_axis(const history& h, int64_t end_ms, int64_t span_ms, int cells
 
 // One figure on an axis, 0-100, NaN where nothing was measured. A bucket is the mean of the samples in it,
 // each clamped to 0-100, and NaN never counts. A bucket no sample fell in, between two samples close enough
-// to join, takes the earlier one: a cell narrower than a second would stripe.
+// to join, takes the later one, which stands for the time since the earlier: a cell narrower than a second
+// would stripe.
 template <class Value> std::vector<double> bucket_cells(const time_axis& a, Value value) {
   std::vector<double> out(static_cast<size_t>(a.cells), std::numeric_limits<double>::quiet_NaN());
   std::vector<int> count(static_cast<size_t>(a.cells), 0);
   bool joined = false;
   int from = 0;
   int64_t before = 0;
-  double held = 0;
   for (size_t i = 0; i < a.samples.size(); ++i) {
     const history_sample& p = *a.samples[i];
     const double raw = value(p);
@@ -991,7 +1002,7 @@ template <class Value> std::vector<double> bucket_cells(const time_axis& a, Valu
       const double v = std::clamp(raw, 0.0, 100.0);
       const int c = a.cell[i];
       if (joined && p.unix_ms - before <= kGapMs) {
-        for (int k = std::max(0, from + 1); k < c; ++k) out[static_cast<size_t>(k)] = held;
+        for (int k = std::max(0, from + 1); k < std::min(c, a.cells); ++k) out[static_cast<size_t>(k)] = v;
       }
       if (c >= 0) {
         double& cell = out[static_cast<size_t>(c)];
@@ -1000,7 +1011,6 @@ template <class Value> std::vector<double> bucket_cells(const time_axis& a, Valu
         ++n;
       }
       from = c;
-      held = v;
     }
     joined = known;
     before = p.unix_ms;
@@ -1181,11 +1191,15 @@ int width_of(const line& l) {
 
 // "-60s ──── label ──── now" over `cells` columns: the first of the labels that leaves two rule characters,
 // or none. The range and now are never the ones dropped.
+int axis_rules(int cells, int64_t span_ms) { return cells - display_width("-" + span_text(span_ms) + " ") - 4; }  // " now"
+
+bool axis_label_fits(int cells, int64_t span_ms, const line& label) { return !label.empty() && axis_rules(cells, span_ms) - width_of(label) - 2 >= 2; }
+
 void axis_line(row& r, int cells, int64_t span_ms, const std::vector<line>& labels) {
   const std::string left = "-" + span_text(span_ms) + " ";
-  const int rules = cells - display_width(left) - 4;  // " now"
+  const int rules = axis_rules(cells, span_ms);
   r.add(left, tone::dim);
-  const auto fits = std::find_if(labels.begin(), labels.end(), [&](const line& l) { return !l.empty() && rules - width_of(l) - 2 >= 2; });
+  const auto fits = std::find_if(labels.begin(), labels.end(), [&](const line& l) { return axis_label_fits(cells, span_ms, l); });
   if (fits == labels.end()) {
     r.add(repeat("─", rules), tone::faint);
   } else {
@@ -1304,8 +1318,26 @@ int64_t graph_end(const history& h, int64_t now_ms) {  // A clock behind the new
 
 struct panel_frame {
   std::vector<line> lines;
-  bool hidden = false;        // A block was dropped for want of rows
+  bool hidden = false;  // A block was dropped for want of rows
+  bool graph = false;   // A graph over the range is drawn, so ←→ changes something on screen
 };
+
+bool any_plot(const std::vector<grid_row>& rows) {
+  return std::any_of(rows.begin(), rows.end(), [](const grid_row& r) { return r.plot; });
+}
+
+// Whether a label carrying `*` is drawn: a starred panel's plot is shown and its label, over 100, fits.
+bool star_drawn(const std::vector<grid_row>& rows, const history& h, int64_t end_ms, int64_t span_ms) {
+  for (const grid_row& r : rows) {
+    if (!r.plot) continue;
+    for (const panel* p : r.cells) {
+      if (!p->star) continue;
+      const window_stats st = series_stats(h, p->series, end_ms, span_ms);
+      if (st.max > 100 && axis_label_fits(r.col - kGutter, span_ms, stats_label(*p, h, st, end_ms, span_ms))) return true;
+    }
+  }
+  return false;
+}
 
 std::vector<line> gpu_users_list(const snapshot& s, int col, int rows, bool& cut) {
   std::vector<line> out;
@@ -1416,12 +1448,16 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   // The split is engine time grouped by side and can pass 100: docs/measurable.md, Experiment 01 result,
   // "Shares add to 100%". A window that did says so beside the caption that explains it.
   const int64_t end = graph_end(h, now_ms);
-  const bool over = series_stats(h, &history_sample::vm_pct, end, span_ms).max > 100 || series_stats(h, &history_sample::windows_pct, end, span_ms).max > 100;
-  std::vector<panel> top = {
-      pct_panel({"device · NVML"}, g.present && g.has_util, g.util_pct, &history_sample::gpu_util),
-      pct_panel({"WSL VM ·", "engine counters,", over ? "VM level, not exact shares*" : "VM level, not exact shares"}, split.valid, split.vm_pct, &history_sample::vm_pct),
-      pct_panel({"Windows · engine counters"}, split.valid, split.windows_pct, &history_sample::windows_pct)};
-  top[1].star = top[2].star = true;
+  // The caption's * goes with a label that carries one, and only when that label is drawn (part 5). Where the
+  // starred caption costs the plot its rows, both go: the label still prints the number, in watch.
+  const auto make_top = [&](bool star) {
+    std::vector<panel> top = {
+        pct_panel({"device · NVML"}, g.present && g.has_util, g.util_pct, &history_sample::gpu_util),
+        pct_panel({"WSL VM ·", "engine counters,", star ? "VM level, not exact shares*" : "VM level, not exact shares"}, split.valid, split.vm_pct, &history_sample::vm_pct),
+        pct_panel({"Windows · engine counters"}, split.valid, split.windows_pct, &history_sample::windows_pct)};
+    top[1].star = top[2].star = star;  // The label's * and the caption's go together, or neither
+    return top;
+  };
 
   panel memory{{"GPU memory · NVML,", "used of total"}, "n/a", tone::dim, &history_sample::gpu_mem_pct, &history_sample::gpu_mem_gib, "%.1f", " GiB"};
   if (g.present && g.has_mem && g.mem_total > 0) {
@@ -1441,10 +1477,17 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   panel_frame f;
   f.lines.push_back(title_row(s, now_ms));
   int room = height - 1;
+  std::vector<panel> top;
   std::vector<grid_row> rows;
-  add_panels(rows, top, width);
-  add_panels(rows, second, width);
-  f.hidden = fit_rows(rows, room);
+  for (const bool star : {true, false}) {  // With the caption's *, unless no label with one is drawn
+    top = make_top(star);
+    rows.clear();
+    add_panels(rows, top, width);
+    add_panels(rows, second, width);
+    f.hidden = fit_rows(rows, room);
+    if (!star || star_drawn(rows, h, end, span_ms)) break;
+  }
+  f.graph = any_plot(rows);
   room -= rows_height(rows);
 
   // Lower blocks: as much of the lists as they can use, then the device line goes last of the two.
@@ -1497,6 +1540,7 @@ panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history&
   std::vector<grid_row> rows;
   add_panels(rows, graphs, width);
   f.hidden = fit_rows(rows, room);
+  f.graph = any_plot(rows);
   room -= rows_height(rows);
 
   std::vector<line> cores;
@@ -1968,9 +2012,8 @@ std::vector<line> cpu_windows_list(const snapshot& s, int col, int rows) {
   for (size_t i = 0; i < shown; ++i) {
     const process_row& p = *list[i];
     const bool is_vm = p.pid == s.vm.vmmem_pid || p.pid == s.vm.vmwp_pid;
-    const bool unmeasured = p.pid == s.vm.vmmem_pid && !s.vm.vmmem_cores_known;  // An unmeasured 0
     row r;
-    r.add(pad_left(unmeasured ? "n/a" : number(p.cores, "%.2f"), 6)).add(" ").add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
+    r.add(pad_left(cores_text(windows_cores_known(s, p), p.cores), 6)).add(" ").add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
     r.add(pad(p.name, name_w), is_vm ? tone::title : tone::text).add(pad_left(fmt("%u", p.threads), 4), tone::dim);
     r.add(pad_left(fmt("%.1f", gib(p.working_set)), 7));
     if (is_vm) r.add(" WSL VM", tone::dim);
@@ -2001,7 +2044,7 @@ std::vector<line> cpu_wsl_list(const wsl_view& w, int col, int rows) {
   for (size_t i = 0; i < shown; ++i) {
     const wsl_process& p = *list[i];
     row r;
-    r.add(pad_left(number(p.cores, "%.2f"), 6)).add(" ").add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
+    r.add(pad_left(cores_text(p.rated, p.cores), 6)).add(" ").add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
     r.add(pad(p.name, name_w), p.on_gpu ? tone::title : tone::text);
     r.add(pad_left(p.threads ? fmt("%u", *p.threads) : "n/a", 4), tone::dim).add(pad_left(fmt("%.1f", gib(p.rss)), 8));
     r.add("  ").add(pad(p.state, 1), p.state == "D" ? tone::watch : tone::dim);
@@ -2103,6 +2146,7 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   append(right, cpu_wsl_list(w, right_col, plan.lists));
 
   panel_frame f;
+  f.graph = true;  // The busy plots have their rows at the layout's floor
   f.hidden = plan.lanes == 0 || plan.ram == 0;
   f.lines.push_back(title_row(s, now_ms));
   f.lines.push_back(rule("CPU", "two systems' own views of overlapping work, never added", width));
@@ -2140,11 +2184,11 @@ std::string range_text(int range) { return fmt("%d min", static_cast<int>(kSpans
 // machtop's footer: the panels on the left, current lit, built dim, not built faint; on the right the keys
 // that act on this panel. Short of room every panel but the current one is its number, then the keys go,
 // then the other panels. Rows a panel had to leave out are said after the panels, or by a leading … .
-line panel_footer(const view_state& v, int lists, int width, bool hidden) {
+line panel_footer(const view_state& v, int lists, int width, bool hidden, bool graph) {
   std::string hints;
   if (panel_draws_selection(v.panel) && lists > 0) hints += "↑↓ select  ";
   if (panel_draws_selection(v.panel) && lists > 1) hints += "tab list  ";
-  if (panel_has_range(v.panel)) hints += "←→ " + range_text(v.range) + "  ";
+  if (panel_has_range(v.panel) && graph) hints += "←→ " + range_text(v.range) + "  ";
   hints += "q quit";
   static constexpr std::string_view kNote = "… some rows hidden";
   for (int form = 0; form < 4; ++form) {  // Names and keys, numbers and keys, numbers, the current panel
@@ -2290,14 +2334,29 @@ std::vector<line> with_footer(const panel_frame& f, int width, int body, const l
 }
 
 // The selectable lists of a panel, each as its rows' keys in the order drawn: panel 3's Windows and WSL
-// lists. A list with no row is not selectable.
+// lists. A list with no row is not selectable, and nor is the guest's when its line is unreadable or stale:
+// design/panel-grammar.md part 3, "WSL unavailable or stale ... nothing to select".
 std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel) {
   std::vector<std::vector<row_key>> lists(2);
   if (panel != 3) return {};
   for (const process_row* p : windows_cpu_order(s)) lists[0].push_back({true, p->pid, p->name});
-  const wsl_view w = read_wsl(s.wsl_json);
-  for (const wsl_process* p : wsl_cpu_order(w)) lists[1].push_back({true, p->pid, p->name});
+  if (s.wsl_age_s < kStaleS) {
+    const wsl_view w = read_wsl(s.wsl_json);
+    for (const wsl_process* p : wsl_cpu_order(w)) lists[1].push_back({true, p->pid, p->name});
+  }
   return lists;
+}
+
+// The list that has focus: the one chosen, unless it has no rows and another has, which then has it.
+int focused_list(int chosen, const std::vector<std::vector<row_key>>& lists) {
+  const int n = static_cast<int>(lists.size());
+  if (n == 0) return 0;
+  const int c = std::clamp(chosen, 0, n - 1);
+  if (!lists[static_cast<size_t>(c)].empty()) return c;
+  for (int i = 0; i < n; ++i) {
+    if (!lists[static_cast<size_t>(i)].empty()) return i;
+  }
+  return c;
 }
 
 int selectable_count(const std::vector<std::vector<row_key>>& lists) {
@@ -2334,14 +2393,16 @@ bool apply_key(view_state& v, key_event e, const snapshot& s) {
       break;
     case key::tab: {
       const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel);
+      pv.focus = focused_list(pv.focus, lists);  // An empty list never keeps focus
       if (selectable_count(lists) > 1) pv.focus = (pv.focus + 1) % static_cast<int>(lists.size());
       break;
     }
     case key::up:
     case key::down: {
       const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel);
-      const int focus = std::clamp(pv.focus, 0, 1);
+      const int focus = focused_list(pv.focus, lists);
       if (static_cast<size_t>(focus) >= lists.size() || lists[static_cast<size_t>(focus)].empty()) break;
+      pv.focus = focus;
       const std::vector<row_key>& rows = lists[static_cast<size_t>(focus)];
       const size_t at = selected_row(rows, pv.rows[focus]);
       const size_t to = e.k == key::down ? std::min(at + 1, rows.size() - 1) : at == 0 ? 0 : at - 1;  // Stops at the ends
@@ -2363,7 +2424,7 @@ std::vector<line> render(const snapshot& s, int width, int height, int64_t now_m
   view_state shown = v;
   shown.panel = panel;
   const int lists = panel_draws_selection(panel) ? selectable_count(selectable_lists(s, panel)) : 0;
-  return with_footer(f, width, body, panel_footer(shown, lists, width, f.hidden));
+  return with_footer(f, width, body, panel_footer(shown, lists, width, f.hidden, f.graph));
 }
 
 std::string as_text(const std::vector<line>& lines) {
