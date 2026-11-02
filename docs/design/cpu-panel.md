@@ -261,7 +261,7 @@ Footer in this layout: `[1] overall  [2] gpu  [3] cpu  [t] span 60s  [q] quit`.
 No sort key, text entry, scrolling or list focus. Each costs a mode.
 
 Superseded 2026-11-02 by the owner's adoption of the shared grammar ([`../panels.md`](../panels.md)):
-`↑`/`↓` select a row, `tab` moves between the Windows and WSL lists, `s` sorts the list holding the
+`↑`/`↓` select a row and scroll a long list, `tab` moves between the Windows and WSL lists, `s` sorts the list holding the
 selection, and `←`/`→` set the range to 1, 5 or 10 minutes in place of `t`. The table and footer above are
 today's build, not the target.
 

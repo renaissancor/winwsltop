@@ -185,9 +185,6 @@ is the shared one (Shared grammar).
 
 - The contention verdict needs a threshold with evidence behind it: how near the limit, for how long. Open,
   confirmed by the owner 2026-11-02: it waits for a ledger row.
-- Scrolling: `design/cpu-panel.md` section 6 refuses it too, and the owner's decision named list focus,
-  the sort and per-process history only. Whether `↑`/`↓` past the last row shown scrolls a list is not
-  decided.
 - Graph labels of average and maximum, and the large layout's `collecting` caption beside the `·`
   (Shared grammar): both change `contracts/ui.md` rule 8, which ui has not yet done.
 
@@ -211,5 +208,11 @@ is the shared one (Shared grammar).
   heading marks the list holding the selection, the other's is dim with no ▶; `s` and the history follow
   that list; `esc` does not reset focus, and a panel keeps its focus across a switch. Source: machtop
   2026-11-02, added to the shared grammar in machtop's `docs/panels.md`. Closes the open question on `tab`.
+- 2026-11-02, machtop. Lists scroll as in machtop's `docs/panels.md`, Shared grammar, "Selection" (branch
+  `grammar-tab`, read from machtop's `move_selection` and `app_table`): `↑`/`↓` stop at the ends and do
+  not wrap; a list longer than its space follows the selection, which stays on the last row shown once it
+  passes the bottom; no paging; the list ends with a dim `N of M` line; a selected name that leaves the
+  list drops the selection to the first row. Supersedes the refusal of scrolling in `design/cpu-panel.md`
+  section 6. The `tab` details above are in the same file, bullet "tab".
 - 2026-11-02. sshvllmtop does not follow the shared grammar yet: its range is 1 m, 10 m, 1 h and it moves
   with `j`/`k`/`g`/`G`. That is sshvllmtop's own work, not a winwsltop task.
