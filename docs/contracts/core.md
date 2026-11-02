@@ -180,3 +180,9 @@ documents true.
   overrules winwsltop's panel design and its three refusals in `design/cpu-panel.md`; the range is 1, 5, 10
   minutes; keys follow machtop and sshvllmtop; `tab` as machtop decided. The contention verdict's threshold
   stays open.
+- 2026-11-02, the owner. Slice 1's seam change (`design/panel-grammar.md`, part 3, commit 1) is additive, `schema`
+  stays 1, as `vmmem_cores_known` was. Snapshot and record: `process_row.cores_known`, bool, the row had an earlier
+  reading (`processes.cpp` `rated`); `process_row.create_time`, 100 ns since 1601, `SystemProcessInformation`
+  `CreateTime`. Protocol: per-process `rated`, bool, false on a first reading, and `start`, clock ticks since boot,
+  `/proc/pid/stat` field 22. A first reading's `cores` keeps its 0, and the flag tells a reader it is unmeasured.
+  The identity fields are not counters; experiment 0 checks that they are stable while a process lives. Not built yet.

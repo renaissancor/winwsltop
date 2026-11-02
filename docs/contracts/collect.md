@@ -69,6 +69,11 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 
 ## Open questions
 
+- Requested 2026-11-02 for slice 1, commit 1 (`design/panel-grammar.md`, part 3), with core: `processes.cpp`
+  fills `process_row.cores_known` from its `rated` and `create_time` from `CreateTime`, both already read;
+  `collector.py` adds `rated` (false on a process's first reading, when `cores` is an unmeasured 0) and
+  `start` (`/proc/pid/stat` field 22, already its key) to each process, and `embed.py` is rerun. Additive.
+
 - Why NVML reads 11 to 20 percent utilization at idle while the engine counters sum to about 6
   (ledger, experiment 01 and 02). Different definitions, or a bad reading. Unresolved.
 - What the second LUID is. `Win32_VideoController` lists one adapter; PDH shows two (ledger).

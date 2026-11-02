@@ -56,6 +56,14 @@ about this machine lives.
 
 ## Open questions
 
+- Requested 2026-11-02 by core for slice 1 (`design/panel-grammar.md`, part 1), the owner's go-ahead given,
+  running as experiment 0: read only, no load, no GPU. Windows available, commit and cache against
+  `Get-Counter` and Task Manager; several processes' working set and private bytes against `Get-Process`;
+  guest swap against `free -b`; guest RSS against `/proc/pid/status` `VmRSS` and `ps`; guest per-process
+  cores against `ps` `TIME` over the same window; guest used and cache beside `vmmemWSL` working set in one
+  sample; Windows create time and guest `starttime` constant while a process lives and different after a pid
+  is reused. Each row clears a `?` on screen and closes part of `TODO.md` item 28.
+
 - Which clock is right: WSL `CLOCK_MONOTONIC` ran 3.68 percent fast against the Windows wall clock on
   one machine, in one state. Neither has been compared with an outside reference.
 - The 645-matmul second at the end of the WSL load in experiment 01. The load uses `time.monotonic()`,
