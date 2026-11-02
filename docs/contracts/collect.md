@@ -58,7 +58,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 |---|---|
 | source | `src/host` 356 lines, `src/gpu` 253, `src/wsl` 621 (279 of them generated), `collector.py` 165 |
 | collector cost | 3.46 ms per sample; line 0.08 to 0.17 s old on arrival (ledger, "WSL collector checked") |
-| collector line | 3522 to 3536 bytes with 30 rows, 443 to 447 larger with `cpu_split`, `load` and `threads`, against a 1 KB budget (`docs/design/cpu-panel.md` section 8). Cost 6.99 ms against 7.05 for the old collector, run side by side for 10 samples | Read live, no raw file.
+| collector line | 4205 to 4213 bytes with 30 rows, about 796 more since `rated` and `start` (e37993d), and 3522 to 3536 before that, after `cpu_split`, `load` and `threads` added 443 to 447. Budget: under 8 KiB a line, see the decision of 2026-11-02. Cost 6.99 ms against 7.05 for the old collector, run side by side for 10 samples, before `rated` and `start` | Read live, no raw file.
 | Ready count | 29.3 µs mean, 57.3 max, over 345 processes and 6152 threads, on 6.32 ms for a sample; `cost.processes` averaged 5.04 ms over 11 samples. No load | Read live, no raw file.
 | `GPU Engine` read | 0.53 ms over 485 instances (ledger, "Windows collector checked") |
 | NVML init | about 626 ms at construction, about 1 ms per sample (ledger, experiment 02) |
@@ -69,10 +69,10 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 
 ## Open questions
 
-- Requested 2026-11-02 for slice 1, commit 1 (`design/panel-grammar.md`, part 3), with core: `processes.cpp`
-  fills `process_row.cores_known` from its `rated` and `create_time` from `CreateTime`, both already read;
-  `collector.py` adds `rated` (false on a process's first reading, when `cores` is an unmeasured 0) and
-  `start` (`/proc/pid/stat` field 22, already its key) to each process, and `embed.py` is rerun. Additive.
+- Guest RSS is `/proc/pid/stat` field 24 times the page size, which reads below `VmRSS` by up to 2568192 B
+  (ledger, "Memory and process collectors checked"). The screen labels it `stat rss` (`design/panel-grammar.md`,
+  part 1). Any change of source, to `VmRSS` or `statm`, is held until evidence reruns the `statm` check with
+  its output saved (`contracts/evidence.md`, open questions).
 
 - Why NVML reads 11 to 20 percent utilization at idle while the engine counters sum to about 6
   (ledger, experiment 01 and 02). Different definitions, or a bad reading. Unresolved.
@@ -134,3 +134,14 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 - 2026-11-01. `load_average` returns `None` for a non-finite value as well as a failed read, so `load` can
   never put `NaN` in a line. `threads` shares the parse of the other `/proc/pid/stat` fields, so this
   collector never sends the `null` the protocol allows for it.
+- 2026-11-02. `rated` and `start` (e37993d), requested for slice 1, commit 1. `rated` is `old is not None`, the same
+  test that decides whether `cores` is computed, so a row is rated exactly when its cores are a measurement. `start` is
+  `/proc/pid/stat` starttime, the second half of the key `processes()` already builds, so the identity sent is the one the
+  collector rates on. Closes the open question that requested them.
+- 2026-11-02, core. The collector line's budget is under 8 KiB a line, replacing "grows under 1 KB" in
+  `design/cpu-panel.md` section 8. A per-change growth budget bounded nothing across changes: the line went from
+  about 3.1 KB to 4.2 KB in two changes, each under 1 KB. The cost of a byte is three parses a sample (`read_wsl` in
+  `lost_tracker`, `history::push` and `render`, `contracts/ui.md` open questions) and a copy into every `--record` line.
+  8 KiB is about twice today's line at 30 rows and leaves room for about 28 more `/dev/dxg` holder rows, the one part
+  the top-30 cut does not bound, far below the bridge's 1 MiB `kMaxPending`. A change that would pass it needs a
+  decision here first.

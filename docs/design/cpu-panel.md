@@ -306,7 +306,7 @@ The tool watches a machine that may be short of CPU.
 | Frame build | Under 5 ms, normal build | Measured |
 | Own CPU | No more than 0.5% of a core above the old live build | Measured 2026-11-02, release builds in a pseudo-terminal at 131 by 40, CPU panel, 60 s, two runs each: v0.1.0 0.91% and 0.85%, this build 1.06% and 0.93%. Read live, no raw file. Covers `winwsltop.exe` only: collector and terminal not measured |
 | History | One flat ring of 901 samples, kept for `kKeepMs` 900000; the drawing span is an argument. Floats, 2 sides, up to 64 threads a side. No per-second allocation | By construction |
-| Collector line | Grows under 1 KB | Measured |
+| Collector line | Grows under 1 KB. Met, 443 to 447 bytes. Superseded 2026-11-02 by an absolute budget, under 8 KiB a line (`contracts/collect.md`), since a growth budget per change bounds nothing over several changes | Measured |
 
 ## 9. Changes by owner, in order
 
