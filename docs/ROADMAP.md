@@ -13,9 +13,8 @@ and `docs/measurable.md` first; two items below are also open questions in `docs
   appears under `vmwp.exe`. Only with the user's go-ahead for GPU load.
 
 ## 2. What beats btop
-- **History:** 60 s graphs exist, and the CPU panel keeps 15 minutes (`contracts/ui.md`). Per-process history
-  of cores and memory is approved in slice 1 (`design/panel-grammar.md`), with the range at 1, 5, 10 minutes
-  and 10 minutes kept. Still PROPOSED: a ring per GPU side and per-process GPU history (slice 2), and the
+- **History:** every graph shows 1, 5 or 10 minutes, and per-process history of cores and memory is built
+  (slice 1, `design/panel-grammar.md`). Still PROPOSED: a ring per GPU side and per-process GPU history (slice 2), and the
   braille chart of WSL vs Windows as panel 8's centrepiece, over the shared range (`panels.md`, Decisions).
 - **Contention verdict:** a plain line when both sides are busy and the GPU is near its limit, with the
   moment it began. Utilization alone hid -46% and -59% in experiment 01.
