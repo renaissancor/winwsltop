@@ -1,6 +1,7 @@
 # Panels
 
-**PROPOSED, 2026-11-02.** Nothing here is decided until `contracts/ui.md` records it in its decision log.
+**PROPOSED, 2026-11-02**, except what "Decisions" at the end records, which `contracts/ui.md` also
+records. The rest is decided only once `contracts/ui.md` records it in its decision log.
 Today's screen is in `README.md` ("Use") and, for panel 3, `design/cpu-panel.md`.
 
 Each panel answers one question. Its core detail is what answers that question; everything else on it
@@ -23,9 +24,9 @@ winwsltop watches two systems that share one machine. So on every panel:
   side, then the process on that side where one is measured.
 - **A Windows figure about the VM and the guest's own figure are two readings, both shown.** Where they
   disagree, the gap is the finding (the CPU panel's `lost`), named as inferred with its formula.
-- **WSL has no per-process GPU use.** `/dev/dxg` holders are identity only (ledger, the table at the top,
-  "`/dev/dxg` holders identify the Linux process", and WSL collector checked). A holder can be selected, and its history then says `no usage measured`
-  instead of drawing a graph.
+- **WSL has no per-process GPU use.** `/dev/dxg` holders are identity only (ledger, the table at the
+  top, "`/dev/dxg` holders identify the Linux process", and WSL collector checked). A holder can be
+  selected, and its history then says `no usage measured` instead of drawing a graph.
 
 ## Shared grammar
 
@@ -35,12 +36,23 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
 - `1`-`8` switch panels; `↑`/`↓` select a row; `←`/`→` change the time range (1, 5, 10 minutes); `esc`
   returns to 1; `q` quits. Keys typed with Korean input on (ㅂ for q, ㄴ for s) count as their Latin
   letters, and a bare `esc` is told from an arrow key's escape sequence by a short delay.
-- **Added, needs agreement with sshvllmtop and machtop:** `tab` moves the selection between the Windows
-  list and the WSL list on a panel that has both. One list per side is the rule here, not an exception,
-  so a second key is cheaper than merging the lists, which `contracts/ui.md` rule 3 forbids.
-- **Changed for winwsltop:** `←`/`→` replace `t`. The history keeps 15 minutes, so the range could go to
-  15; it stops at 10 to match the other tools. See open questions.
-- The footer lists the panels with the current one lit. A panel that is not built yet is listed dim.
+- `tab` moves the selection to the next selectable list on the current panel and wraps round. There is
+  no Shift+Tab. On a panel with one selectable list it does nothing and the footer does not show it.
+  Decided by machtop 2026-11-02, added to the shared grammar in machtop's `docs/panels.md`. Here it is
+  how a panel moves between its Windows list and its WSL list, which `contracts/ui.md` rule 3 forbids
+  merging.
+  - Each list keeps its own selected row, keyed by name, so the selection survives a reorder. Switching
+    lists resets neither.
+  - The list holding the selection has its heading lit; the other list's heading is dim and its rows
+    show no ▶.
+  - `s` sorts the list holding the selection, and the history below the lists shows that list's
+    selected row.
+  - `esc` returns to panel 1 and does not reset focus. Each panel keeps its focus when you switch away
+    and back, as it keeps its selection.
+- **Changed for winwsltop:** `←`/`→` replace `t`, and the range is 1, 5, 10 minutes, the same as
+  machtop's (decided 2026-11-02, below). The history keeps 15 minutes, more than the range needs.
+- The footer lists the panels with the current one lit. **Added for winwsltop, not in machtop's text:** a
+  panel that is not built yet is listed dim.
 - Graphs: a measured 0 is the lowest braille dot row (⣀) in steel; no sample inside the watched span is
   blank; the part of the window from before winwsltop started watching is a faint `·` every other cell.
   This is already winwsltop's rule, `contracts/ui.md` rule 8, from 6ef13ef. **Changed for winwsltop:**
@@ -152,8 +164,8 @@ is the shared one (Shared grammar).
 - **Core detail:** over the selected range, side by side: the GPU split (Windows, WSL, unattributed),
   `lost` CPU (inferred), and memory held by `vmmemWSL` against the guest's used. The guest's used is not
   collected: it is `memory.total` less `memory.available` from the collector's line, derived, on the
-  guest's side only. Below it, the moments
-  contention began and ended, once the verdict in panel 1 exists.
+  guest's side only. Below it, the moments contention began and ended, once the verdict in panel 1
+  exists.
 - **History:** the whole panel is history; the selection picks which of the three rows is drawn large.
 - **Later, PROPOSED (`ROADMAP.md` 2):** workload truth, such as vLLM `/metrics` from inside WSL, so a
   slowdown is shown in the work done and not only in utilization.
@@ -171,16 +183,33 @@ is the shared one (Shared grammar).
 
 ## Open questions
 
-- `design/cpu-panel.md` refuses three things the shared grammar needs. Adopting this file supersedes
-  all three, and the decision must be recorded there and in `contracts/ui.md`:
-  - list focus, with a sort key and scrolling: section 6, "No sort key, text entry, scrolling or list
-    focus. Each costs a mode", against selection on every panel and `tab` between lists;
+- The contention verdict needs a threshold with evidence behind it: how near the limit, for how long. Open,
+  confirmed by the owner 2026-11-02: it waits for a ledger row.
+- Scrolling: `design/cpu-panel.md` section 6 refuses it too, and the owner's decision named list focus,
+  the sort and per-process history only. Whether `↑`/`↓` past the last row shown scrolls a list is not
+  decided.
+- Graph labels of average and maximum, and the large layout's `collecting` caption beside the `·`
+  (Shared grammar): both change `contracts/ui.md` rule 8, which ui has not yet done.
+
+## Decisions
+
+- 2026-11-02, the owner. The shared grammar from machtop's `docs/panels.md` overrules winwsltop's existing
+  panel design. The three refusals in `design/cpu-panel.md` are superseded:
+  - list focus and the sort key: section 6, "No sort key, text entry, scrolling or list focus. Each
+    costs a mode", against selection on every panel and `tab` between lists;
   - the `[s]` sort: section 4, "Refused, and why", "`[s]` sort by memory ... Cut", against `s` on
     panel 7;
   - per-process history: section 11, "Out of this design", against the selected process's history on
     panels 3 and 4.
-- `tab` between the two lists changes the shared grammar. Agree it with sshvllmtop and machtop first, or
-  find a way that needs no new key.
-- The range: 1, 5, 10 like the others, or 1, 5, 15 to use the 15 minutes `history` already keeps.
-- The contention verdict needs a threshold with evidence behind it: how near the limit, for how long.
-- sshvllmtop does not yet follow the shared numbering (its keys are `p`, `a`, `w`, `j`/`k`).
+  Recorded in `design/cpu-panel.md` and `contracts/ui.md`.
+- 2026-11-02, the owner. The range on `←`/`→` is 1, 5, 10 minutes, the same as machtop and sshvllmtop's
+  shared grammar. It replaces the 1, 5, 15 option once open here, and supersedes the "1, 10 and 60 minutes"
+  of `ROADMAP.md` section 2 for the centrepiece chart on panel 8.
+- 2026-11-02, the owner. Keys follow machtop and sshvllmtop's shared grammar.
+- 2026-11-02, machtop. `tab` as in Shared grammar: next selectable list, wrapping, no Shift+Tab, nothing on
+  a panel with one list and then not in the footer; each list keeps its selected row by name; the lit
+  heading marks the list holding the selection, the other's is dim with no ▶; `s` and the history follow
+  that list; `esc` does not reset focus, and a panel keeps its focus across a switch. Source: machtop
+  2026-11-02, added to the shared grammar in machtop's `docs/panels.md`. Closes the open question on `tab`.
+- 2026-11-02. sshvllmtop does not follow the shared grammar yet: its range is 1 m, 10 m, 1 h and it moves
+  with `j`/`k`/`g`/`G`. That is sshvllmtop's own work, not a winwsltop task.
