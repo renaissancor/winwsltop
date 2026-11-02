@@ -60,8 +60,10 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
 - Graphs are labelled with the window's average and maximum, never the minimum; a cell is the mean of
   its samples; a measure with a real ceiling is drawn 0-100, any other to a rounded `scale` or a zoomed
   `range` (machtop f7e24f2). Built in slice 1, which changes rule 8 (`design/panel-grammar.md`, part 5).
-  **Added for winwsltop, put to machtop:** the cell holding the window's maximum carries one extra dot, and
-  a split value over 100 is printed with `*` beside `VM level, not exact shares*`.
+  The cell holding the window's maximum carries one extra dot, the latest on a tie and none at or under the
+  mean's dot row, and a value over a 0-100 ceiling is drawn at the ceiling and labelled as measured in the
+  watch tone (machtop dbb7f95). **Added for winwsltop:** the over-100 label carries `*`, beside
+  `VM level, not exact shares*`.
 - **Added for winwsltop:** a figure the screen shows without a ledger row is marked `?`, and the panel's
   rule line says `? not yet checked` (`design/panel-grammar.md`, part 1).
 
@@ -187,7 +189,6 @@ is the shared one (Shared grammar).
 
 - The contention verdict needs a threshold with evidence behind it: how near the limit, for how long. Open,
   confirmed by the owner 2026-11-02: it waits for a ledger row.
-- Put to machtop 2026-11-02: the dot on the cell holding the window's maximum, and the over-100 `*`.
 
 ## Decisions
 
@@ -224,3 +225,7 @@ is the shared one (Shared grammar).
   shown without a ledger row are marked `?`, not hidden; the seam change is additive flags, `schema` stays 1;
   panel 3 at 34 rows shows 5 list rows; panel 1 gets no selection and panel 2 waits for slice 2. Recorded in
   `contracts/ui.md`.
+- 2026-11-02, machtop dbb7f95. The dot at the window's maximum, proposed by winwsltop, is shared grammar: in the cell
+  holding the maximum, the latest on a tie, when it holds more than one sample and the dot falls above its mean. A value
+  over a 0-100 ceiling is drawn at the ceiling and labelled as measured in the watch tone; the `*` on `VM level, not
+  exact shares*` stays winwsltop's own. Closes the two questions put to machtop.

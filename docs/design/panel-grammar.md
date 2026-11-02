@@ -576,15 +576,19 @@ measured is undecided); a sum of Windows used and guest used, which counts the g
 | `vmmemWSL` working set; Windows and guest used and cache | zoom, `range` | 64 MiB: whole-machine figures move by tens of MiB, and 4 MiB would draw that as a cliff |
 | Heat block, lanes | the ramp, unchanged | |
 
-4. **The cell holding the window's maximum** gets one more dot at the maximum's height, above its mean,
-   when a cell holds more than one sample. At 10 minutes on a 43-cell plot a cell holds 14 samples, so a
-   one-second spike to 100% has a mean of about 7, the lowest dot row, and looks like 0. The `max` label
-   says how high but not when; the dot says when. One dot, in the plot's own tone, costs no row. machtop
-   does not do this yet (section 8).
-5. **Over 100.** The split is engine time grouped by side and can pass 100 ("Shares add to 100%": no, in
-   "Experiment 01 result"). The cell clamps; the label prints as measured with a `*` in `watch`, and the
-   same frame puts `*` after the caption `VM level, not exact shares`, which is why. A window with nothing
-   over 100 shows neither.
+4. **The cell holding the window's maximum** gets one more dot at the maximum's height, in the plot's own
+   tone, costing no row (machtop `docs/panels.md`, `grammar-tab` dbb7f95, "Shared grammar", the graph-cell
+   bullet; proposed here, winwsltop builds it first). Only when that cell holds more than one sample, and
+   only when the dot falls above the dot row the cell's mean reaches; if several cells hold the maximum, the
+   latest one. No other cell gets a dot. At 10 minutes on a 43-cell plot a cell holds 14 samples, so a
+   one-second spike to 100% has a mean of about 7, the lowest dot row, and would read as idle; the `max`
+   label says how high, the dot says when.
+5. **Over 100.** Shared rule (dbb7f95, the over-100 bullet): on a 0-100% graph a value above the ceiling is
+   drawn at the ceiling, and its label prints the measured number in `watch`; the graph clamps, the number
+   does not, as `contracts/ui.md` rule 5 already says. The split is engine time grouped by side and can pass
+   100 ("Shares add to 100%": no, in "Experiment 01 result"). **winwsltop's own:** the label also carries a
+   `*`, and the same frame puts `*` after the caption `VM level, not exact shares`, which is why. A window
+   with nothing over 100 shows neither.
 6. The axis caption `peak over mean · 20 s` becomes `each cell 20 s`, and `collecting: N s of M s` goes: the
    `·` says it. That closes the `contracts/ui.md` open question on that caption.
 
@@ -628,8 +632,10 @@ Panel 2's axis rows, from `render_check busy 131 40 gpu` and `100 34 gpu`, with 
 > Graphs have time on the x axis. A measure with a real ceiling (a percentage of one core, a device or the
 > whole machine) is drawn 0 to 100; any other is drawn from 0 to the window's maximum rounded up to 1, 2 or
 > 5 times a power of ten, never below its floor, and prints `scale` and that top, or zooms and prints
-> `range`. A cell is the mean of the samples in its slice of the window, and the cell holding the window's
-> maximum also marks it with one dot. A measured 0 is the bottom dot row (⣀), a missing sample or a stall is
+> `range`. A cell is the mean of the samples in its slice of the window. The cell holding the window's
+> maximum, the latest if several do, also marks it with one dot at its height, when that cell holds more
+> than one sample and the dot falls above the cell's mean. A value above a 0-100 graph's ceiling is drawn at
+> the ceiling and labelled as measured, in the watch tone. A measured 0 is the bottom dot row (⣀), a missing sample or a stall is
 > a blank gap, never a zero, and time from before watching began is a faint `·` in every other cell of the
 > bottom row. Each graph is labelled with the average and maximum of its samples over the window, never the
 > minimum. Panels are never stacked or summed, and each graph title names its source.
@@ -639,11 +645,13 @@ The large-layout exception keeps its repeat rule and drops "the plots a peak".
 ### render_check must check
 
 - 10 minutes with one 100 among 0s: the cell is under 100, the label says `max 100`, and that cell has the
-  extra dot; at 1 minute no extra dot appears.
+  extra dot; at 1 minute no extra dot appears; two cells holding the maximum put it in the later one; a
+  cell whose mean already reaches the maximum's dot row gets none; no other cell ever has one.
 - `plot_columns`: two samples in one column give their mean; a joined gap of two columns takes the later
   sample in both.
-- `avg` and `max` against values worked out by hand, including over 100; `max 112%*` and the caption's `*`
-  with `demo_minute`, neither with every split value at or under 100.
+- `avg` and `max` against values worked out by hand, including over 100; with `demo_minute` the cell at 112
+  is drawn at the ceiling, `max 112%*` is in `watch` and the caption has its `*`; neither with every split
+  value at or under 100.
 - `scale 20` for 13.25 cores, `scale 0.05` for 0.01; `range` on every zoomed plot.
 - No label when every sample in the range is a gap; no `min`, `peak over mean` or `collecting:` anywhere.
 - Labelled axis rows keep `-60s`, `-5m`, `-10m` and `now`, and drop the label before either end.
@@ -690,10 +698,11 @@ This slice touches both seams, `snapshot.h` and `PROTOCOL.md`, in commit 1, and 
 a process keyed by pid and name; scale by measure (part 5); mean cells and window-wide `avg` and `max`;
 Shift+Tab does nothing; the `faint` tone for panels not built.
 
-For machtop:
+Answered by machtop, `grammar-tab` dbb7f95, 2026-11-02:
 
-1. The dot at the window's maximum (part 5, item 4). Adopt it, or keep the label alone?
-2. The over-100 `*` (part 5, item 5) has no machtop case; it is winwsltop's own.
+1. The dot at the window's maximum is shared grammar, with two additions now in part 5, item 4: the latest
+   cell on a tie, and no dot at or under the mean's dot row.
+2. Over 100 is shared: drawn at the ceiling, labelled as measured in `watch`. The `*` stays winwsltop's own.
 
 Decided by the owner, 2026-11-02:
 
