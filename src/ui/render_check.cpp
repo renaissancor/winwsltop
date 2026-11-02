@@ -3196,7 +3196,7 @@ void check_view_keys() {
   check(v.range == 1, "the range is the screen's, kept across panels");
   press(v, {digit(1), left, left});
   check(v.range == 1, "← on panel 1 leaves the range");
-  for (int p = 4; p <= 8; ++p) {
+  for (int p = 5; p <= 8; ++p) {
     press(v, {digit(p), left, right, right});
     check(v.range == 1 && v.panel == p, "←→ on a panel not built leaves the range: " + std::to_string(p));
   }
@@ -3279,8 +3279,12 @@ void check_view_keys() {
       if (w >= display_width(name) + 2) check(has(t, name), "the current panel is named" + at);
       check(!has(t, "[t]") && !has(t, " s ") && !has(t, "sort"), "no t and no s" + at);
       // Panel 3 offers ↑↓ and tab with its lists; the keys go together, so they need 19 + 3 + 37 columns there.
-      check(has(t, "↑↓") == (p == 3 && w >= 59) && has(t, "tab list") == (p == 3 && w >= 59), "↑↓ and tab only on panel 3, which draws its lists" + at);
-      check(has(t, "←→") == (panel_has_range(p) && w >= (p == 3 ? 59 : 38)), "←→ only on panels 2 and 3, where it fits beside the panels' numbers" + at);
+      // 19 for the panels' numbers, 3, 37 for the keys; panel 4 stacked under 80 columns leaves rows out at 40
+      // high, and the footer's leading … takes 2 more.
+      const bool lists = p == 3 || p == 4;
+      const int keys_from = p == 4 ? 61 : lists ? 59 : 38;
+      check(has(t, "↑↓") == (lists && w >= keys_from) && has(t, "tab list") == (lists && w >= keys_from), "↑↓ and tab only on panels 3 and 4, which draw their lists" + at);
+      check(has(t, "←→") == (panel_has_range(p) && w >= keys_from), "←→ only on panels 2, 3 and 4, where it fits beside the panels' numbers" + at);
       for (const span& q : foot) {
         if (q.text.empty() || q.text[0] < '1' || q.text[0] > '8' || (q.text.size() > 1 && q.text[1] != ' ')) continue;
         const int n = q.text[0] - '0';
@@ -3307,7 +3311,7 @@ void check_view_keys() {
 
   // The panels not built: their question, where their figures are meanwhile, the footer on the bottom row.
   const struct { int p; const char* title; const char* question; const char* where; } pages[] = {
-      {4, "MEMORY", "Where is physical memory going", "on panels 1 and 3"}, {5, "DISK", "Which disk is busy, and is it the WSL disk?", "on panel 1"},
+      {5, "DISK", "Which disk is busy, and is it the WSL disk?", "on panel 1"},
       {6, "NETWORK", "Which interface is busy?", "on panel 1"}, {7, "PROCESSES", "Every process, every measure.", "on panels 1 and 3"},
       {8, "VM COST", "What has each side cost the other, and when?", "on panel 2 and the VM's CPU on panel 3"}};
   for (const auto& pg : pages) {
@@ -3592,7 +3596,7 @@ void check_selection() {
   view_state sel = state_for(3);
   apply_key(sel, down, s);
   const std::vector<proc_id> keep = selected_processes(s, sel);
-  check(keep.size() == 2 && keep[0].side == 0 && keep[0].pid == windows_cpu_order(s)[1]->pid && keep[1].side == 1 && keep[1].pid == 4121, "selected_processes names both lists' rows");
+  check(keep.size() == 4 && keep[0].side == 0 && keep[0].pid == windows_cpu_order(s)[1]->pid && keep[1].side == 1 && keep[1].pid == 4121, "selected_processes names both lists' rows");
 }
 
 // design/panel-grammar.md part 1, after experiment 06: what keeps its ? and what does not.
@@ -3608,6 +3612,126 @@ void check_unchecked_marks() {
   check(!has(as_text(render(nothing, 200, 66, kNow)), "?"), "no unchecked figure shown, no ?");
   const history demo = demo_minute(busy());
   check(!has(as_text(render(busy(), 131, 40, kNow, &demo, state_for(2))), "?"), "panel 2 has none");
+}
+
+// design/panel-grammar.md part 4, panel 4 Memory, with part 1's experiment-06 marks and machtop's zoom.
+void check_memory_panel() {
+  const snapshot s = busy();
+  const history demo = demo_minute(s);
+  const auto mem = [&](int w, int rows, const view_state& v = state_for(4), const snapshot* t = nullptr, const history* h = nullptr) {
+    return render(t ? *t : s, w, rows, kNow, h ? h : &demo, v);
+  };
+  std::vector<line> f = mem(100, 34);
+  std::string text = as_text(f);
+  check(f.size() == 34 && frame_fits(f, 100, 34), "100 by 34 fits");
+  check(!has(text, "not built yet") && has(as_text({f.back()}), "4 mem"), "key 4 is the memory panel now");
+  check(has(text, "whole machine, includes the WSL VM") && has(text, "guest view, inside the VM"), "each side says what it is");
+  check(has(text, "? not yet checked") && has(text, "cache? 12.0") && has(text, "swap? 0.0 GiB"), "cache and swap keep their ?, and the rule says what it means");
+  check(count_of(text, "?") == 4 && !has(text, "used?") && !has(text, "commit?") && !has(text, "WS GiB?"), "and nothing else has one: ? on cache twice, swap, and the rule");
+  check(has(text, "WINDOWS  used 24.7 of 63.7 GiB · cache? 12.0") && has(text, "WSL  used 7.3 of 31.2 GiB · cache 7.0"), "the heads, one format for both");
+  check(has(text, "commit 31.0 of 80.0 GiB") && has(text, "PSI mem 0.00% avg10"), "commit on Windows, PSI mem in the guest");
+  // The VM on its own row, full width, with nothing of the guest's on it.
+  const std::string vm = line_with(f, "vmmemWSL working set");
+  check(vm.rfind("VM  vmmemWSL working set 10.1 GiB · Windows' view of the VM, included in WINDOWS", 0) == 0 && !has(vm, "│"), "the VM's row, on its own");
+  // The two sides stay apart: every guest figure right of the divider, every Windows one left.
+  for (const line& l : f) {
+    const std::string t = as_text({l});
+    const size_t bar = t.find(" │ ");
+    if (bar == std::string::npos) continue;
+    for (const char* guest : {"7.3 of 31.2", "swap?", "PSI mem", "stat rss", "python3", "ollama"}) {
+      if (has(t, guest)) check(t.find(guest) > bar, std::string("guest figures right of the divider: ") + guest);
+    }
+    for (const char* win : {"24.7 of 63.7", "commit", "WS GiB", "svchost", "vmmemWSL"}) {
+      if (has(t, win)) check(t.find(win) < bar, std::string("Windows figures left of it: ") + win);
+    }
+  }
+  // Lists: by memory, then pid; pid 0 left out; the VM's two processes named.
+  const std::vector<const process_row*> by_ws = windows_mem_order(s);
+  bool sorted = true;
+  for (size_t i = 1; i < by_ws.size(); ++i) sorted = sorted && (by_ws[i - 1]->working_set > by_ws[i]->working_set || (by_ws[i - 1]->working_set == by_ws[i]->working_set && by_ws[i - 1]->pid < by_ws[i]->pid));
+  check(sorted && by_ws.front()->pid == 7120 && std::none_of(by_ws.begin(), by_ws.end(), [](const process_row* p) { return p->pid == 0; }), "Windows by working set then pid, no pid 0");
+  check(has(line_with(f, "7120 vmmemWSL"), "WSL VM") && has(line_with(f, "11736 vmwp.exe"), "WSL VM"), "vmmemWSL and vmwp.exe are the VM");
+  check(has(line_with(f, "▶"), "7120 vmmemWSL") && has(text, "Windows · vmmemWSL 7120 · working set"), "the panel opens on the VM's history");
+  check(line_with(f, "WSL  by stat rss").find("WSL") != std::string::npos && has(text, "stat rss GiB") && line_with(f, "4121 python3").find("6.00") != std::string::npos, "the guest by stat rss");
+  // After 16 presses of ↓ at 100 by 34: rows 7 to 17, the 17th last and marked, 11 of 46, its own history.
+  view_state v = state_for(4);
+  for (int i = 0; i < 16; ++i) apply_key(v, key_event{key::down}, s);
+  f = mem(100, 34, v);
+  text = as_text(f);
+  const std::vector<const process_row*> order = windows_mem_order(s);
+  check(has(line_with(f, "▶"), std::to_string(order[16]->pid)) && order[16]->pid == 10048, "the 17th row is selected: pid 10048");
+  check(has(text, "11 of 46") && has(line_with(f, "11 of 46", -1), "▶"), "drawn from row 7 with the 17th last, 11 of 46 under it");
+  check(has(line_with(f, "Windows   "), std::to_string(order[6]->pid)) || has(text, std::to_string(order[6]->pid) + " "), "row 7 is the first drawn");
+  check(has(text, "Windows · svchost.exe 10048 · working set") && has(line_with(f, "10048 · working set"), "MiB"), "the history names pid 10048, in MiB");
+  // tab: the guest's list, its history.
+  apply_key(v, key_event{key::tab}, s);
+  text = as_text(mem(100, 34, v));
+  check(has(text, "WSL · python3 4121 · stat rss"), "tab: the guest's history, named stat rss");
+  // Zoom, machtop's rule: the spread or the floor, a tenth under the minimum, a fifth over the maximum.
+  window_stats st;
+  st.min = 24.75;
+  st.max = 24.75;
+  zoom z = zoom_of(st, kMachineFloorGiB);
+  check(std::fabs(z.bottom - (24.75 - 0.00625)) < 1e-9 && std::fabs(z.top - z.bottom - 0.075) < 1e-9, "a flat series spans the floor, 64 MiB, a tenth of it under");
+  st.min = 10;
+  st.max = 20;
+  z = zoom_of(st, kMachineFloorGiB);
+  check(z.bottom == 9 && z.top == 21, "a wide series: 10 to 20 is drawn 9 to 21");
+  st.min = 0.0001;
+  st.max = 0.002;
+  z = zoom_of(st, kProcessFloorGiB);
+  check(z.bottom == 0 && std::fabs(z.top - 1.2 * kProcessFloorGiB) < 1e-12, "never below 0, and a process's floor is 4 MiB");
+  check(unit_of({24.74, 24.82}).decimals == 1 && unit_of({10.151, 10.153}).decimals == 3 && std::string(unit_of({0.02, 0.03}).name) == " MiB", "GiB or MiB, with the decimals that tell the ends apart");
+  // A flat series draws one line, not blank, and the label prints its range.
+  const std::string plots = as_text(mem(131, 40));
+  check(has(plots, "used avg 24.7 max 24.7 · range") && has(plots, "cache avg 7.0 max 7.0 · range"), "each plot's title has avg, max and range");
+  int flat = 0;
+  for (const line& l : mem(131, 40)) {
+    const std::string t = as_text({l});
+    if (t.rfind("    │⣀", 0) == 0) ++flat;
+  }
+  check(flat == 2, "a flat series draws one line, on the bottom row, in both of Windows' plots");
+  const std::vector<line> pf = mem(131, 40);
+  check(!has(as_text({pf.begin(), pf.end() - 1}), "min "), "no minimum is printed");
+  // WSL stopped: the right side says why, and nothing there to select.
+  const snapshot gone = no_wsl();
+  view_state g = state_for(4);
+  apply_key(g, key_event{key::tab}, gone);
+  const std::vector<line> gf = mem(131, 40, g, &gone);
+  check(has(as_text(gf), "WSL data unavailable") && !has(as_text({gf.back()}), "tab list") && has(as_text({gf.back()}), "↑↓ select") && g.panels[4].focus == 0, "WSL stopped: it says why, and tab is not offered");
+  // Every size, three fixtures.
+  snapshot hostile = busy();
+  hostile.memory.available = hostile.memory.total * 3;
+  hostile.processes.push_back(hostile.processes[2]);
+  hostile.processes.back().name = "\x1b]0;x\x07\x1b[2J";
+  hostile.processes.back().working_set = 50ull * kG;
+  for (const snapshot* t : std::initializer_list<const snapshot*>{&s, &hostile}) {
+    for (int w = 1; w <= 300; w += 3) {
+      for (int rows = 1; rows <= 66; rows += 5) check(frame_fits(mem(w, rows, state_for(4), t), w, rows), "panel 4 fits " + std::to_string(w) + "x" + std::to_string(rows));
+    }
+  }
+  const history bare_h = demo_minute(bare());
+  const snapshot b = bare();
+  for (int w = 1; w <= 300; w += 3) {
+    for (int rows = 1; rows <= 66; rows += 5) check(frame_fits(mem(w, rows, state_for(4), &b, &bare_h), w, rows), "bare panel 4 fits " + std::to_string(w) + "x" + std::to_string(rows));
+  }
+  check(vt_clean(vt_frame(mem(131, 40, state_for(4), &hostile), 40)), "a hostile name on panel 4 stays safe");
+  check(has(as_text(mem(131, 40, state_for(4), &b, &bare_h)), "WINDOWS  used 5.0 of 16.0 GiB") && has(as_text(mem(131, 40, state_for(4), &b, &bare_h)), "vmmemWSL not found"), "bare: Windows alone, and the VM said missing");
+  snapshot no_psi = busy();
+  no_psi.wsl_json.replace(no_psi.wsl_json.find("\"memory\":0.0"), 12, "\"memory\":null");
+  check(has(as_text(mem(131, 40, state_for(4), &no_psi)), "PSI mem n/a"), "no PSI is n/a, not 0");
+  // Rows: the history 8 and the lists 15 at 40, 6 and 11 at 34.
+  memory_rows r = plan_memory_rows(40);
+  check(r.history == 8 && r.lists == 15 && r.plots, "at 40: 8 history rows, 15 list rows");
+  r = plan_memory_rows(34);
+  check(r.history == 6 && r.lists == 11, "at 34: 6 and 11");
+  r = plan_memory_rows(22);
+  check(r.history == 2 && r.lists == 3, "short: the history keeps 2 rows while the lists have 3");
+  r = plan_memory_rows(20);
+  check(r.history == 0 && r.lists == 4, "shorter: the history goes before a list falls under 3");
+  r = plan_memory_rows(18);
+  check(!r.plots && r.lists == 8, "shorter still: then the plots");
+  for (const auto& [w, rows] : {std::pair{131, 40}, std::pair{100, 34}}) check(vt_frame(mem(w, rows), rows).size() < 48 * 1024, "panel 4 under the frame budget");
 }
 
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
@@ -3847,6 +3971,16 @@ int measure_frames() {
     const std::chrono::duration<double, std::milli> took = std::chrono::steady_clock::now() - from;
     printf("panel 2    %3d s 131x40  %6zu bytes  %.3f ms a frame\n", span_s, bytes, took.count() / kFrames);
   }
+  for (const auto& [w, rows] : {std::pair{131, 40}, std::pair{100, 34}}) {  // Panel 4 on busy's memory
+    const snapshot s = busy();
+    const history h = demo_minute(s);
+    size_t bytes = 0;
+    constexpr int kFrames = 300;
+    const auto from = std::chrono::steady_clock::now();
+    for (int i = 0; i < kFrames; ++i) bytes = vt_frame(render(s, w, rows, kNow, &h, state_for(4)), rows).size();
+    const std::chrono::duration<double, std::milli> took = std::chrono::steady_clock::now() - from;
+    printf("panel 4     60 s %dx%d  %6zu bytes  %.3f ms a frame\n", w, rows, bytes, took.count() / kFrames);
+  }
   {  // One push with this machine's load: 360 Windows processes and the guest's 30, every slot written
     snapshot s = contended();
     s.processes.clear();
@@ -3988,6 +4122,7 @@ int main(int argc, char** argv) {
   check_process_ring();
   check_selection();
   check_unchecked_marks();
+  check_memory_panel();
   if (!quick) {
     check_denied_note();
     check_holder_wording();

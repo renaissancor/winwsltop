@@ -826,12 +826,14 @@ struct window_stats {
   double avg = std::numeric_limits<double>::quiet_NaN(), max = std::numeric_limits<double>::quiet_NaN();
   int max_at = -1;    // The column or cell holding the latest sample at the maximum
   int max_count = 0;  // Samples in that column or cell
+  double min = std::numeric_limits<double>::quiet_NaN();  // Never printed: a zoomed graph's bottom comes from it
 };
 
 // Adds one sample to a window's figures. A later sample at the same maximum takes its place.
 void add_to(window_stats& st, double& total, int& n, double v, int at) {
   total += v;
   ++n;
+  if (!(v >= st.min)) st.min = v;
   if (!(v < st.max)) {  // Also the first, while max is NaN
     st.max = v;
     st.max_at = at;
@@ -1912,16 +1914,36 @@ std::vector<const wsl_process*> wsl_cpu_order(const wsl_view& w) {
   return list;
 }
 
-// The selectable lists of a panel, each as its rows' keys in the order drawn: panel 3's Windows and WSL
-// lists. A list with no row is not selectable, and nor is the guest's when its line is unreadable or stale:
-// design/panel-grammar.md part 3, "WSL unavailable or stale ... nothing to select".
+// Panel 4's lists in the order drawn: Windows by working set, the guest by stat rss, then PID.
+std::vector<const process_row*> windows_mem_order(const snapshot& s) {
+  std::vector<const process_row*> list;
+  for (const process_row& p : s.processes) {
+    if (p.pid != 0) list.push_back(&p);  // PID 0 is the idle process
+  }
+  std::stable_sort(list.begin(), list.end(), [](const process_row* a, const process_row* b) {
+    return a->working_set != b->working_set ? a->working_set > b->working_set : a->pid < b->pid;
+  });
+  return list;
+}
+
+std::vector<const wsl_process*> wsl_mem_order(const wsl_view& w) {
+  std::vector<const wsl_process*> list;
+  if (!w.ok) return list;
+  for (const wsl_process& p : w.processes) list.push_back(&p);
+  std::stable_sort(list.begin(), list.end(), [](const wsl_process* a, const wsl_process* b) { return a->rss != b->rss ? a->rss > b->rss : a->pid < b->pid; });
+  return list;
+}
+
+// The selectable lists of a panel, each as its rows' keys in the order drawn: the Windows and WSL lists of
+// panels 3 and 4. A list with no row is not selectable, and nor is the guest's when its line is unreadable
+// or stale: design/panel-grammar.md part 3, "WSL unavailable or stale ... nothing to select".
 std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel) {
   std::vector<std::vector<row_key>> lists(2);
-  if (panel != 3) return {};
-  for (const process_row* p : windows_cpu_order(s)) lists[0].push_back({true, p->pid, p->name});
+  if (panel != 3 && panel != 4) return {};
+  for (const process_row* p : panel == 3 ? windows_cpu_order(s) : windows_mem_order(s)) lists[0].push_back({true, p->pid, p->name});
   if (s.wsl_age_s < kStaleS) {
     const wsl_view w = read_wsl(s.wsl_json);
-    for (const wsl_process* p : wsl_cpu_order(w)) lists[1].push_back({true, p->pid, p->name});
+    for (const wsl_process* p : panel == 3 ? wsl_cpu_order(w) : wsl_mem_order(w)) lists[1].push_back({true, p->pid, p->name});
   }
   return lists;
 }
@@ -2046,10 +2068,10 @@ struct selection_view {
   size_t row[2] = {0, 0};
 };
 
-selection_view selection_of(const snapshot& s, const view_state& v) {
+selection_view selection_of(const snapshot& s, const view_state& v, int panel = 3) {
   selection_view sv;
-  sv.lists = selectable_lists(s, 3);
-  const view_state::panel_view& pv = v.panels[3];
+  sv.lists = selectable_lists(s, panel);
+  const view_state::panel_view& pv = v.panels[panel];
   sv.focus = focused_list(pv.focus, sv.lists);
   for (size_t i = 0; i < 2; ++i) sv.row[i] = selected_row(sv.lists[i], pv.rows[i]);
   return sv;
@@ -2289,20 +2311,321 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   return f;
 }
 
+// ---- Panel 4, memory ------------------------------------------------------------------------------
+//
+// design/panel-grammar.md part 4. Each side's own figures, in GiB, side by side and never added: Windows'
+// used includes the VM, and whether the guest's cache sits in vmmemWSL's working set is unresolved (ledger,
+// "Memory and process collectors checked"), so the VM has a row of its own.
+
+constexpr double kMachineFloorGiB = 64.0 / 1024;  // A whole machine's figures move by tens of MiB
+constexpr double kProcessFloorGiB = 4.0 / 1024;   // machtop's per-app memory
+
+// A zoomed graph's bottom and top: machtop's sample_series (src/render.cpp at 246c2cb), the spread of the
+// window's samples or the floor if more, from a tenth of it under the minimum to a fifth over the maximum.
+struct zoom {
+  double bottom = 0, top = 1;
+};
+
+zoom zoom_of(const window_stats& st, double floor) {
+  if (std::isnan(st.max)) return {0, floor};
+  const double spread = std::max(st.max - st.min, floor);
+  zoom z;
+  z.bottom = std::max(0.0, st.min - spread * 0.1);
+  z.top = z.bottom + spread * 1.2;
+  return z;
+}
+
+// GiB from 1 GiB up, MiB under, with the fewest decimals, 1 to 3, that tell the bottom from the top.
+struct zoom_unit {
+  double scale = 1;
+  const char* name = " GiB";
+  int decimals = 1;
+};
+
+zoom_unit unit_of(const zoom& z) {
+  zoom_unit u;
+  if (z.top < 1) u = {1024, " MiB", 1};
+  for (; u.decimals < 3; ++u.decimals) {
+    if (fmt("%.*f", u.decimals, z.bottom * u.scale) != fmt("%.*f", u.decimals, z.top * u.scale)) break;
+  }
+  return u;
+}
+
+std::string in_unit(double gib_value, const zoom_unit& u) { return std::isfinite(gib_value) ? fmt("%.*f", u.decimals, gib_value * u.scale) : "n/a"; }
+
+// "avg 24.8 max 24.8 · range 24.75–24.82 GiB", or the name alone with nothing measured in the window.
+std::string zoom_label(const window_stats& st, const zoom& z, const char* sep) {
+  if (std::isnan(st.avg)) return "";
+  const zoom_unit u = unit_of(z);
+  const zoom_unit one = {u.scale, u.name, std::max(1, u.decimals - 1)};
+  return "avg " + in_unit(st.avg, one) + sep + "max " + in_unit(st.max, one) + (std::string(sep) == "  " ? "  " : " · ") + "range " + in_unit(z.bottom, u) + "–" + in_unit(z.top, u) + u.name;
+}
+
+// A zoomed plot over an axis: the cells are the samples' place between bottom and top, as a percent.
+template <class Value> std::vector<line> zoom_plot(const time_axis& a, const history& h, Value gib_value, double floor, int rows, bool gutter_labels, window_stats& raw, zoom& z) {
+  raw = bucket_stats(a, gib_value);
+  z = zoom_of(raw, floor);
+  const zoom zz = z;
+  const auto place = [&](const history_sample& p) { return (gib_value(p) - zz.bottom) / (zz.top - zz.bottom) * 100; };
+  const window_stats placed = bucket_stats(a, place);
+  std::string top, bottom;
+  if (gutter_labels) {
+    const zoom_unit u = unit_of(z);
+    const auto short_number = [&](double v) {
+      std::string t = fmt("%.1f", v * u.scale);
+      if (display_width(t) > 4) t = fmt("%.0f", v * u.scale);
+      return display_width(t) >= 3 ? t : pad_left(t, 3);  // pad_left would cut a wider one
+    };
+    top = short_number(z.top);
+    bottom = short_number(z.bottom);
+  }
+  return plot_block(bucket_cells(a, place), rows, top, bottom, unwatched_cells(h, a), placed);
+}
+
+std::string gib_of(uint64_t b) { return fmt("%.1f", gib(b)); }
+
+std::vector<line> windows_memory_heads(const snapshot& s) {
+  static constexpr int kIndent = 9;  // "WINDOWS  "
+  row used;
+  used.add("WINDOWS", tone::title, true).add("  ");
+  if (s.memory.total == 0) {
+    used.add("used n/a", tone::dim);
+  } else {
+    const tone t = left_tone(100.0 * static_cast<double>(s.memory.available) / static_cast<double>(s.memory.total));
+    used.add("used " + gib_of(s.memory.total - std::min(s.memory.total, s.memory.available)) + " of " + gib_of(s.memory.total) + " GiB", t, t != tone::text);
+    used.add(" · cache? " + gib_of(s.memory.cache), tone::text);
+  }
+  row source;
+  source.to(kIndent).add("whole machine, includes the WSL VM", tone::dim);
+  row commit;
+  commit.to(kIndent);
+  if (s.memory.commit_limit > 0) commit.add("commit " + gib_of(s.memory.commit_used) + " of " + gib_of(s.memory.commit_limit) + " GiB");
+  else commit.add("commit n/a", tone::dim);
+  return {used, source, commit};
+}
+
+std::vector<line> wsl_memory_heads(const snapshot& s, const wsl_view& w, int col) {
+  static constexpr int kIndent = 5;  // "WSL  "
+  row used;
+  used.add("WSL", tone::title, true).add("  ");
+  row source, other;
+  source.to(kIndent).add("guest view, inside the VM", tone::dim);
+  other.to(kIndent);
+  if (!w.ok) {
+    used.add(wsl_unavailable(s, w), tone::watch);
+    if (s.wsl_restarts > 0) other.add(fmt("collector restarted %d times", s.wsl_restarts), tone::watch);
+    return {used, source, other};
+  }
+  if (w.mem_total == 0) {
+    used.add("used n/a", tone::dim);
+  } else {
+    const tone t = left_tone(100.0 * static_cast<double>(w.mem_available) / static_cast<double>(w.mem_total));
+    used.add("used " + gib_of(w.mem_total - std::min(w.mem_total, w.mem_available)) + " of " + gib_of(w.mem_total) + " GiB", t, t != tone::text);
+    used.add(" · cache " + gib_of(w.mem_cached));
+  }
+  const bool stale = s.wsl_age_s >= kStaleS;
+  const std::string age = stale ? " · " + number(s.wsl_age_s, "%.0f") + " s old" : "";
+  const int room = col - source.cols() - display_width(age) - 3;
+  if (room >= kLeastDistro && !w.distro.empty()) source.add(" · " + fit(w.distro, room), tone::dim);
+  source.add(age, tone::watch, true);
+  other.add("swap? " + gib_of(w.swap_used) + " GiB · ");
+  if (w.psi_memory) {
+    const bool high = *w.psi_memory >= kPressureWatch;
+    other.add(fmt("PSI mem %.2f%% avg10", *w.psi_memory), high ? tone::watch : tone::text, high);
+  } else {
+    other.add("PSI mem n/a", tone::dim);
+  }
+  return {used, source, other};
+}
+
+line vm_memory_row(const snapshot& s) {
+  row r;
+  r.add("VM", tone::title, true).add("  ");
+  if (s.vm.vmmem_pid == 0) return r.add("vmmemWSL not found on Windows", tone::watch);
+  r.add("vmmemWSL working set " + gib_of(s.vm.vmmem_working_set) + " GiB");
+  r.add(" · Windows' view of the VM, included in WINDOWS", tone::dim);
+  return r;
+}
+
+// One side's used-and-cache block: for each, a title with avg, max and range, and a 2-row zoomed plot.
+std::vector<line> memory_plots(const time_axis& a, const history& h, const char* used_name, float history_sample::*used, const char* cache_name, float history_sample::*cache) {
+  std::vector<line> out;
+  for (const auto& [name, series] : {std::pair{used_name, used}, std::pair{cache_name, cache}}) {
+    const auto value = [series = series](const history_sample& p) { return static_cast<double>(p.*series); };
+    window_stats st;
+    zoom z;
+    const std::vector<line> plot = zoom_plot(a, h, value, kMachineFloorGiB, 2, false, st, z);
+    row title;
+    title.add(name);
+    const std::string label = zoom_label(st, z, " ");
+    if (!label.empty()) title.add(" " + label, tone::dim);
+    out.push_back(title);
+    out.insert(out.end(), plot.begin(), plot.end());
+  }
+  return out;
+}
+
+std::vector<line> windows_memory_list(const snapshot& s, int col, const list_view& v) {
+  const std::vector<const process_row*> list = windows_mem_order(s);
+  row head;
+  head.add("Windows", list_head_tone(v.focused), v.focused);
+  if (list.empty()) return {head, message("", "unavailable", tone::watch, 0)};
+  head.add("  by working set", tone::dim);
+  const int name_w = std::clamp(col - 32, 4, 40);
+  row cols;
+  cols.add("  ").add(pad_left("WS GiB", 8), tone::dim).add(" ").add(pad_left("pid", 7), tone::dim).add(" ");
+  cols.add(pad("name", name_w), tone::dim).add(pad_left("cores", 6), tone::dim);
+  std::vector<line> out = {head, cols};
+  const size_t first = first_drawn(v.selected, v.rows), end = std::min(list.size(), first + static_cast<size_t>(std::max(0, v.rows)));
+  for (size_t i = first; i < end; ++i) {
+    const process_row& p = *list[i];
+    const bool is_vm = p.pid == s.vm.vmmem_pid || p.pid == s.vm.vmwp_pid, marked = v.focused && i == v.selected;
+    row r;
+    list_lead(r, marked);
+    r.add(pad_left(fmt("%.2f", gib(p.working_set)), 8)).add(" ").add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
+    r.add(pad(p.name, name_w), is_vm ? tone::title : tone::text).add(pad_left(cores_text(windows_cores_known(s, p), p.cores), 6), tone::dim);
+    if (is_vm) r.add(" WSL VM", tone::dim);
+    out.push_back(list_row(r, marked));
+  }
+  out.push_back({{fmt("%d of %d", static_cast<int>(end - first), static_cast<int>(list.size())), tone::dim}});
+  return out;
+}
+
+std::vector<line> wsl_memory_list(const wsl_view& w, int col, const list_view& v) {
+  row head;
+  head.add("WSL", list_head_tone(v.focused), v.focused);
+  if (!w.ok) return {head, message("", "unavailable", tone::watch, 0)};
+  head.add("  by stat rss", tone::dim);
+  const std::vector<const wsl_process*> list = wsl_mem_order(w);
+  const int name_w = std::clamp(col - 28, 4, 40);
+  row cols;
+  cols.add("  ").add(pad_left("stat rss GiB", 13), tone::dim).add(" ").add(pad_left("pid", 7), tone::dim).add(" ");
+  cols.add(pad("name", name_w), tone::dim).add("  st", tone::dim);
+  std::vector<line> out = {head, cols};
+  const size_t first = first_drawn(v.selected, v.rows), end = std::min(list.size(), first + static_cast<size_t>(std::max(0, v.rows)));
+  for (size_t i = first; i < end; ++i) {
+    const wsl_process& p = *list[i];
+    const bool marked = v.focused && i == v.selected;
+    row r;
+    list_lead(r, marked);
+    r.add(pad_left(fmt("%.2f", gib(p.rss)), 13)).add(" ").add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
+    r.add(pad(p.name, name_w), p.on_gpu ? tone::title : tone::text).add("  ").add(pad(p.state, 1), p.state == "D" ? tone::watch : tone::dim);
+    out.push_back(list_row(r, marked));
+  }
+  out.push_back({{fmt("%d of %d · %lld in the guest", static_cast<int>(end - first), static_cast<int>(list.size()), static_cast<long long>(w.process_count)), tone::dim}});
+  return out;
+}
+
+// The one history: the focused list's selected process, its working set or stat rss, zoomed, never under
+// 4 MiB across.
+std::vector<line> memory_history(const history& h, const proc_id* id, int width, int rows, int64_t end_ms, int64_t span_ms) {
+  std::vector<line> out;
+  row title;
+  if (!id) {
+    out.push_back(title.add("history", tone::dim).add("  nothing to select", tone::dim));
+    out.resize(static_cast<size_t>(rows) + 1);
+    return out;
+  }
+  title.add(id->side == 0 ? "Windows" : "WSL", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim);
+  title.add(id->side == 0 ? " · working set" : " · stat rss", tone::dim);
+  const int slot = h.slot_of(*id);
+  const time_axis axis = make_axis(h, end_ms, span_ms, width - kCpuGutter);
+  const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.memory_at(slot, h.position(p))); };
+  window_stats st;
+  zoom z;
+  const std::vector<line> plot = zoom_plot(axis, h, value, kProcessFloorGiB, rows, true, st, z);
+  const std::string right = zoom_label(st, z, "  ");
+  if (!right.empty() && title.cols() + 3 + display_width(right) <= width) title.to(width - display_width(right)).add(right, tone::dim);
+  out.push_back(title);
+  out.insert(out.end(), plot.begin(), plot.end());
+  return out;
+}
+
+// Rows, height including the footer (part 4, "Rows"): 17 fixed; the history clamp((height - 16) / 3, 2, 12)
+// and the lists the rest, but a list keeps 3 rows: the history gives way first, then the plots.
+struct memory_rows {
+  int history = 0, lists = 0;
+  bool plots = true;
+};
+
+memory_rows plan_memory_rows(int height) {
+  memory_rows p;
+  p.history = std::clamp((height - 16) / 3, 2, 12);
+  p.lists = height - 17 - p.history;
+  if (p.lists < kLeastListRows) {
+    p.history = std::max(kHistoryRows, p.history - (kLeastListRows - p.lists));
+    p.lists = height - 17 - p.history;
+  }
+  if (p.lists < kLeastListRows) {
+    p.history = 0;
+    p.lists = height - 16;
+  }
+  if (p.lists < kLeastListRows) {
+    p.plots = false;
+    p.lists += 6;
+  }
+  p.lists = std::max(0, p.lists);
+  return p;
+}
+
+constexpr int kMemoryWide = 80;  // Narrower than this the two sides stack
+
+panel_frame memory_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms, const view_state& v) {
+  const memory_rows plan = plan_memory_rows(height + 1);
+  const bool wide = width >= kMemoryWide;
+  const int col = wide ? (width - kListGap) / 2 : width, right_col = wide ? width - col - kListGap : width;
+  const int64_t end = axis_end(h, now_ms);
+  const time_axis axis = make_axis(h, end, span_ms, std::max(1, col - kCpuGutter));
+  const selection_view sv = selection_of(s, v, 4);
+
+  panel_frame f;
+  f.graph = plan.plots || plan.history > 0;
+  f.hidden = !plan.plots || plan.history == 0 || plan.lists < kLeastListRows;
+  f.lines.push_back(title_row(s, now_ms));
+  f.lines.push_back(rule("MEMORY", "? not yet checked · two systems' own views of overlapping memory, never added", width));
+  const auto pair = [&](const std::vector<line>& left, const std::vector<line>& right) {
+    if (wide) {
+      side_by_side(f.lines, left, right, col);
+    } else {
+      f.lines.insert(f.lines.end(), left.begin(), left.end());
+      f.lines.insert(f.lines.end(), right.begin(), right.end());
+    }
+  };
+  pair(windows_memory_heads(s), wsl_memory_heads(s, w, right_col));
+  f.lines.push_back(vm_memory_row(s));
+  if (plan.plots) pair(memory_plots(axis, h, "used", &history_sample::windows_used, "cache?", &history_sample::windows_cache),
+                       memory_plots(axis, h, "used", &history_sample::wsl_used, "cache", &history_sample::wsl_cache));
+  if (plan.lists > 0) {
+    // Stacked, the two lists share the rows the plan gave one.
+    const int each = wide ? plan.lists : std::max(1, (plan.lists - 3) / 2);
+    pair(windows_memory_list(s, col, list_for(sv, 0, each)), wsl_memory_list(w, right_col, list_for(sv, 1, each)));
+    f.selectable = selectable_drawn(sv);
+  }
+  if (plan.history > 0) {
+    proc_id id;
+    const bool any = selected_process(s, w, sv, id);
+    const std::vector<line> hist = memory_history(h, any ? &id : nullptr, width, plan.history, end, span_ms);
+    f.lines.insert(f.lines.end(), hist.begin(), hist.end());
+  }
+  if (static_cast<int>(f.lines.size()) > height) f.hidden = true;
+  f.lines.resize(static_cast<size_t>(std::max(0, height)));  // The footer stays at the bottom
+  return f;
+}
+
 // ---- Panels not built, and the footer --------------------------------------------------------------
 
 // machtop's short labels, and winwsltop's 8.
 constexpr const char* kPanelLabel[kPanels + 1] = {"", "overview", "gpu", "cpu", "mem", "disk", "net", "procs", "vm cost"};
 
-bool panel_built(int p) { return p >= 1 && p <= 3; }  // 4 is slice 1's commit 7
-bool panel_has_range(int p) { return p == 2 || p == 3; }  // Panels whose graphs ←→ change
+bool panel_built(int p) { return p >= 1 && p <= 4; }
+bool panel_has_range(int p) { return p >= 2 && p <= 4; }  // Panels whose graphs ←→ change
 
 // docs/panels.md's question for each panel not built, and where its figures are meanwhile.
 std::vector<line> unbuilt_frame(const snapshot& s, int p, int width, int64_t now_ms) {
-  static constexpr const char* kTitle[kPanels + 1] = {"", "", "", "", "MEMORY", "DISK", "NETWORK", "PROCESSES", "VM COST"};
+  static constexpr const char* kTitle[kPanels + 1] = {"", "", "", "", "", "DISK", "NETWORK", "PROCESSES", "VM COST"};
   static constexpr const char* kText[kPanels + 1] = {
       "", "", "", "",
-      "Where is physical memory going, and is the guest holding host memory it does not use? Memory is on panels 1 and 3 until this panel is built.",
+      "",
       "Which disk is busy, and is it the WSL disk? The disk rows are on panel 1 until this panel is built.",
       "Which interface is busy? The network rows are on panel 1 until this panel is built.",
       "Every process, every measure. The process lists are on panels 1 and 3 until this panel is built.",
@@ -2511,6 +2834,11 @@ void history::push(const snapshot& s, const std::vector<proc_id>& keep) {
   n.wsl_busy = guest ? to_float(w.busy_pct) : gap;
   n.wsl_iowait = guest && w.cpu_iowait ? to_float(*w.cpu_iowait) : gap;
   n.lost_vcpus = s.lost.state == lost_state::known ? to_float(s.lost.vcpus) : gap;
+  n.windows_used = s.memory.total > 0 ? to_float(gib(s.memory.total - std::min(s.memory.total, s.memory.available))) : gap;
+  n.windows_cache = s.memory.total > 0 ? to_float(gib(s.memory.cache)) : gap;
+  n.vm_working_set = s.vm.vmmem_pid != 0 ? to_float(gib(s.vm.vmmem_working_set)) : gap;
+  n.wsl_used = guest && w.mem_total > 0 ? to_float(gib(w.mem_total - std::min(w.mem_total, w.mem_available))) : gap;
+  n.wsl_cache = guest && w.mem_total > 0 ? to_float(gib(w.mem_cached)) : gap;
   n.windows_threads = put_cores(s.cpu.core_pct, n.windows_core);
   static const std::vector<double> kNone;
   n.wsl_threads = put_cores(guest ? w.core_pct : kNone, n.wsl_core);
@@ -2537,6 +2865,7 @@ panel_frame panel_body(const snapshot& s, const wsl_view& w, const history& h, i
   if (panel == 1) f.lines = overall_frame(s, w, width, body, now_ms);
   else if (panel == 2) f = gpu_frame(s, w, h, width, body, now_ms, span_ms);
   else if (panel == 3) f = cpu_frame(s, w, h, width, body, now_ms, span_ms, v);
+  else if (panel == 4) f = memory_frame(s, w, h, width, body, now_ms, span_ms, v);
   else f.lines = unbuilt_frame(s, panel, width, now_ms);
   if (panel > 3) f.lines.resize(static_cast<size_t>(std::max(0, body)));  // The footer stays on the bottom row
   return f;
@@ -2552,14 +2881,16 @@ std::vector<line> with_footer(const panel_frame& f, int width, int body, const l
 }  // namespace
 
 std::vector<proc_id> selected_processes(const snapshot& s, const view_state& v) {
-  const selection_view sv = selection_of(s, v);
   const wsl_view w = read_wsl(s.wsl_json);
   std::vector<proc_id> out;
-  for (int list = 0; list < 2; ++list) {
-    selection_view one = sv;
-    one.focus = list;
-    proc_id id;
-    if (!sv.lists[static_cast<size_t>(list)].empty() && selected_process(s, w, one, id)) out.push_back(id);
+  for (const int panel : {3, 4}) {
+    const selection_view sv = selection_of(s, v, panel);
+    for (int list = 0; list < 2; ++list) {
+      selection_view one = sv;
+      one.focus = list;
+      proc_id id;
+      if (!sv.lists[static_cast<size_t>(list)].empty() && selected_process(s, w, one, id)) out.push_back(id);
+    }
   }
   return out;
 }

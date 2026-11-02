@@ -32,6 +32,9 @@ struct history_sample {
   float own_kernel = 0, vm_cpu = 0;                    // cpu_derived's two, each percent of the machine
   float wsl_busy = 0, wsl_iowait = 0;
   float lost_vcpus = 0;                                 // Inferred, in vCPUs; a separate unit from the rest
+  // Panel 4, GiB, each side's own figure and never one across them: Windows used (total less available) and
+  // cache, vmmemWSL's working set, the guest's used and cache under the large layout's repeat rule.
+  float windows_used = 0, windows_cache = 0, vm_working_set = 0, wsl_used = 0, wsl_cache = 0;
   uint16_t windows_threads = 0, wsl_threads = 0;        // How many of the values below this sample read
   float windows_core[kHistoryThreads] = {}, wsl_core[kHistoryThreads] = {};
 };
