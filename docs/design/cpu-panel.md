@@ -104,6 +104,10 @@ Not contended, right head row 3 reads `load 2.1 · lost CPU n/a under 99% busy`,
 
 Rows go in this order. At 34 it gives busy graph 3, RAM 2, lanes 2, lists 6; at 40 busy graph 9.
 
+Superseded 2026-11-02 by [`panel-grammar.md`](panel-grammar.md), part 3: RAM moves to panel 4, and the
+lists gain an `N of M` line and one history below them, so at 34 the lists show 5 rows, the owner's choice,
+and at 40 the busy graph has 8.
+
 1. Title, rule, 4 head rows, footer, lists with 3 data rows and 2 heading rows: 12.
 2. Heat block: caption, 10 rows, axis: 12 at 20 threads or more, since rows are capped by room.
 3. Busy graph, 3 rows.
@@ -193,7 +197,7 @@ the panel 2 VRAM grammar: `41.2/63.7 GiB  free 22.5 GiB`, and `left_tone`.
 | `Hv LP % Guest Run Time` | Is Root VP plus `Hv VP`: Windows runs as a guest too |
 | Last CPU per process | "A process's `/proc/pid/stat` `processor` is where it works": False here |
 | Command line | Protocol choice (`PROTOCOL.md`): arguments can hold secrets and `--record` writes them to disk. Stays out |
-| `[s]` sort by memory | Serves no job above, and alone would need a wider collector line. Cut. Superseded 2026-11-02: `s` sorts the selected list on every panel ([`../panels.md`](../panels.md), "Decisions") |
+| `[s]` sort by memory | Serves no job above, and alone would need a wider collector line. Cut. Superseded 2026-11-02: `s` sorts the list holding the selection where a panel has a sort cycle, which in machtop is panel 7; slice 1 builds none ([`panel-grammar.md`](panel-grammar.md), section 0) |
 | Per-thread DPC and interrupt | No place in the layout, meaning `Not checked`, largest ever seen 6.250. Cut |
 
 ### Traps the screen must not fall into
@@ -244,6 +248,9 @@ stay out of scope, stated in the README, not half-fixed here.
   peak of a bucket, so no spike vanishes. Heat and lanes take the mean, because a one-second burst must not
   paint 20 seconds hot: on experiment 04's data peak puts many cells at 50 or more and mean puts none. The
   axis says `each cell 1.4 s`, and past 60 s `peak over mean · 20 s`.
+  Superseded 2026-11-02 by [`panel-grammar.md`](panel-grammar.md), part 5: the busy plots take the mean too,
+  the cell holding the window's maximum carries one extra dot, the axis row carries `avg` and `max`, and
+  `peak over mean` goes. The RAM plots leave this panel.
 - **Guest samples:** a repeated guest line carries the previous value for one sample. Under contention
   experiment 05 had 13 repeats in 58 records and never two in a row, because arrival slips while the guest
   keeps measuring; a gap would stripe the whole column. Two repeats in a row are a gap. This amends ui
@@ -333,8 +340,8 @@ A fresh auditor reads after commits 3 and 7, and the whole at the end.
 
 ## 11. Out of this design
 
-Scrolling, filtering, grouping `svchost`, per-process history, clock speed, and `lost` for a partly busy guest
+Scrolling (superseded 2026-11-02, lists scroll as in [`panel-grammar.md`](panel-grammar.md), part 3), filtering, grouping `svchost`, per-process history, clock speed, and `lost` for a partly busy guest
 or under `.wslconfig` limits, which needs another approved load. Per-process history is no longer out, from
 2026-11-02: the shared grammar ([`../panels.md`](../panels.md), "Decisions") shows the
-selected process's history below the lists. The network panel is a separate design,
+selected process's history below the lists, one history following focus ([`panel-grammar.md`](panel-grammar.md), part 3). The network panel is a separate design,
 after this one ships.
