@@ -41,10 +41,14 @@ which core owns, reads schema 1 of the collector's line.
    unreadable, not guessed at.
 7. Thresholds for amber and red are judgement calls and live in one block at the top of `render.cpp`,
    except `kStaleS`, in `snapshot.h` because `lost` stops on it too.
-8. Graphs use a fixed 0-100 scale with time on the x axis. A missing sample or a stall is a blank gap,
-   never a zero. Panels are never stacked or summed, and each graph title names its source.
+8. Graphs use a fixed 0-100 scale with time on the x axis. A measured 0 is the bottom dot row (⣀), a
+   missing sample or a stall is a blank gap, never a zero, and time from before watching began is a
+   faint `·` in every other cell of the bottom row. Panels are never stacked or summed, and each graph
+   title names its source.
    Exception, the large CPU panel only: a repeated guest line carries the previous value for one sample,
    and two in a row are a gap (design section 5). Heat and lanes there show a mean, the plots a peak.
+   There the `·` is placed by bucket, on the bottom row of the busy and RAM plots; the heat block and the
+   lanes have no bottom dot row, so they stay blank before watching began.
 
 ## How to validate
 
@@ -62,16 +66,21 @@ which core owns, reads schema 1 of the collector's line.
 
 | item | value |
 |---|---|
-| source | `src/ui` 5262 lines, of which `render_check.cpp` 2824 |
-| checks | 120083, 0 failed, run on Windows 2026-11-02. 97 mutants of the ring, buckets, colours and large layout were built and run through `render_check quick`, on Linux with g++; all are caught now, 13 only after a check was added for them. It was not exhaustive. `handle_keys` in `main.cpp` has no automated check |
-| sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, spans 60 s and 15 min; 4, 8, 14, 20, 21, 40 and 64 threads, normal and hostile, at five widths |
-| frame bytes, 131 by 40 | noisy 33392, contended 16176, idle 14107, stale 15232; noisy at 40 threads 44542 and at 64 threads 43388. Budget 48 KiB |
-| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.28 to 0.64 ms, worst noisy at 131 by 40. Budget 5 ms |
+| source | `src/ui` 5719 lines, of which `render_check.cpp` 3215 |
+| checks | 120649, 0 failed, run on Windows 2026-11-02 after merging main's graph rule (`scripts/check.sh --windows`, which also ran `lost_check`, 143, 0 failed). Rerun on Linux with g++ as `render_check quick`: 5293, 0 failed; 11 mutants of the merged rule (bucket placement, the `·` in the plots, the stall at `kKeepMs`, `kStepMs`, when watching began) were built and run that way, and all are caught. The 97 mutants of the ring, buckets, colours and large layout from before the merge were not rerun, and main's own mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
+| sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, spans 60 s and 15 min; 4, 8, 14, 20, 21, 40 and 64 threads, normal and hostile, at five widths. The graph rule: 60 s panels at 131 by 40, 80 by 24 and 200 by 60; the large layout at 100 by 34, 131 by 40 and 200 by 60, both spans |
+| frame bytes, 131 by 40 | noisy 33392, contended 16176, idle 14107, stale 15232; noisy at 40 threads 44542 and at 64 threads 43388, rerun 2026-11-02 after the merge and unchanged. Budget 48 KiB |
+| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.32 to 0.69 ms, worst noisy at 131 by 40, rerun 2026-11-02 after the merge. Budget 5 ms |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once for the older panels; conhost not checked. The large layout and `t` ran live through a pseudo-terminal, and its colours were read from rendered images, not seen in Windows Terminal |
 
 ## Open questions
 
+- A step back of `kStepMs` (1 s) or less during a stall, with the new sample still after the newest one, is
+  not corrected: those samples sit up to a second too close to now. Below that it cannot be told from jitter.
+- The large layout's axis says `collecting: N s of M s` from the oldest kept sample, not from when watching
+  began. After a stall that clears the ring it says collecting while the cells are a gap, not dotted. Whether
+  it should count from `watched_from_ms()` instead is open.
 - PROPOSED (`ROADMAP.md`): GPU holders first in the Windows list, an `unattributed` line between the
   device total and the split, about 10 Windows rows, idle virtual NICs hidden.
 - PROPOSED: `--replay FILE` through the same `render()`, which would also give the recorded fixtures
@@ -98,6 +107,24 @@ which core owns, reads schema 1 of the collector's line.
 - 2026-11-02. `highest of each row` outranks the count in a caption, because it says what a cell is.
 - 2026-11-02. `render()` takes `render_options`: a span and whether the caller acts on `t`. The footer offers `[t]`
   only when both the option and the layout say so, so no dead key ships before `main.cpp` handles it.
+- 2026-11-02. Graphs follow the rule shared with sshvllmtop and machtop: ⣀ measured 0, blank gap, faint ·
+  every other cell before watching began. The `·` is on the bottom row only, in blank cells, counted from
+  the graph's left edge. `history` keeps when watching began apart from its samples, so the 600-sample cap
+  does not move it. A backward clock step moves it with the samples. A stall of the span or longer,
+  whichever way the wall clock moved, clears the samples and makes the whole window a gap, not unwatched.
+  Before anything is pushed the graph is all unwatched; a pushed sample whose time cannot be placed counts
+  as watching, so the span before the first placed sample is a gap. Audited 2026-11-02 (verdict ship);
+  its findings D1-D3 fixed the same day.
+- 2026-11-02. Merging main's graph rule into the ring. `history` keeps 15 minutes and is told the span only
+  when drawing, so main's stall at `kSpanMs` became one at `kKeepMs`: a stall of 900 s or more, either way the
+  wall clock moved, clears the ring and puts when watching began 900 s before the sample, so every span is a
+  gap. Clearing at 60 s would have thrown away 14 minutes the 15-minute span still draws correctly. To keep
+  main's guarantee that a 120 s stall reads as a gap on the 60 s span, the stored samples and when watching
+  began now shift whenever the wall clock moved more than `kStepMs` (1 s, in `history.h`) less than
+  `interval_s` says, not only when it went behind the newest sample. That closes main's open question on a
+  partial step back during a stall. On the large layout the unwatched cells are the buckets before the one
+  watching began in, `floor(t / bucket)` as `make_axis` places a sample; the 60 s panels keep main's placement,
+  as `plot_columns` places one. `render_check` reads both gutters, `  0│` and `  0 │`.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.

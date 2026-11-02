@@ -848,6 +848,264 @@ void check_scale() {
   }
 }
 
+struct cell {
+  std::string text;
+  tone color = tone::text;
+};
+
+// Each plot's cells in one row, left to right, with their tones. A plot starts after a faint "│" drawn
+// right after a dim gutter label, so "  0│", the large layout's "  0 │" and "    │" all count, and ends at
+// anything not in the bar or faint tone, or at the large layout's " │ " between its two columns.
+std::vector<std::vector<cell>> plots_in(const line& l) {
+  std::vector<cell> cps;
+  for (const span& s : l) {
+    for (size_t i = 0; i < s.text.size();) {
+      const size_t from = i;
+      next_cp(s.text, i);
+      cps.push_back({s.text.substr(from, i - from), s.color});
+    }
+  }
+  std::vector<std::vector<cell>> out;
+  bool in = false;
+  for (size_t k = 0; k < cps.size(); ++k) {
+    const cell& c = cps[k];
+    const bool bar_line = c.text == "│" && c.color == tone::faint;
+    if (bar_line && k > 0 && cps[k - 1].color == tone::dim) { in = true; out.emplace_back(); continue; }
+    if (!in) continue;
+    if (bar_line || (c.color != tone::bar && c.color != tone::faint) || (c.text == " " && k + 1 < cps.size() && cps[k + 1].text == "│")) {
+      in = false;
+      continue;
+    }
+    out.back().push_back(c);
+  }
+  return out;
+}
+
+// The bottom plot row of the nth graph in a frame, counting graphs left to right and then down, cell by
+// cell with its tone. Empty when there is no nth graph.
+std::vector<cell> bottom_cells(const std::vector<line>& frame, int nth) {
+  int seen = 0;
+  for (const line& l : frame) {
+    const std::string t = as_text({l});
+    if (t.rfind("  0│", 0) != 0 && t.rfind("  0 │", 0) != 0) continue;
+    for (std::vector<cell>& p : plots_in(l)) {
+      if (seen++ == nth) return std::move(p);
+    }
+  }
+  return {};
+}
+
+// The rows of a frame's graphs above the bottom one.
+std::string upper_graph_rows(const std::string& t) {
+  std::string out;
+  for (size_t from = 0; from < t.size();) {
+    const size_t nl = std::min(t.find('\n', from), t.size());
+    const std::string l = t.substr(from, nl - from);
+    if (l.rfind("100│", 0) == 0 || l.rfind("   │", 0) == 0) out += l + "\n";
+    from = nl + 1;
+  }
+  return out;
+}
+
+// Every graph of both panels at value v, the WSL line new each time so it is never a repeat.
+snapshot rule_sample(int64_t t, double v, int k) {
+  snapshot s = sample_at(busy(), t, v, v, v, v);
+  s.cpu.busy_pct = v;
+  s.gpu_device.mem_used = static_cast<uint64_t>(static_cast<double>(s.gpu_device.mem_total) * v / 100);
+  s.gpu_device.power_w = s.gpu_device.power_limit_w * v / 100;
+  const size_t at = s.wsl_json.find("\"mono_s\":");
+  s.wsl_json.replace(at, s.wsl_json.find(',', at) - at, "\"mono_s\":" + std::to_string(812 + k));
+  return s;
+}
+
+// The graph-cell rule shared with sshvllmtop and machtop: a measured 0 is ⣀ in the bar tone, a sample
+// missing inside the watched span is blank, and the part of the minute from before watching began is a
+// faint · in every other cell, on the bottom row only.
+void check_graph_rule() {
+  const auto is_dot = [](const cell& c) { return c.text == "·" && c.color == tone::faint; };
+  const auto dots_in = [&](const std::vector<cell>& cs) { return static_cast<int>(std::count_if(cs.begin(), cs.end(), is_dot)); };
+  const struct { view v; int graphs; const char* name; } panels[] = {{view::gpu, 5, " gpu"}, {view::cpu, 2, " cpu"}};
+
+  history fresh, zero, gap, empty;
+  for (int age = 9; age >= 0; --age) fresh.push(rule_sample(kNow - age * 1000, 50, age));
+  for (int age = 60; age >= 0; --age) zero.push(rule_sample(kNow - age * 1000, 0, age));
+  for (int age = 60; age >= 0; --age) if (age > 40 || age < 20) gap.push(rule_sample(kNow - age * 1000, 0, age));
+  check(fresh.watched_from_ms() == kNow - 9000, "watching began at the first sample");
+
+  for (const auto& p : panels) {
+    for (const auto& [w, h] : {std::pair{131, 40}, std::pair{80, 24}, std::pair{200, 60}}) {
+      const std::string where = std::string(p.name) + " " + std::to_string(w) + "x" + std::to_string(h);
+      const snapshot s = rule_sample(kNow, 50, 99);
+
+      // Not watched yet: a fresh start, ten seconds of samples on the right.
+      const std::vector<line> ff = render(s, w, h, kNow, &fresh, p.v);
+      check(!has(upper_graph_rows(as_text(ff)), "·"), "the unwatched dots are on the bottom row only" + where);
+      for (int g = 0; g < p.graphs; ++g) {
+        const std::vector<cell> cs = bottom_cells(ff, g);
+        const std::string n = where + " graph " + std::to_string(g);
+        const int cells = static_cast<int>(cs.size());
+        int first = 0;  // The first drawn cell
+        while (first < cells && (cs[static_cast<size_t>(first)].text == " " || is_dot(cs[static_cast<size_t>(first)]))) ++first;
+        check(cells > 9 && first < cells, "a fresh graph draws its first samples" + n);
+        check(std::abs(first - cells * 51 / 60) <= 1, "the unwatched part is the time before the first sample" + n);
+        bool alternate = true;
+        for (int i = 0; i < first; ++i) {
+          const cell& c = cs[static_cast<size_t>(i)];
+          alternate = alternate && (i % 2 == 0 ? is_dot(c) : c.text == " ");
+        }
+        check(alternate, "a faint · in every other cell before watching began" + n);
+        check(dots_in({cs.begin() + first, cs.end()}) == 0, "no · once watching began" + n);
+        bool drawn = true;
+        for (int i = first; i < cells; ++i) drawn = drawn && cs[static_cast<size_t>(i)].color == tone::bar && cs[static_cast<size_t>(i)].text != " ";
+        check(drawn, "the watched part is drawn in the bar tone" + n);
+      }
+
+      // Measured 0, a whole minute of it: ⣀ in every cell, in the bar tone, and nothing above.
+      const std::vector<line> zf = render(s, w, h, kNow, &zero, p.v);
+      check(count_braille(upper_graph_rows(as_text(zf))) == 0, "a measured 0 is the bottom row only" + where);
+      for (int g = 0; g < p.graphs; ++g) {
+        const std::vector<cell> cs = bottom_cells(zf, g);
+        bool line_of_zero = !cs.empty();
+        for (const cell& c : cs) line_of_zero = line_of_zero && c.text == "⣀" && c.color == tone::bar;
+        check(line_of_zero, "a measured 0 is ⣀ in the bar tone" + where + " graph " + std::to_string(g));
+      }
+
+      // A gap: samples 41 s and 19 s ago and none between, inside the watched minute: blank, not dotted
+      // and not ⣀.
+      const std::vector<line> gf = render(s, w, h, kNow, &gap, p.v);
+      for (int g = 0; g < p.graphs; ++g) {
+        const std::vector<cell> cs = bottom_cells(gf, g);
+        const std::string n = where + " graph " + std::to_string(g);
+        int run = 0, longest = 0;
+        for (const cell& c : cs) {
+          run = c.text == " " ? run + 1 : 0;
+          longest = std::max(longest, run);
+        }
+        const int cells = static_cast<int>(cs.size());
+        check(dots_in(cs) == 0, "a gap is not dotted" + n);
+        check(longest >= cells * 20 / 60 - 1 && longest <= cells * 22 / 60 + 1, "a gap is blank for as long as it lasted" + n);
+        check(!cs.empty() && cs.front().text == "⣀" && cs.back().text == "⣀", "around the gap, the measured 0s" + n);
+      }
+
+      // No sample yet: the whole minute is unwatched.
+      const std::vector<line> ef = render(s, w, h, kNow, &empty, p.v);
+      for (int g = 0; g < p.graphs; ++g) {
+        const std::vector<cell> cs = bottom_cells(ef, g);
+        check(!cs.empty() && dots_in(cs) == (static_cast<int>(cs.size()) + 1) / 2, "before the first sample every other cell is ·" + where);
+      }
+    }
+  }
+
+  // A minute watched with nothing measured is a gap all along: blank, no dots.
+  const history watched_bare = demo_minute(bare());
+  const std::string bare_gpu = graph_rows(as_text(render(bare(), 131, 40, kNow, &watched_bare, view::gpu)));
+  check(!has(bare_gpu, "·") && count_braille(bare_gpu) == 0, "watched with nothing measured is blank, not dotted");
+  const std::string bare_wsl = panel_cells(graph_rows(as_text(render(bare(), 131, 40, kNow, &watched_bare, view::cpu))), 1);
+  check(!has(bare_wsl, "·") && count_braille(bare_wsl) == 0, "a watched minute with no WSL line is blank, not dotted");
+
+  // When watching began, through the history's own changes.
+  constexpr int kCells = 38;
+  check(unwatched_cells(empty, 0, kCells) == kCells, "no sample: every cell unwatched");
+  history one;
+  one.push(rule_sample(kNow, 0, 0));
+  check(unwatched_cells(one, kNow, kCells) == kCells - 1, "one sample now: all but its cell unwatched");
+  check(unwatched_cells(one, kNow + 60000, kCells) == 0, "a minute later nothing is unwatched");
+  history fast;
+  for (int i = 0; i < 5000; ++i) fast.push(rule_sample(kNow + i, 0, i));
+  check(fast.samples().front().unix_ms > kNow && fast.watched_from_ms() == kNow, "watching began at the first sample, after the ring drops it");
+  history stepped;
+  for (int age = 10; age >= 0; --age) stepped.push(rule_sample(kNow - age * 1000, 0, age));
+  stepped.push(rule_sample(kNow - 3600000, 0, 11));
+  check(stepped.watched_from_ms() == stepped.samples().front().unix_ms, "a backward step moves when watching began with the samples");
+  // A stall of 120 s: under the 15 minutes kept, so the samples stay, placed 120 s back, for the longer
+  // span; on the minute's graph it is a gap.
+  snapshot stall = rule_sample(kNow - 7200000, 0, 12);
+  stall.interval_s = 120;
+  stepped.push(stall);
+  const sample_range kept = stepped.samples();
+  check(kept.size() == 13 && kept[11].unix_ms == kNow - 7200000 - 120000 && stepped.watched_from_ms() == kept.front().unix_ms,
+        "a stall under what is kept keeps the samples, shifted with when watching began");
+  check(unwatched_cells(stepped, kNow - 7200000, kCells) == 0, "a stall longer than the span is a gap, not unwatched");
+  check(dots_in(bottom_cells(render(stall, 131, 40, kNow - 7200000, &stepped, view::gpu), 0)) == 0, "after a long stall no dots");
+  // A stall of all that is kept clears the samples, and every span before it is watched with nothing measured.
+  snapshot clear = rule_sample(kNow - 9000000, 0, 13);
+  clear.interval_s = static_cast<double>(history::kKeepMs) / 1000.0;
+  stepped.push(clear);
+  check(stepped.samples().size() == 1 && stepped.watched_from_ms() <= kNow - 9000000 - history::kKeepMs && unwatched_cells(stepped, kNow - 9000000, kCells) == 0,
+        "a stall that clears the history is a gap, not unwatched");
+  check(dots_in(bottom_cells(render(clear, 131, 40, kNow - 9000000, &stepped, view::gpu), 0)) == 0, "after a stall of what is kept no dots");
+  history forward;
+  forward.push(rule_sample(kNow, 0, 0));
+  forward.push(rule_sample(kNow + 600000, 0, 1));
+  check(unwatched_cells(forward, kNow + 600000, kCells) == 0, "a forward step is a gap, not unwatched");
+
+  // A stall of 120 s during which the wall clock stepped back by 100 s: t is still after the last
+  // sample, but watching has lasted at least 130 s, so the whole graph is a gap. The wall clock moved
+  // 100 s less than interval_s, so the samples move back that far and keep their place for the longer span.
+  history partial_step;
+  for (int age = 9; age >= 0; --age) partial_step.push(rule_sample(kNow - age * 1000, 0, age));
+  snapshot late = rule_sample(kNow + 20000, 0, 10);
+  late.interval_s = 120;
+  partial_step.push(late);
+  check(unwatched_cells(partial_step, kNow + 20000, kCells) == 0 && partial_step.samples().size() == 11 &&
+            partial_step.samples()[9].unix_ms == kNow + 20000 - 120000 && partial_step.watched_from_ms() == kNow - 9000 - 100000,
+        "a stall with a partial backward step is a gap, not unwatched");
+  for (const auto& p : panels) {
+    const std::vector<line> f = render(late, 131, 40, kNow + 20000, &partial_step, p.v);
+    for (int g = 0; g < p.graphs; ++g) check(dots_in(bottom_cells(f, g)) == 0, std::string("a stall with a partial backward step has no dots") + p.name);
+  }
+
+  // Samples whose time cannot be placed are a gap: the program was watching.
+  history rejected;
+  snapshot unplaced = rule_sample(kNow, 0, 0);
+  unplaced.unix_ms = 0;
+  rejected.push(unplaced);
+  rejected.push(unplaced);
+  check(rejected.samples().empty() && rejected.watching() && unwatched_cells(rejected, 0, kCells) == 0, "a sample that cannot be placed is a gap, not unwatched");
+  for (const auto& p : panels) {
+    const std::vector<line> f = render(rule_sample(kNow, 0, 0), 131, 40, kNow, &rejected, p.v);
+    check(dots_in(bottom_cells(f, 0)) == 0 && !bottom_cells(f, 0).empty(), std::string("after unplaceable samples no dots") + p.name);
+  }
+  rejected.push(rule_sample(kNow, 0, 1));
+  check(unwatched_cells(rejected, kNow, kCells) == 0, "after unplaceable samples, the time before the first placed one is a gap");
+  for (const auto& p : panels) {
+    const std::vector<line> f = render(rule_sample(kNow, 0, 1), 131, 40, kNow, &rejected, p.v);
+    check(!bottom_cells(f, 0).empty() && dots_in(bottom_cells(f, 0)) == 0, std::string("the first placed sample after unplaceable ones has no dots before it") + p.name);
+  }
+
+  // Now ahead of the newest sample, as when a key redraws between samples, and a series whose first
+  // samples measured nothing (the WSL CPU before the collector's first line, the device before NVML
+  // answers). The dots stop where the first sample is, as the series measured from the start shows it,
+  // and the unmeasured start is a blank gap. The sub-second offsets move the boundary across cells.
+  const struct { view v; int whole, partial; const char* name; } pairs[] = {{view::gpu, 1, 0, " device"}, {view::cpu, 0, 1, " WSL CPU"}};
+  for (const int ahead : {1000, 3000, 5000}) {
+    for (int frac = 0; frac < 1000; frac += 125) {
+      history h;
+      for (int k = 0; k < 10; ++k) {
+        snapshot s = rule_sample(kNow - ahead - (9 - k) * 1000 - frac, 50, k);
+        if (k < 4) { s.wsl_json.clear(); s.gpu_device.has_util = false; }
+        h.push(s);
+      }
+      for (const auto& p : pairs) {
+        const std::vector<line> f = render(rule_sample(kNow, 50, 99), 131, 40, kNow, &h, p.v);
+        const std::vector<cell> whole = bottom_cells(f, p.whole), part = bottom_cells(f, p.partial);
+        const std::string n = std::string(p.name) + " " + std::to_string(ahead) + " ms ahead +" + std::to_string(frac);
+        size_t first = 0;
+        while (first < whole.size() && (whole[first].text == " " || is_dot(whole[first]))) ++first;
+        bool same = whole.size() == part.size() && first > 0 && first < part.size();
+        for (size_t i = 0; same && i < first; ++i) same = (i % 2 == 0 ? is_dot(part[i]) && is_dot(whole[i]) : part[i].text == " " && whole[i].text == " ");
+        check(same, "dots up to the first sample, measured or not" + n);
+        check(first < part.size() && part[first].text == " " && dots_in({part.begin() + static_cast<long>(std::min(first, part.size())), part.end()}) == 0,
+              "an unmeasured start is a blank gap, not dotted" + n);
+      }
+    }
+  }
+
+  // Only blank cells take a dot; a drawn cell keeps its braille.
+  const line pl = plot_line("⣀ ⣀  ", 5);
+  check(as_text({pl}) == "⣀ ⣀ ·\n", "a drawn cell is never covered by a dot");
+}
+
 void check_panels() {
   const snapshot full = busy();
   const history empty, demo = demo_minute(full), demo_bare = demo_minute(bare());
@@ -988,6 +1246,7 @@ void check_panels() {
   // Blank with little history.
   const std::string eg = as_text(render(full, 131, 50, kNow, &empty, view::gpu));
   check(count_braille(graph_rows(eg)) == 0 && has(eg, "-60s") && has(eg, "91%"), "an empty history is blank graphs and the live number");
+  check(has(graph_rows(eg), "· · ·"), "an empty history is not watched yet: dotted, not a gap");
 
   // Short windows: graphs shrink, then lower blocks go, the footer stays.
   const std::string tall = as_text(render(full, 131, 50, kNow, &demo, view::gpu));
@@ -2684,6 +2943,136 @@ void check_console() {
 }
 #endif
 
+// The graph rule on the large layout's time axis (docs/design/cpu-panel.md section 5): unwatched cells are
+// whole buckets before the one watching began in, on both spans, for the busy plots and the RAM plots;
+// the heat block and the lanes keep blank for no measurement.
+void check_graph_rule_buckets() {
+  const auto is_dot = [](const cell& c) { return c.text == "·" && c.color == tone::faint; };
+  const auto lead = [&](const std::vector<cell>& cs) {  // Cells before the first drawn one
+    size_t i = 0;
+    while (i < cs.size() && (cs[i].text == " " || is_dot(cs[i]))) ++i;
+    return static_cast<int>(i);
+  };
+  const auto alternate = [&](const std::vector<cell>& cs, int n) {
+    bool ok = n <= static_cast<int>(cs.size());
+    for (int i = 0; ok && i < n; ++i) ok = i % 2 == 0 ? is_dot(cs[static_cast<size_t>(i)]) : cs[static_cast<size_t>(i)].text == " " && cs[static_cast<size_t>(i)].color == tone::faint;
+    return ok;
+  };
+  const auto faint_dots = [](const line& l) {
+    int n = 0;
+    for (const span& p : l) {
+      if (p.color != tone::faint) continue;
+      for (size_t i = 0; i < p.text.size();) {
+        const size_t from = i;
+        next_cp(p.text, i);
+        n += p.text.compare(from, i - from, "·") == 0;
+      }
+    }
+    return n;
+  };
+
+  // The axis itself: the bucket watching began in holds the first sample, so is watched; every bucket
+  // before it is not. kNow is a whole second, so a 60 s span over 60 cells puts it on a bucket edge.
+  history none, one, edge, unplaced_only;
+  check(unwatched_cells(none, make_axis(none, kNow, 60000, 60)) == 60, "on the axis, no sample: every cell unwatched");
+  snapshot bad = rule_sample(kNow, 0, 0);
+  bad.unix_ms = 0;
+  unplaced_only.push(bad);
+  check(unwatched_cells(unplaced_only, make_axis(unplaced_only, kNow, 60000, 60)) == 0, "on the axis, unplaceable samples are a gap");
+  one.push(rule_sample(kNow - 9000, 0, 0));
+  edge.push(rule_sample(kNow - 9001, 0, 0));
+  const time_axis a1 = make_axis(one, kNow, 60000, 60), a2 = make_axis(edge, kNow, 60000, 60);
+  check(unwatched_cells(one, a1) == 50 && a1.cell.size() == 1 && a1.cell[0] == 50, "unwatched stops at the first sample's bucket");
+  check(unwatched_cells(edge, a2) == 49 && a2.cell.size() == 1 && a2.cell[0] == 49, "a millisecond earlier is the bucket before");
+  check(unwatched_cells(one, make_axis(one, kNow + 900000, 900000, 59)) == 0, "15 minutes later nothing is unwatched");
+
+  // A fresh start on both spans, in the large layout: dots up to the first sample's cell, both busy plots
+  // and both RAM plots alike, nothing above a plot's bottom row, nothing in the heat block or the lanes.
+  history fresh;
+  for (int age = 9; age >= 0; --age) fresh.push(rule_sample(kNow - age * 1000, 50, age));
+  for (const int span_s : {60, 900}) {
+    for (const auto& [w, h] : {std::pair{100, 34}, std::pair{131, 40}, std::pair{200, 60}}) {
+      const std::string n = " " + std::to_string(span_s) + " s " + std::to_string(w) + "x" + std::to_string(h);
+      const std::vector<line> f = render(rule_sample(kNow, 50, 99), w, h, kNow, &fresh, view::cpu, options_for(span_s));
+      if (!is_large(f)) { check(false, "the large layout draws" + n); continue; }
+      const std::vector<cell> win = bottom_cells(f, 0), wsl = bottom_cells(f, 1);
+      const int cells = static_cast<int>(win.size()), first = lead(win);
+      const time_axis axis = make_axis(fresh, kNow, span_s * 1000LL, cells);
+      check(cells > 9 && wsl.size() == win.size() && first == unwatched_cells(fresh, axis) && first == axis.cell.front() && first < cells,
+            "the unwatched part ends at the first sample's bucket" + n);
+      check(alternate(win, first) && alternate(wsl, lead(wsl)) && lead(wsl) == first, "a faint · in every other cell, both columns alike" + n);
+      int ram_row = -1, dots = 0, bottom_dots = 0;
+      for (size_t i = 0; i < f.size(); ++i) {
+        const std::string t = as_text({f[i]});
+        if (t.rfind("RAM │", 0) == 0) ram_row = static_cast<int>(i);
+        dots += faint_dots(f[i]);
+        if (t.rfind("  0 │", 0) == 0) bottom_dots += faint_dots(f[i]);
+      }
+      check(ram_row > 0 && faint_dots(f[static_cast<size_t>(ram_row)]) == 0, "the RAM plot's top row has no dots" + n);
+      if (ram_row > 0 && static_cast<size_t>(ram_row) + 1 < f.size()) {
+        const std::vector<std::vector<cell>> ram = plots_in(f[static_cast<size_t>(ram_row) + 1]);
+        check(ram.size() == 2 && lead(ram[0]) == first && alternate(ram[0], first) && alternate(ram[1], first), "the RAM plots' bottom row is dotted the same" + n);
+        bottom_dots += faint_dots(f[static_cast<size_t>(ram_row) + 1]);
+      }
+      check(dots == bottom_dots && dots == 4 * ((first + 1) / 2), "dots only on the plots' bottom rows, not the heat block or the lanes" + n);
+    }
+  }
+
+  // A measured 0 for the whole 15 minutes is ⣀ in every cell of both busy plots.
+  history zero;
+  for (int age = 900; age >= 0; --age) zero.push(rule_sample(kNow - age * 1000, 0, age));
+  const std::vector<line> zf = render(rule_sample(kNow, 0, 999), 131, 40, kNow, &zero, view::cpu, options_for(900));
+  for (int g = 0; g < 2; ++g) {
+    const std::vector<cell> cs = bottom_cells(zf, g);
+    bool line_of_zero = !cs.empty();
+    for (const cell& c : cs) line_of_zero = line_of_zero && c.text == "⣀" && c.color == tone::bar;
+    check(line_of_zero, "a measured 0 over 15 minutes is ⣀ in the bar tone, graph " + std::to_string(g));
+  }
+
+  // A stall of 120 s with the wall clock 100 s behind: a gap on the minute's axis, and on 15 minutes the
+  // samples keep their place, with dots only before they began.
+  history partial;
+  for (int age = 9; age >= 0; --age) partial.push(rule_sample(kNow - 120000 - age * 1000, 50, age));
+  snapshot late = rule_sample(kNow, 50, 10);
+  late.unix_ms = kNow - 100000;
+  late.interval_s = 120;
+  partial.push(late);
+  for (const int span_s : {60, 900}) {
+    const std::vector<line> f = render(late, 131, 40, kNow - 100000, &partial, view::cpu, options_for(span_s));
+    const std::vector<cell> cs = bottom_cells(f, 0);
+    const time_axis axis = make_axis(partial, kNow - 100000, span_s * 1000LL, static_cast<int>(cs.size()));
+    const int first = lead(cs);
+    if (span_s == 60) {
+      check(!cs.empty() && first == static_cast<int>(cs.size()) - 1 && std::count_if(cs.begin(), cs.end(), is_dot) == 0, "a stall on the minute's axis is a gap, not dotted");
+    } else {
+      check(!cs.empty() && first == unwatched_cells(partial, axis) && first == axis.cell.front() && alternate(cs, first), "on 15 minutes, dots end where the shifted samples begin");
+    }
+  }
+
+  // A stall of all that is kept, on 15 minutes: a gap across the axis, no dots.
+  history cleared;
+  for (int age = 9; age >= 0; --age) cleared.push(rule_sample(kNow - 2000000 - age * 1000, 50, age));
+  snapshot after = rule_sample(kNow, 50, 10);
+  after.interval_s = static_cast<double>(history::kKeepMs) / 1000.0;
+  cleared.push(after);
+  const std::vector<cell> cc = bottom_cells(render(after, 131, 40, kNow, &cleared, view::cpu, options_for(900)), 0);
+  check(cleared.samples().size() == 1 && !cc.empty() && std::count_if(cc.begin(), cc.end(), is_dot) == 0 && lead(cc) == static_cast<int>(cc.size()) - 1,
+        "a stall of what is kept is a gap across 15 minutes, not dotted");
+
+  // The wall clock a little short of interval_s is jitter and moves nothing; past kStepMs it stepped back.
+  history jitter;
+  jitter.push(rule_sample(kNow, 0, 0));
+  snapshot j = rule_sample(kNow + 500, 0, 1);
+  j.interval_s = 1.4;
+  jitter.push(j);
+  check(jitter.samples()[0].unix_ms == kNow && jitter.watched_from_ms() == kNow, "a wall clock 900 ms short of interval_s moves nothing");
+  snapshot k = rule_sample(kNow + 1500, 0, 2);
+  k.interval_s = 2.5;
+  jitter.push(k);
+  check(jitter.samples()[1].unix_ms == kNow + 1500 - 2500 && jitter.samples()[0].unix_ms == kNow - 1500 && jitter.watched_from_ms() == kNow - 1500,
+        "1.5 s short of interval_s is a step back: the samples and when watching began move");
+}
+
 }  // namespace
 
 // Frame bytes, and the time to build one from a snapshot: render() and vt_frame(), no terminal.
@@ -2800,6 +3189,7 @@ int main(int argc, char** argv) {
   check_vt_colour();
   check_buckets();
   check_scale();
+  check_graph_rule();
   check_panels();
   check_large_mockup();
   check_large_allocation();
@@ -2813,6 +3203,7 @@ int main(int argc, char** argv) {
   check_large_bytes();
   check_span_key();
   check_large_captions();
+  check_graph_rule_buckets();
   if (!quick) {
     check_denied_note();
     check_holder_wording();

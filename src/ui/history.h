@@ -66,14 +66,24 @@ class history {
   void push(const snapshot& s);
   sample_range samples() const { return {ring_.data(), ring_.size(), first_, count_}; }
 
+  // When watching began, on the samples' clock, and meaningful only once there is a sample. A graph
+  // draws the time before it as not watched yet, which is not a gap: a gap is watched time with no
+  // measurement. Kept apart from the samples, which are dropped once they are older than kKeepMs.
+  int64_t watched_from_ms() const { return watched_from_ms_; }
+  // Whether anything was pushed, even a sample whose time could not be placed.
+  bool watching() const { return watching_; }
+
  private:
   static constexpr int64_t kLatestMs = 4102444800000;  // 2100: past this a time is not a clock reading
   static constexpr size_t kCapacity = 901;             // 15 minutes at the one a second main.cpp pushes, both ends in
+  static constexpr int64_t kStepMs = 1000;             // The wall clock this far short of interval_s stepped back
 
   history_sample& at(size_t i) { return ring_[(first_ + i) % ring_.size()]; }
 
   std::vector<history_sample> ring_;  // Sized once, by the first push: a sample then allocates nothing
   size_t first_ = 0, count_ = 0;
+  int64_t watched_from_ms_ = 0;
+  bool watching_ = false;
   std::string last_wsl_;  // The collector's line in the last sample, to tell a new line from a repeat
   int repeats_ = 0;       // Repeated lines in a row
 };

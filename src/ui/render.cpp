@@ -864,6 +864,7 @@ std::vector<std::string> plot_rows(const std::vector<double>& cols, int rows) {
 struct time_axis {
   int cells = 0;
   int64_t bucket_ms = 1;
+  int64_t last = 0;                            // The bucket of the right edge, floor(end_ms / bucket_ms)
   std::vector<const history_sample*> samples;  // Those on the axis and the one before, oldest first
   std::vector<int> cell;                       // The cell of each; below 0 for that one before
 };
@@ -876,7 +877,7 @@ time_axis make_axis(const history& h, int64_t end_ms, int64_t span_ms, int cells
   a.cells = std::max(0, cells);
   if (a.cells == 0) return a;
   a.bucket_ms = std::max<int64_t>(1, (span_ms + a.cells - 1) / a.cells);
-  const int64_t last = floor_div(end_ms, a.bucket_ms);
+  const int64_t last = a.last = floor_div(end_ms, a.bucket_ms);
   const sample_range all = h.samples();
   for (size_t i = 0; i < all.size(); ++i) {
     const int64_t back = last - floor_div(all[i].unix_ms, a.bucket_ms);  // Cells left of the right edge
@@ -928,6 +929,47 @@ template <class Value> std::vector<double> bucket_cells(const time_axis& a, bool
     for (size_t c = 0; c < out.size(); ++c) {
       if (count[c] > 1) out[c] /= count[c];
     }
+  }
+  return out;
+}
+
+// Cells from the left that lie wholly before watching began: no sample can be there, and blank would
+// read as a gap. Before any push, all of them; after pushes that could not be placed, none. Placed as
+// plot_columns places the first sample, for the graphs it draws.
+int unwatched_cells(const history& h, int64_t end_ms, int cells) {
+  if (!h.watching()) return std::max(0, cells);
+  if (h.samples().empty()) return 0;
+  const double span = static_cast<double>(history::kSpanMs), ago = static_cast<double>(end_ms - h.watched_from_ms());
+  if (cells <= 0 || ago >= span) return 0;
+  const long x = std::lround((2.0 * cells - 1) * (1.0 - std::max(0.0, ago) / span));
+  return static_cast<int>(std::clamp(x / 2, 0L, static_cast<long>(cells)));
+}
+
+// The same on a time axis, placed as make_axis places the first sample: the buckets before the one
+// watching began in. That bucket holds the first sample, so it is watched.
+int unwatched_cells(const history& h, const time_axis& a) {
+  if (!h.watching()) return a.cells;
+  if (h.samples().empty()) return 0;
+  const int64_t left = a.last - a.cells + 1, before = floor_div(h.watched_from_ms(), a.bucket_ms) - left;
+  return static_cast<int>(std::clamp<int64_t>(before, 0, a.cells));
+}
+
+// A plot row as spans: the braille in the bar tone and, on the bottom row, a faint dot in every other
+// blank cell of the unwatched part, so a fresh start reads as not watched yet rather than as missing.
+// The rule sshvllmtop and machtop share: ⣀ a measured 0, blank a gap, · before watching began.
+line plot_line(const std::string& plot, int unwatched) {
+  line out;
+  const auto put = [&](std::string_view text, tone t) {
+    if (!out.empty() && out.back().color == t) out.back().text += text;
+    else out.push_back({std::string(text), t});
+  };
+  int cell = 0;
+  for (size_t i = 0; i < plot.size(); ++cell) {
+    const size_t from = i;
+    next_cp(plot, i);
+    const std::string_view c(plot.data() + from, i - from);
+    if (cell < unwatched && c == " ") put(cell % 2 == 0 ? "·" : " ", tone::faint);
+    else put(c, tone::bar);
   }
   return out;
 }
@@ -1014,11 +1056,12 @@ std::vector<line> panel_title(const panel& p, int col) {
 std::vector<line> panel_graph(const panel& p, const history& h, int64_t end_ms, int col, int rows) {
   const int cells = col - kGutter;
   const std::vector<std::string> plot = plot_rows(plot_columns(h, p.series, end_ms, 2 * cells), rows);
+  const int unwatched = unwatched_cells(h, end_ms, cells);
   std::vector<line> out;
   for (int y = 0; y < rows; ++y) {
     row r;
     r.add(y == 0 ? "100" : y == rows - 1 ? "  0" : "   ", tone::dim).add("│", tone::faint);
-    r.add(plot[static_cast<size_t>(y)], tone::bar);
+    for (const span& c : plot_line(plot[static_cast<size_t>(y)], y == rows - 1 ? unwatched : 0)) r.add(c.text, c.color);
     out.push_back(r);
   }
   row axis;
@@ -1512,7 +1555,7 @@ void gutter(row& r, std::string_view label, std::string_view bar = "│", tone c
 }
 
 // A plot's cells are a whole bucket wide: both dots of a braille cell show the same value.
-std::vector<line> plot_block(const std::vector<double>& cells, int rows, std::string_view top, std::string_view bottom) {
+std::vector<line> plot_block(const std::vector<double>& cells, int rows, std::string_view top, std::string_view bottom, int unwatched) {
   std::vector<double> dots;
   dots.reserve(cells.size() * 2);
   for (const double v : cells) dots.insert(dots.end(), 2, v);
@@ -1521,7 +1564,7 @@ std::vector<line> plot_block(const std::vector<double>& cells, int rows, std::st
   for (int y = 0; y < rows; ++y) {
     row r;
     gutter(r, y == 0 ? top : y == rows - 1 ? bottom : std::string_view());
-    r.add(plot[static_cast<size_t>(y)], tone::bar);
+    for (const span& c : plot_line(plot[static_cast<size_t>(y)], y == rows - 1 ? unwatched : 0)) r.add(c.text, c.color);
     out.push_back(r);
   }
   return out;
@@ -1867,11 +1910,12 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   const auto append = [](std::vector<line>& to, std::vector<line> from) { to.insert(to.end(), from.begin(), from.end()); };
 
   const std::vector<double> windows_busy = bucket_cells(axis, true, [](const history_sample& p) { return p.windows_cpu; });
-  append(left, plot_block(windows_busy, plan.busy, "100", "  0"));
-  append(right, plot_block(peak(&history_sample::wsl_busy), plan.busy, "100", "  0"));
+  const int unwatched = unwatched_cells(h, axis);  // One axis, so the same for every plot of both columns
+  append(left, plot_block(windows_busy, plan.busy, "100", "  0", unwatched));
+  append(right, plot_block(peak(&history_sample::wsl_busy), plan.busy, "100", "  0", unwatched));
   if (plan.ram == kRamRows) {
-    append(left, plot_block(peak(&history_sample::windows_ram), kRamRows, "RAM", ""));
-    append(right, plot_block(peak(&history_sample::wsl_ram), kRamRows, "RAM", ""));
+    append(left, plot_block(peak(&history_sample::windows_ram), kRamRows, "RAM", "", unwatched));
+    append(right, plot_block(peak(&history_sample::wsl_ram), kRamRows, "RAM", "", unwatched));
   } else if (plan.ram == 1) {
     left.push_back(lane("RAM", mean(&history_sample::windows_ram)));
     right.push_back(lane("RAM", mean(&history_sample::wsl_ram)));
@@ -1947,18 +1991,30 @@ uint16_t put_cores(const std::vector<double>& from, float (&to)[kHistoryThreads]
 
 void history::push(const snapshot& s) {
   const int64_t t = s.unix_ms;
+  const bool was_watching = watching_;
+  watching_ = true;  // Even a sample that cannot be placed: the program is watching
   if (t <= 0 || t > kLatestMs) return;  // A sample that cannot be placed in time is a gap
 
-  // The wall clock stepped back. interval_s comes from QPC, so the old samples keep their spacing and
-  // move with the clock: nothing is lost and nothing lands ahead of "now". After a stall as long as
-  // what is kept they are off every graph anyway, and must not join the new sample as if continuous.
-  if (count_ > 0 && t <= at(count_ - 1).unix_ms) {
-    if (s.interval_s >= static_cast<double>(kKeepMs) / 1000.0) {
-      count_ = 0;
-    } else {
-      const double gap_s = s.interval_s > 0 ? s.interval_s : 1.0;
-      const int64_t shift = at(count_ - 1).unix_ms + static_cast<int64_t>(gap_s * 1000.0) - t;
+  // Watching began here, or earlier at a time that could not be placed: then what is kept before t is a gap.
+  if (count_ == 0) watched_from_ms_ = was_watching ? t - kKeepMs : t;
+
+  // A stall as long as what is kept, whichever way the wall clock moved meanwhile: interval_s comes from
+  // QPC, so the stored samples are off every graph, must not join the new one as if continuous, and every
+  // span before t is watched time with nothing measured.
+  // Otherwise, when the wall clock moved less than interval_s says, it stepped back, wholly or during a
+  // stall: the old samples keep their spacing and move with the clock, so nothing is lost, nothing lands
+  // ahead of "now", and a stall under what is kept still reads as one on a shorter span. When watching
+  // began moves with them.
+  if (count_ > 0 && s.interval_s >= static_cast<double>(kKeepMs) / 1000.0) {
+    count_ = 0;
+    watched_from_ms_ = std::min(watched_from_ms_, t - kKeepMs);
+  } else if (count_ > 0) {
+    const int64_t last = at(count_ - 1).unix_ms;
+    const double gap_s = s.interval_s > 0 ? s.interval_s : 1.0;
+    const int64_t shift = last + static_cast<int64_t>(gap_s * 1000.0) - t;
+    if (t <= last || (s.interval_s > 0 && shift > kStepMs)) {
       for (size_t i = 0; i < count_; ++i) at(i).unix_ms -= shift;
+      watched_from_ms_ -= shift;
     }
   }
 
