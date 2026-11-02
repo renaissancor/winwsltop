@@ -41,28 +41,29 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
   Decided by machtop 2026-11-02, added to the shared grammar in machtop's `docs/panels.md`. Here it is
   how a panel moves between its Windows list and its WSL list, which `contracts/ui.md` rule 3 forbids
   merging.
-  - Each list keeps its own selected row, keyed by name, so the selection survives a reorder. Switching
-    lists resets neither.
+  - Each list keeps its own selected row, a process by pid and name (machtop f7e24f2), so the selection
+    survives a reorder. Switching lists resets neither.
   - The list holding the selection has its heading lit; the other list's heading is dim and its rows
     show no ▶.
-  - `s` sorts the list holding the selection, and the history below the lists shows that list's
-    selected row.
+  - `s` sorts the list holding the selection, and the one history below the lists, full width and titled
+    with its list, shows that list's selected row. Never one history per list (machtop f7e24f2).
   - `esc` returns to panel 1 and does not reset focus. Each panel keeps its focus when you switch away
     and back, as it keeps its selection.
 - **Changed for winwsltop:** `←`/`→` replace `t`, and the range is 1, 5, 10 minutes, the same as
-  machtop's (decided 2026-11-02, below). The history keeps 15 minutes, more than the range needs.
-- The footer lists the panels with the current one lit. **Added for winwsltop, not in machtop's text:** a
-  panel that is not built yet is listed dim.
+  machtop's (decided 2026-11-02, below). From slice 1 the history keeps 10 minutes.
+- The footer lists the panels with the current one lit and a panel not built yet in the faint tone, which
+  machtop f7e24f2 made shared grammar.
 - Graphs: a measured 0 is the lowest braille dot row (⣀) in steel; no sample inside the watched span is
   blank; the part of the window from before winwsltop started watching is a faint `·` every other cell.
-  This is already winwsltop's rule, `contracts/ui.md` rule 8, from 6ef13ef. **Changed for winwsltop:**
-  the large layout of panel 3 still prints `collecting: N s of M s` on its axis, which `README.md`
-  ("Use", `t`) describes; under the shared grammar the `·` says it alone. Whether that caption goes is
-  not decided (`contracts/ui.md`, open question on that caption).
-- **Changed for winwsltop:** graphs are labelled with the window's average and maximum, never the
-  minimum. Today no graph has such a label: rule 8 has the large layout's plots draw a peak and its heat a
-  mean, with the axis reading `peak over mean`, and the 60 s panels draw the highest sample in a column
-  (`contracts/ui.md`, decision of 2026-11-01). Adopting the labels changes rule 8.
+  This is already winwsltop's rule, `contracts/ui.md` rule 8, from 6ef13ef. The large layout's
+  `collecting: N s of M s` caption goes in slice 1.
+- Graphs are labelled with the window's average and maximum, never the minimum; a cell is the mean of
+  its samples; a measure with a real ceiling is drawn 0-100, any other to a rounded `scale` or a zoomed
+  `range` (machtop f7e24f2). Built in slice 1, which changes rule 8 (`design/panel-grammar.md`, part 5).
+  **Added for winwsltop, put to machtop:** the cell holding the window's maximum carries one extra dot, and
+  a split value over 100 is printed with `*` beside `VM level, not exact shares*`.
+- **Added for winwsltop:** a figure the screen shows without a ledger row is marked `?`, and the panel's
+  rule line says `? not yet checked` (`design/panel-grammar.md`, part 1).
 
 ## 1 Overview: is either side being held back by the other right now?
 
@@ -97,8 +98,9 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
 
 - **Core detail:** the large layout of `design/cpu-panel.md` as built: what each side says, the heat
   lanes, `lost` (inferred, its formula on the panel), then the Windows and WSL process lists by cores.
-- **History:** the selected process's cores. Needs a per-process ring (PROPOSED, `ROADMAP.md` 2); until
-  then the panel keeps its own graphs and selection only highlights.
+- **History:** the selected process's cores, one history following focus, from the per-process ring of
+  slice 1 (`design/panel-grammar.md`, part 3). A guest process's cores are the guest's own count, marked
+  `?` until experiment 0 checks them.
 - **Moves out:** RAM, to panel 4.
 - **Not here:** which Windows LP ran a vCPU, and so which LP ran a guest thread. No counter read says
   which LP ran a VP, and no VP stayed put (ledger, CPU counters checked, "A guest vCPU maps to a Windows
@@ -109,18 +111,18 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
 
 ## 4 Memory: where is physical memory going, and is the guest holding host memory it does not use?
 
-- **Core detail:** Windows memory (total, available, commit, cache) beside the VM as Windows sees it
-  (`vmmemWSL` working set) and the guest's own view (`/proc/meminfo`: total, available, cached, swap
-  used, and PSI memory). Then both process lists by memory: Windows working set and private bytes, WSL
-  RSS.
+- **Core detail:** as built in slice 1 (`design/panel-grammar.md`, part 4): each side's used and cache,
+  with Windows commit and the guest's swap and PSI memory; the VM on its own row (`vmmemWSL` working set);
+  each side's used and cache over the range; both process lists by memory, Windows working set and WSL
+  RSS. Private bytes are not shown: no row and not on screen today.
 - **Hypothesis behind the question, not a finding:** that the guest's page cache is held as `vmmemWSL`
   working set on Windows. The one reading near it (ledger, WSL collector checked, "Guest memory vs
   host") has guest used plus cache close to `vmmemWSL`, but read minutes apart, so the fit may be
   coincidence. It needs a row with the two read in one sample before the panel states it.
 - **History:** the selected process's memory.
-- **Waits for:** a ledger row checking Windows available, commit and cache against Windows' own tools
-  (only total is checked: ledger, Windows collector checked), and the guest-versus-`vmmemWSL` row read
-  in one sample rather than minutes apart.
+- **Marked `?` until experiment 0:** Windows available, used, commit and cache, Windows per-process
+  working set, guest swap and guest RSS (only Windows total and `vmmemWSL` working set are checked: ledger,
+  Windows collector checked). The guest-versus-`vmmemWSL` reading in one sample is in the same experiment.
 - **Not here:** a sum of Windows used and guest used. The guest's memory is inside `vmmemWSL`.
 
 ## 5 Disk: which disk is busy, and is it the WSL disk?
@@ -185,8 +187,7 @@ is the shared one (Shared grammar).
 
 - The contention verdict needs a threshold with evidence behind it: how near the limit, for how long. Open,
   confirmed by the owner 2026-11-02: it waits for a ledger row.
-- Graph labels of average and maximum, and the large layout's `collecting` caption beside the `·`
-  (Shared grammar): both change `contracts/ui.md` rule 8, which ui has not yet done.
+- Put to machtop 2026-11-02: the dot on the cell holding the window's maximum, and the over-100 `*`.
 
 ## Decisions
 
@@ -216,3 +217,10 @@ is the shared one (Shared grammar).
   section 6. The `tab` details above are in the same file, bullet "tab".
 - 2026-11-02. sshvllmtop does not follow the shared grammar yet: its range is 1 m, 10 m, 1 h and it moves
   with `j`/`k`/`g`/`G`. That is sshvllmtop's own work, not a winwsltop task.
+- 2026-11-02, machtop f7e24f2. One history, full width, below the lists, following focus and titled with its
+  list, never one per list; a process remembered by pid and name; scale by measure; a cell is the mean of its
+  slice of the window and `avg` and `max` cover the whole window; no Shift+Tab; panels not built listed faint.
+- 2026-11-02, the owner. Slice 1, `design/panel-grammar.md`, is approved to build after experiment 0. Figures
+  shown without a ledger row are marked `?`, not hidden; the seam change is additive flags, `schema` stays 1;
+  panel 3 at 34 rows shows 5 list rows; panel 1 gets no selection and panel 2 waits for slice 2. Recorded in
+  `contracts/ui.md`.
