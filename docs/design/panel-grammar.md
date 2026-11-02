@@ -4,7 +4,7 @@ Status: approved to build after experiment 0, 2026-11-02. Revised after a UX rev
 ("fix first", both at 326a2e1) and machtop's answers; the owner's decisions are in section 8 and recorded in
 `contracts/ui.md`.
 
-The shared grammar is machtop's `docs/panels.md`, branch `grammar-tab`, commit f7e24f2, section "Shared
+The shared grammar is machtop's `docs/panels.md` (246c2cb on machtop main), section "Shared
 grammar" (outside this repository). The owner made it authoritative on 2026-11-02: where it is clear,
 winwsltop follows it, and `design/cpu-panel.md`'s refusals of list focus, the `s` sort, scrolling and
 per-process history are superseded. [`../panels.md`](../panels.md) records winwsltop's decisions on it.
@@ -107,7 +107,7 @@ time read 19.320 cores alone and 13.253 beside WSL), which do not add up to busy
 | `esc` | Panel 1. Every panel keeps its focus and selections; the range is kept | all | no |
 | `q`, `ㅂ` | Quit. Ctrl+C still quits | all | yes |
 | `t` | Nothing: the range replaces it | | no |
-| Shift+Tab | Nothing (machtop f7e24f2: there is no Shift+Tab; its parser drops `ESC [ Z` whole) | | no |
+| Shift+Tab | Nothing (machtop 246c2cb: there is no Shift+Tab; its parser drops `ESC [ Z` whole) | | no |
 
 The range is one setting for the screen, as machtop's `view_state.range`; `←` further back and `→` nearer,
 clamped, as machtop's `apply`.
@@ -141,7 +141,7 @@ checked. `main.cpp` keeps the polling, the redraw on a key and the quit.
 machtop's `footer()`: the panels on the left, the keys that act on this panel on the right; when both do
 not fit, every panel but the current one shrinks to its number. Labels are machtop's short ones with
 winwsltop's 8: `overview gpu cpu mem disk net procs vm cost`. The current panel is lit (`title`, bold), a
-built one `dim`, one not built `faint`, which f7e24f2 made shared grammar.
+built one `dim`, one not built `faint`, which 246c2cb made shared grammar.
 
 Footers, in order: panel 1 at 131 and 100 columns, panel 3 at 131 and 100, panel 4 at 100, panel 2 at 80:
 
@@ -199,7 +199,7 @@ Panel 3 is where both sides' process lists already sit side by side (`contracts/
 
 ### Behaviour
 
-From machtop f7e24f2, "Selection" and "tab":
+From machtop 246c2cb, "Selection" and "tab":
 
 - Each list remembers its selected row by identity: a process by pid and name. If that row leaves the list
   the selection falls to the first row; the key is kept, so the row is selected again if it returns. Before
@@ -215,7 +215,7 @@ From machtop f7e24f2, "Selection" and "tab":
   selection background (machtop's `44;62;76`); the other's heading is `dim` and shows no `▶`. Every list row
   has a 2-column lead for the `▶`, taken from the name column.
 - **One history, full width, below both lists**, following focus and titled with its list:
-  `Windows · cpu_burn.exe 31000 · cores` (f7e24f2: "never one per list (two side by side invite comparing
+  `Windows · cpu_burn.exe 31000 · cores` (246c2cb: "never one per list (two side by side invite comparing
   rows the panel keeps apart)", which is `contracts/ui.md` rule 3). Cores are drawn from 0 to the window's
   maximum rounded up to 1, 2 or 5 times a power of ten, never below 0.05 cores (machtop's per-app CPU
   floor), and the title's right side reads `avg A  max M  scale S` (part 5). A guest process's history is
@@ -578,7 +578,7 @@ measured is undecided); a sum of Windows used and guest used, which counts the g
 
 **Question:** over the range I chose, how loaded was this, typically and at worst?
 
-### Decision, from machtop f7e24f2
+### Decision, from machtop 246c2cb
 
 1. **A cell is the mean of the samples in its slice of the window; a sample stands for the second before
    it.** NaN never counts. This replaces the highest sample on the 60 s panels and the peak on the large
@@ -598,13 +598,13 @@ measured is undecided); a sum of Windows used and guest used, which counts the g
 | Heat block, lanes | the ramp, unchanged | |
 
 4. **The cell holding the window's maximum** gets one more dot at the maximum's height, in the plot's own
-   tone, costing no row (machtop `docs/panels.md`, `grammar-tab` dbb7f95, "Shared grammar", the graph-cell
+   tone, costing no row (machtop `docs/panels.md` (246c2cb), "Shared grammar", the graph-cell
    bullet; proposed here, winwsltop builds it first). Only when that cell holds more than one sample, and
    only when the dot falls above the dot row the cell's mean reaches; if several cells hold the maximum, the
    latest one. No other cell gets a dot. At 10 minutes on a 43-cell plot a cell holds 14 samples, so a
    one-second spike to 100% has a mean of about 7, the lowest dot row, and would read as idle; the `max`
    label says how high, the dot says when.
-5. **Over 100.** Shared rule (dbb7f95, the over-100 bullet): on a 0-100% graph a value above the ceiling is
+5. **Over 100.** Shared rule (246c2cb, the over-100 bullet): on a 0-100% graph a value above the ceiling is
    drawn at the ceiling, and its label prints the measured number in `watch`; the graph clamps, the number
    does not, as `contracts/ui.md` rule 5 already says. The split is engine time grouped by side and can pass
    100 ("Shares add to 100%": no, in "Experiment 01 result"). **winwsltop's own:** the label also carries a
@@ -715,11 +715,11 @@ This slice touches both seams, `snapshot.h` and `PROTOCOL.md`, in commit 1, and 
 
 ## 8. Open questions
 
-**Answered by machtop (f7e24f2), now in the design:** one history, full width, following focus (part 3);
+**Answered by machtop (246c2cb), now in the design:** one history, full width, following focus (part 3);
 a process keyed by pid and name; scale by measure (part 5); mean cells and window-wide `avg` and `max`;
 Shift+Tab does nothing; the `faint` tone for panels not built.
 
-Answered by machtop, `grammar-tab` dbb7f95, 2026-11-02:
+Answered by machtop (246c2cb), 2026-11-02:
 
 1. The dot at the window's maximum is shared grammar, with two additions now in part 5, item 4: the latest
    cell on a tie, and no dot at or under the mean's dot row.
@@ -734,7 +734,7 @@ Decided by the owner, 2026-11-02:
 7. Panel 3 at 34 rows shows 5 list rows (part 3).
 
 8. Alt+key decodes as `esc` then the key (part 2), so Alt+Q quits. Closed under the owner's standing decision
-   that keys follow machtop and sshvllmtop's shared grammar (`panels.md`, Decisions): the source is machtop's key parser (`src/keys.cpp` on `grammar-tab`, `key_parser::next`: an ESC followed by any byte but `[` or `O` is `esc` on its own, so Alt+key, which a terminal sends as ESC then the key, reads as `esc` then the key); the grammar's text does not state it yet.
+   that keys follow machtop and sshvllmtop's shared grammar (`panels.md`, Decisions): the source is machtop's key parser (`src/keys.cpp` at 246c2cb, `key_parser::next`: an ESC followed by any byte but `[` or `O` is `esc` on its own, so Alt+key, which a terminal sends as ESC then the key, reads as `esc` then the key); the grammar's text does not state it yet.
 
 Still open:
 

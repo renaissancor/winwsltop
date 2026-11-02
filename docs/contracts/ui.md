@@ -166,7 +166,7 @@ which core owns, reads schema 1 of the collector's line.
     shown. Experiment 0 (`contracts/evidence.md`) is to clear them.
   - The seam change of commit 1 is additive flags, `schema` stays 1 (`contracts/core.md`).
   Alt+key decodes as `esc` then the key, so Alt+Q quits, under the owner's decision that keys follow the shared
-  grammar: the source is machtop's key parser (`src/keys.cpp` on `grammar-tab`, `key_parser::next`: an ESC followed by any byte but `[` or `O` is `esc` on its own, so Alt+key, which a terminal sends as ESC then the key, reads as `esc` then the key); the grammar's text does not state it yet. Still open: the live key checks the design lists in section 8.
+  grammar: the source is machtop's key parser (`src/keys.cpp` at 246c2cb, `key_parser::next`: an ESC followed by any byte but `[` or `O` is `esc` on its own, so Alt+key, which a terminal sends as ESC then the key, reads as `esc` then the key); the grammar's text does not state it yet. Still open: the live key checks the design lists in section 8.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.

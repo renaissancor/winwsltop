@@ -41,28 +41,28 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
   Decided by machtop 2026-11-02, added to the shared grammar in machtop's `docs/panels.md`. Here it is
   how a panel moves between its Windows list and its WSL list, which `contracts/ui.md` rule 3 forbids
   merging.
-  - Each list keeps its own selected row, a process by pid and name (machtop f7e24f2), so the selection
+  - Each list keeps its own selected row, a process by pid and name (machtop 246c2cb), so the selection
     survives a reorder. Switching lists resets neither.
   - The list holding the selection has its heading lit; the other list's heading is dim and its rows
     show no ▶.
   - `s` sorts the list holding the selection, and the one history below the lists, full width and titled
-    with its list, shows that list's selected row. Never one history per list (machtop f7e24f2).
+    with its list, shows that list's selected row. Never one history per list (machtop 246c2cb).
   - `esc` returns to panel 1 and does not reset focus. Each panel keeps its focus when you switch away
     and back, as it keeps its selection.
 - **Changed for winwsltop:** `←`/`→` replace `t`, and the range is 1, 5, 10 minutes, the same as
   machtop's (decided 2026-11-02, below). From slice 1 the history keeps 10 minutes.
 - The footer lists the panels with the current one lit and a panel not built yet in the faint tone, which
-  machtop f7e24f2 made shared grammar.
+  machtop 246c2cb made shared grammar.
 - Graphs: a measured 0 is the lowest braille dot row (⣀) in steel; no sample inside the watched span is
   blank; the part of the window from before winwsltop started watching is a faint `·` every other cell.
   This is already winwsltop's rule, `contracts/ui.md` rule 8, from 6ef13ef. The large layout's
   `collecting: N s of M s` caption goes in slice 1.
 - Graphs are labelled with the window's average and maximum, never the minimum; a cell is the mean of
   its samples; a measure with a real ceiling is drawn 0-100, any other to a rounded `scale` or a zoomed
-  `range` (machtop f7e24f2). Built in slice 1, which changes rule 8 (`design/panel-grammar.md`, part 5).
+  `range` (machtop 246c2cb). Built in slice 1, which changes rule 8 (`design/panel-grammar.md`, part 5).
   The cell holding the window's maximum carries one extra dot, the latest on a tie and none at or under the
   mean's dot row, and a value over a 0-100 ceiling is drawn at the ceiling and labelled as measured in the
-  watch tone (machtop dbb7f95). **Added for winwsltop:** the over-100 label carries `*`, beside
+  watch tone (machtop 246c2cb). **Added for winwsltop:** the over-100 label carries `*`, beside
   `VM level, not exact shares*`.
 - **Added for winwsltop:** a figure the screen shows without a ledger row is marked `?`, and the panel's
   rule line says `? not yet checked` (`design/panel-grammar.md`, part 1).
@@ -210,22 +210,22 @@ is the shared one (Shared grammar).
   heading marks the list holding the selection, the other's is dim with no ▶; `s` and the history follow
   that list; `esc` does not reset focus, and a panel keeps its focus across a switch. Source: machtop
   2026-11-02, added to the shared grammar in machtop's `docs/panels.md`. Closes the open question on `tab`.
-- 2026-11-02, machtop. Lists scroll as in machtop's `docs/panels.md`, Shared grammar, "Selection" (branch
-  `grammar-tab`, read from machtop's `move_selection` and `app_table`): `↑`/`↓` stop at the ends and do
+- 2026-11-02, machtop. Lists scroll as in machtop's `docs/panels.md`, Shared grammar, "Selection" (246c2cb on
+  machtop main, read from machtop's `move_selection` and `app_table`): `↑`/`↓` stop at the ends and do
   not wrap; a list longer than its space follows the selection, which stays on the last row shown once it
   passes the bottom; no paging; the list ends with a dim `N of M` line; a selected name that leaves the
   list drops the selection to the first row. Supersedes the refusal of scrolling in `design/cpu-panel.md`
   section 6. The `tab` details above are in the same file, bullet "tab".
 - 2026-11-02. sshvllmtop does not follow the shared grammar yet: its range is 1 m, 10 m, 1 h and it moves
   with `j`/`k`/`g`/`G`. That is sshvllmtop's own work, not a winwsltop task.
-- 2026-11-02, machtop f7e24f2. One history, full width, below the lists, following focus and titled with its
+- 2026-11-02, machtop 246c2cb. One history, full width, below the lists, following focus and titled with its
   list, never one per list; a process remembered by pid and name; scale by measure; a cell is the mean of its
   slice of the window and `avg` and `max` cover the whole window; no Shift+Tab; panels not built listed faint.
 - 2026-11-02, the owner. Slice 1, `design/panel-grammar.md`, is approved to build after experiment 0. Figures
   shown without a ledger row are marked `?`, not hidden; the seam change is additive flags, `schema` stays 1;
   panel 3 at 34 rows shows 5 list rows; panel 1 gets no selection and panel 2 waits for slice 2. Recorded in
   `contracts/ui.md`.
-- 2026-11-02, machtop dbb7f95. The dot at the window's maximum, proposed by winwsltop, is shared grammar: in the cell
+- 2026-11-02, machtop 246c2cb. The dot at the window's maximum, proposed by winwsltop, is shared grammar: in the cell
   holding the maximum, the latest on a tie, when it holds more than one sample and the dot falls above its mean. A value
   over a 0-100 ceiling is drawn at the ceiling and labelled as measured in the watch tone; the `*` on `VM level, not
   exact shares*` stays winwsltop's own. Closes the two questions put to machtop.
