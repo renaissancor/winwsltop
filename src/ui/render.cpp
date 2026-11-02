@@ -793,8 +793,10 @@ std::vector<line> overall_frame(const snapshot& s, const wsl_view& w, int width,
 
 // ---- Graphs --------------------------------------------------------------------------------------
 //
-// Every graph is one figure on a fixed 0-100 scale, width mapped to a span of time. Time places a
-// sample, never its index. Graphs are not stacked, summed or overlaid: each names its own source.
+// Every graph is one figure, width mapped to the range shown. A measure with a ceiling is drawn 0-100; any
+// other from 0 to its scale_top. Time places a sample, never its index. A cell is the mean of its samples,
+// and the cell holding the window's maximum marks it with one dot. Graphs are not stacked, summed or
+// overlaid: each names its own source.
 
 constexpr int kGutter = 4;       // "100│"
 constexpr int kMinGraph = 2;     // Rows of a graph when the window is short: room for "100" and "0"
@@ -805,16 +807,43 @@ constexpr int kTitleLines = 3;
 constexpr int kMaxGpuList = 14;  // Rows of the GPU panel's lists; height beyond this goes to the graphs
 constexpr int kSideBySideGpu = 64;  // Those lists are short and stay side by side down to here
 
-// One value per dot column, oldest on the left, 0-100; NaN where nothing was measured. Columns from the
-// end of the previous sample up to this one take its value, if the previous one is close enough to
-// join and measured this figure. Several samples in one column show the highest.
-std::vector<double> plot_columns(const history& h, double history_sample::*series, int64_t end_ms, int dots, int64_t span_ms = history::kSpanMs) {
-  std::vector<double> cols(static_cast<size_t>(std::max(0, dots)), std::numeric_limits<double>::quiet_NaN());
-  if (dots <= 0) return cols;
+// What a graph's labels say about its window, from the samples and not the cells, so a maximum can sit
+// above every cell. As measured: over 100 stays over 100. NaN with no sample in the window.
+struct window_stats {
+  double avg = std::numeric_limits<double>::quiet_NaN(), max = std::numeric_limits<double>::quiet_NaN();
+  int max_at = -1;    // The column or cell holding the latest sample at the maximum
+  int max_count = 0;  // Samples in that column or cell
+};
+
+// Adds one sample to a window's figures. A later sample at the same maximum takes its place.
+void add_to(window_stats& st, double& total, int& n, double v, int at) {
+  total += v;
+  ++n;
+  if (!(v < st.max)) {  // Also the first, while max is NaN
+    st.max = v;
+    st.max_at = at;
+  }
+}
+
+struct plotted {
+  std::vector<double> cols;  // One per dot column, oldest on the left, 0-100; NaN where nothing was measured
+  window_stats stats;
+};
+
+// A sample stands for the time since the previous one, if that one is close enough to join and measured
+// this figure, and otherwise for its own column. A column is the mean of the samples that stand for some of
+// it, each clamped to 0-100: the graph clamps, the label does not.
+plotted plot_series(const history& h, double history_sample::*series, int64_t end_ms, int dots, int64_t span_ms) {
+  plotted out;
+  out.cols.assign(static_cast<size_t>(std::max(0, dots)), std::numeric_limits<double>::quiet_NaN());
+  if (dots <= 0) return out;
+  std::vector<double> sum(out.cols.size(), 0);
+  std::vector<int> count(out.cols.size(), 0);
   const double end = static_cast<double>(end_ms), span = static_cast<double>(span_ms);
   const auto x_of = [&](double t) { return std::lround((dots - 1) * (1.0 - (end - t) / span)); };
   bool joined = false;
-  double before = 0;
+  double before = 0, total = 0;
+  int n = 0;
   for (const history_sample& p : h.samples()) {
     const double t = static_cast<double>(p.unix_ms), value = p.*series;
     const bool known = std::isfinite(value);
@@ -823,30 +852,81 @@ std::vector<double> plot_columns(const history& h, double history_sample::*serie
       const long from = joined && t - before <= kGapMs ? std::min(x, std::max(0L, x_of(before) + 1)) : x;
       const double v = std::clamp(value, 0.0, 100.0);
       for (long k = from; k <= x; ++k) {
-        double& c = cols[static_cast<size_t>(k)];
-        c = std::isnan(c) ? v : std::max(c, v);
+        sum[static_cast<size_t>(k)] += v;
+        ++count[static_cast<size_t>(k)];
       }
+      add_to(out.stats, total, n, value, static_cast<int>(x));
     }
     joined = known;
     before = t;
   }
-  return cols;
+  for (size_t k = 0; k < out.cols.size(); ++k) {
+    if (count[k] > 0) out.cols[k] = sum[k] / count[k];
+  }
+  if (n > 0) {
+    out.stats.avg = total / n;
+    out.stats.max_count = count[static_cast<size_t>(out.stats.max_at)];
+  }
+  return out;
 }
 
-// Filled braille, one string per row from the top. A measured value always shows at least its bottom
-// dot, so a measured 0 is a line and a gap is empty.
-std::vector<std::string> plot_rows(const std::vector<double>& cols, int rows) {
+std::vector<double> plot_columns(const history& h, double history_sample::*series, int64_t end_ms, int dots, int64_t span_ms = history::kSpanMs) {
+  return plot_series(h, series, end_ms, dots, span_ms).cols;
+}
+
+// The average and maximum of one figure over a window, placed as plot_series places its samples.
+window_stats series_stats(const history& h, double history_sample::*series, int64_t end_ms, int64_t span_ms) {
+  window_stats st;
+  double total = 0;
+  int n = 0;
+  for (const history_sample& p : h.samples()) {
+    const double value = p.*series;
+    if (std::isfinite(value) && p.unix_ms <= end_ms && end_ms - p.unix_ms <= span_ms) add_to(st, total, n, value, 0);
+  }
+  if (n > 0) st.avg = total / n;
+  return st;
+}
+
+// The top of a graph with no ceiling: the window's maximum rounded up to 1, 2 or 5 times a power of ten,
+// never below floor.
+double scale_top(double max, double floor) {
+  const double v = std::isfinite(max) ? std::max(max, floor) : floor;
+  if (!(v > 0)) return floor;
+  const double decade = std::pow(10.0, std::floor(std::log10(v)));
+  for (const double step : {1.0, 2.0, 5.0, 10.0}) {
+    if (step * decade >= v * (1 - 1e-12)) return step * decade;
+  }
+  return 10 * decade;
+}
+
+// Which dot column carries the maximum's dot, or -1: it holds more than one sample, so its mean can hide
+// the maximum, and the dot is above the dot row the mean reaches. The dot's height is the maximum's.
+int max_mark(const window_stats& st) { return st.max_count > 1 ? st.max_at : -1; }
+
+// Filled braille, one string per row from the top, 0 to top. A measured value always shows at least its
+// bottom dot, so a measured 0 is a line and a gap is empty. Column mark, if any, also gets one dot at
+// mark_value's height when that is above its own.
+std::vector<std::string> plot_rows(const std::vector<double>& cols, int rows, int mark = -1, double mark_value = 0, double top = 100) {
   std::vector<std::string> out(static_cast<size_t>(rows));
+  const auto high = [&](double v) { return std::max(1, static_cast<int>(std::lround(std::clamp(v, 0.0, top) / top * 4 * rows))); };
+  int mark_high = 0;
+  if (mark >= 0 && mark < static_cast<int>(cols.size()) && !std::isnan(cols[static_cast<size_t>(mark)]) && std::isfinite(mark_value)) {
+    const int h = high(mark_value);
+    if (h > high(cols[static_cast<size_t>(mark)])) mark_high = h;
+  }
   const int cells = static_cast<int>(cols.size()) / 2;
   for (int y = 0; y < rows; ++y) {
+    const int below = (rows - 1 - y) * 4;  // Dots under this row
     for (int c = 0; c < cells; ++c) {
       unsigned bits = 0;
       for (int side = 0; side < 2; ++side) {
-        const double v = cols[static_cast<size_t>(2 * c + side)];
+        const int at = 2 * c + side;
+        const double v = cols[static_cast<size_t>(at)];
         if (std::isnan(v)) continue;
-        const int high = std::max(1, static_cast<int>(std::lround(v / 100.0 * 4 * rows)));
-        const int dots = std::clamp(high - (rows - 1 - y) * 4, 0, 4);
-        for (int k = 0; k < dots; ++k) bits |= (side == 0 ? kDotLeft : kDotRight)[k];
+        const unsigned* dot = side == 0 ? kDotLeft : kDotRight;
+        const int dots = std::clamp(high(v) - below, 0, 4);
+        for (int k = 0; k < dots; ++k) bits |= dot[k];
+        if (at == mark && mark_high > below && mark_high <= below + 4) bits |= dot[mark_high - below - 1];
       }
       if (bits) put_cp(out[static_cast<size_t>(y)], static_cast<char32_t>(0x2800 + bits));
       else out[static_cast<size_t>(y)] += ' ';
@@ -893,10 +973,10 @@ time_axis make_axis(const history& h, int64_t end_ms, int64_t span_ms, int cells
   return a;
 }
 
-// One figure on an axis, 0-100, NaN where nothing was measured. A bucket holds its highest sample, or the
-// mean of those it has when peak is false, and NaN never counts. A bucket no sample fell in, between two
-// samples close enough to join, takes the earlier one: a cell narrower than a second would stripe.
-template <class Value> std::vector<double> bucket_cells(const time_axis& a, bool peak, Value value) {
+// One figure on an axis, 0-100, NaN where nothing was measured. A bucket is the mean of the samples in it,
+// each clamped to 0-100, and NaN never counts. A bucket no sample fell in, between two samples close enough
+// to join, takes the earlier one: a cell narrower than a second would stripe.
+template <class Value> std::vector<double> bucket_cells(const time_axis& a, Value value) {
   std::vector<double> out(static_cast<size_t>(a.cells), std::numeric_limits<double>::quiet_NaN());
   std::vector<int> count(static_cast<size_t>(a.cells), 0);
   bool joined = false;
@@ -916,7 +996,7 @@ template <class Value> std::vector<double> bucket_cells(const time_axis& a, bool
       if (c >= 0) {
         double& cell = out[static_cast<size_t>(c)];
         int& n = count[static_cast<size_t>(c)];
-        cell = n == 0 ? v : peak ? std::max(cell, v) : cell + v;
+        cell = n == 0 ? v : cell + v;
         ++n;
       }
       from = c;
@@ -925,21 +1005,36 @@ template <class Value> std::vector<double> bucket_cells(const time_axis& a, bool
     joined = known;
     before = p.unix_ms;
   }
-  if (!peak) {
-    for (size_t c = 0; c < out.size(); ++c) {
-      if (count[c] > 1) out[c] /= count[c];
-    }
+  for (size_t c = 0; c < out.size(); ++c) {
+    if (count[c] > 1) out[c] /= count[c];
   }
   return out;
+}
+
+// The window's average and maximum on an axis, from the samples in its cells, and the cell of the maximum.
+template <class Value> window_stats bucket_stats(const time_axis& a, Value value) {
+  window_stats st;
+  double total = 0;
+  int n = 0;
+  for (size_t i = 0; i < a.samples.size(); ++i) {
+    const double v = value(*a.samples[i]);
+    if (a.cell[i] >= 0 && std::isfinite(v)) add_to(st, total, n, v, a.cell[i]);
+  }
+  if (n == 0) return st;
+  st.avg = total / n;
+  for (size_t i = 0; i < a.samples.size(); ++i) {
+    st.max_count += a.cell[i] == st.max_at && std::isfinite(value(*a.samples[i])) ? 1 : 0;
+  }
+  return st;
 }
 
 // Cells from the left that lie wholly before watching began: no sample can be there, and blank would
 // read as a gap. Before any push, all of them; after pushes that could not be placed, none. Placed as
 // plot_columns places the first sample, for the graphs it draws.
-int unwatched_cells(const history& h, int64_t end_ms, int cells) {
+int unwatched_cells(const history& h, int64_t end_ms, int cells, int64_t span_ms = history::kSpanMs) {
   if (!h.watching()) return std::max(0, cells);
   if (h.samples().empty()) return 0;
-  const double span = static_cast<double>(history::kSpanMs), ago = static_cast<double>(end_ms - h.watched_from_ms());
+  const double span = static_cast<double>(span_ms), ago = static_cast<double>(end_ms - h.watched_from_ms());
   if (cells <= 0 || ago >= span) return 0;
   const long x = std::lround((2.0 * cells - 1) * (1.0 - std::max(0.0, ago) / span));
   return static_cast<int>(std::clamp(x / 2, 0L, static_cast<long>(cells)));
@@ -984,7 +1079,13 @@ struct panel {
   std::vector<std::string> title;  // Pieces kept whole when the title wraps, while they fit
   std::string value;               // As measured
   tone color = tone::text;
-  double history_sample::*series = nullptr;
+  double history_sample::*series = nullptr;  // The graph's height, 0-100
+  // What the graph's label prints, in its own unit, or null for series itself as a percent. The unit follows
+  // the maximum; a percent follows each number.
+  double history_sample::*label_series = nullptr;
+  const char* label_format = "%.0f";
+  const char* label_unit = "";
+  bool star = false;  // Over 100 also carries `*`, which a caption on the panel explains
 };
 
 // No percent is printed for bytes or watts: those keep their own units, and the graph is their height.
@@ -1053,10 +1154,54 @@ std::vector<line> panel_title(const panel& p, int col) {
   return out;
 }
 
-std::vector<line> panel_graph(const panel& p, const history& h, int64_t end_ms, int col, int rows) {
+std::string span_text(int64_t span_ms) {
+  return span_ms % 60000 == 0 && span_ms > 60000 ? fmt("%dm", static_cast<int>(span_ms / 60000)) : fmt("%ds", static_cast<int>(span_ms / 1000));
+}
+
+// "avg 60% max 95%", or "avg 8.4 max 9.8 GiB" in a unit that is not a percent: label's figures, as measured.
+// Past the graph's ceiling, which drawn's maximum says, the maximum is in the watch tone, with `*` where the
+// panel's caption explains it. Nothing with no sample in the window.
+line stats_label(const window_stats& drawn, const window_stats& label, const char* format = "%.0f", const char* unit = nullptr, bool star = false) {
+  if (std::isnan(label.avg)) return {};
+  const auto text = [&](double v) { return number(v, format) + (unit ? "" : "%"); };
+  const bool over = drawn.max > 100;
+  return {{"avg " + text(label.avg) + " max ", tone::dim}, {text(label.max) + (unit ? unit : "") + (over && star ? "*" : ""), over ? tone::watch : tone::dim}};
+}
+
+line stats_label(const panel& p, const history& h, const window_stats& drawn, int64_t end_ms, int64_t span_ms) {
+  if (!p.label_series) return stats_label(drawn, drawn, p.label_format, nullptr, p.star);
+  return stats_label(drawn, series_stats(h, p.label_series, end_ms, span_ms), p.label_format, p.label_unit, p.star);
+}
+
+int width_of(const line& l) {
+  int w = 0;
+  for (const span& p : l) w += display_width(p.text);
+  return w;
+}
+
+// "-60s ──── label ──── now" over `cells` columns: the first of the labels that leaves two rule characters,
+// or none. The range and now are never the ones dropped.
+void axis_line(row& r, int cells, int64_t span_ms, const std::vector<line>& labels) {
+  const std::string left = "-" + span_text(span_ms) + " ";
+  const int rules = cells - display_width(left) - 4;  // " now"
+  r.add(left, tone::dim);
+  const auto fits = std::find_if(labels.begin(), labels.end(), [&](const line& l) { return !l.empty() && rules - width_of(l) - 2 >= 2; });
+  if (fits == labels.end()) {
+    r.add(repeat("─", rules), tone::faint);
+  } else {
+    const int rest = rules - width_of(*fits) - 2;
+    r.add(repeat("─", rest / 2), tone::faint).add(" ");
+    for (const span& p : *fits) r.add(p.text, p.color);
+    r.add(" ").add(repeat("─", rest - rest / 2), tone::faint);
+  }
+  r.add(" now", tone::dim);
+}
+
+std::vector<line> panel_graph(const panel& p, const history& h, int64_t end_ms, int col, int rows, int64_t span_ms) {
   const int cells = col - kGutter;
-  const std::vector<std::string> plot = plot_rows(plot_columns(h, p.series, end_ms, 2 * cells), rows);
-  const int unwatched = unwatched_cells(h, end_ms, cells);
+  const plotted d = plot_series(h, p.series, end_ms, 2 * cells, span_ms);
+  const std::vector<std::string> plot = plot_rows(d.cols, rows, max_mark(d.stats), d.stats.max);
+  const int unwatched = unwatched_cells(h, end_ms, cells, span_ms);
   std::vector<line> out;
   for (int y = 0; y < rows; ++y) {
     row r;
@@ -1065,7 +1210,8 @@ std::vector<line> panel_graph(const panel& p, const history& h, int64_t end_ms, 
     out.push_back(r);
   }
   row axis;
-  axis.to(kGutter).add("-60s ", tone::dim).add(repeat("─", cells - 9), tone::faint).add(" now", tone::dim);
+  axis.to(kGutter);
+  axis_line(axis, cells, span_ms, {stats_label(p, h, d.stats, end_ms, span_ms)});
   out.push_back(axis);
   return out;
 }
@@ -1126,14 +1272,14 @@ void grow_rows(std::vector<grid_row>& rows, int extra) {
   }
 }
 
-void draw_rows(std::vector<line>& out, const std::vector<grid_row>& rows, const history& h, int64_t end_ms) {
+void draw_rows(std::vector<line>& out, const std::vector<grid_row>& rows, const history& h, int64_t end_ms, int64_t span_ms) {
   for (const grid_row& r : rows) {
     std::vector<std::vector<line>> columns;
     for (const panel* p : r.cells) {
       std::vector<line> c = panel_title(*p, r.col);
       c.resize(static_cast<size_t>(r.title_h));
       if (r.plot) {
-        const std::vector<line> graph = panel_graph(*p, h, end_ms, r.col, r.graph_h);
+        const std::vector<line> graph = panel_graph(*p, h, end_ms, r.col, r.graph_h, span_ms);
         c.insert(c.end(), graph.begin(), graph.end());
       }
       columns.push_back(std::move(c));
@@ -1265,20 +1411,25 @@ void gpu_lists(std::vector<line>& out, const snapshot& s, const wsl_view& w, int
   out.insert(out.end(), bottom.begin(), bottom.end());
 }
 
-panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms) {
+panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms) {
   const gpu_device_view& g = s.gpu_device;
   const gpu_split_view& split = s.gpu_split;
-  const std::vector<panel> top = {
+  // The split is engine time grouped by side and can pass 100: docs/measurable.md, Experiment 01 result,
+  // "Shares add to 100%". A window that did says so beside the caption that explains it.
+  const int64_t end = graph_end(h, now_ms);
+  const bool over = series_stats(h, &history_sample::vm_pct, end, span_ms).max > 100 || series_stats(h, &history_sample::windows_pct, end, span_ms).max > 100;
+  std::vector<panel> top = {
       pct_panel({"device · NVML"}, g.present && g.has_util, g.util_pct, &history_sample::gpu_util),
-      pct_panel({"WSL VM ·", "engine counters,", "VM level, not exact shares"}, split.valid, split.vm_pct, &history_sample::vm_pct),
+      pct_panel({"WSL VM ·", "engine counters,", over ? "VM level, not exact shares*" : "VM level, not exact shares"}, split.valid, split.vm_pct, &history_sample::vm_pct),
       pct_panel({"Windows · engine counters"}, split.valid, split.windows_pct, &history_sample::windows_pct)};
+  top[1].star = top[2].star = true;
 
-  panel memory{{"GPU memory · NVML,", "used of total"}, "n/a", tone::dim, &history_sample::gpu_mem_pct};
+  panel memory{{"GPU memory · NVML,", "used of total"}, "n/a", tone::dim, &history_sample::gpu_mem_pct, &history_sample::gpu_mem_gib, "%.1f", " GiB"};
   if (g.present && g.has_mem && g.mem_total > 0) {
     memory.value = fmt("%.1f/%.1f GiB", gib(g.mem_used), gib(g.mem_total));
     memory.color = tone::text;
   }
-  panel power{{"power · NVML,", "of limit"}, "n/a", tone::dim, &history_sample::gpu_power_pct};
+  panel power{{"power · NVML,", "of limit"}, "n/a", tone::dim, &history_sample::gpu_power_pct, &history_sample::gpu_power_w, "%.0f", " W"};
   if (g.present && g.has_power && std::isfinite(g.power_w)) {
     power.value = number(g.power_w, "%.0f");
     if (g.power_limit_w > 0) power.value += "/" + number(g.power_limit_w, "%.0f");
@@ -1289,6 +1440,7 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   const std::vector<panel> second = {std::move(memory), std::move(power)};
 
   panel_frame f;
+  f.span_applies = true;
   f.lines.push_back(title_row(s, now_ms));
   int room = height - 1;
   std::vector<grid_row> rows;
@@ -1321,13 +1473,13 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
     f.hidden = true;
   }
   if (room > 0) grow_rows(rows, room);
-  draw_rows(f.lines, rows, h, graph_end(h, now_ms));
+  draw_rows(f.lines, rows, h, end, span_ms);
   if (device) f.lines.push_back(device_row(g, width));
   f.lines.insert(f.lines.end(), lists.begin(), lists.end());
   return f;
 }
 
-panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms) {
+panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms) {
   // Stacked lists have two heads and share their rows; below 8 rows the Windows list gets none.
   const bool wide = width >= 100;
   const int least = wide ? 5 : 8;
@@ -1342,6 +1494,7 @@ panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history&
       std::move(guest)};
 
   panel_frame f;
+  f.span_applies = true;
   f.lines.push_back(title_row(s, now_ms));
   int room = height - 1;
   std::vector<grid_row> rows;
@@ -1377,7 +1530,7 @@ panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history&
   if (head) f.lines.push_back(rule("CPU", "two systems' own views of overlapping work, never added", width));
   else f.hidden = true;
   if (room > 0) grow_rows(rows, room);
-  draw_rows(f.lines, rows, h, graph_end(h, now_ms));
+  draw_rows(f.lines, rows, h, graph_end(h, now_ms), span_ms);
   if (show_cores) f.lines.insert(f.lines.end(), cores.begin(), cores.end());
   if (list_rows > 0) process_section(f.lines, s, w, width, list_rows);
   return f;
@@ -1533,7 +1686,7 @@ using thread_value = float (*)(const history_sample&, int);
 std::vector<double> half_cells(const time_axis& a, const std::vector<int>& threads, thread_value value) {
   std::vector<double> out(static_cast<size_t>(a.cells), std::numeric_limits<double>::quiet_NaN());
   for (const int t : threads) {
-    const std::vector<double> one = bucket_cells(a, false, [&](const history_sample& p) { return static_cast<double>(value(p, t)); });
+    const std::vector<double> one = bucket_cells(a, [&](const history_sample& p) { return static_cast<double>(value(p, t)); });
     for (size_t c = 0; c < out.size(); ++c) {
       if (std::isnan(out[c]) || one[c] > out[c]) out[c] = std::isnan(one[c]) ? out[c] : one[c];
     }
@@ -1554,12 +1707,14 @@ void gutter(row& r, std::string_view label, std::string_view bar = "│", tone c
   r.add(pad(label, kCpuGutter - 1), tone::dim).add(bar, c);
 }
 
-// A plot's cells are a whole bucket wide: both dots of a braille cell show the same value.
-std::vector<line> plot_block(const std::vector<double>& cells, int rows, std::string_view top, std::string_view bottom, int unwatched) {
+// A plot's cells are a whole bucket wide: both dots of a braille cell show the same value. The maximum's
+// dot, when its cell takes one, is in the right half, the later.
+std::vector<line> plot_block(const std::vector<double>& cells, int rows, std::string_view top, std::string_view bottom, int unwatched, const window_stats& st) {
   std::vector<double> dots;
   dots.reserve(cells.size() * 2);
   for (const double v : cells) dots.insert(dots.end(), 2, v);
-  const std::vector<std::string> plot = plot_rows(dots, rows);
+  const int mark = max_mark(st);
+  const std::vector<std::string> plot = plot_rows(dots, rows, mark < 0 ? -1 : 2 * mark + 1, st.max);
   std::vector<line> out;
   for (int y = 0; y < rows; ++y) {
     row r;
@@ -1592,22 +1747,17 @@ line lost_lane(const std::vector<double>& vcpus) {
   return r;
 }
 
-std::string span_text(int64_t span_ms) {
-  return span_ms % 60000 == 0 && span_ms > 60000 ? fmt("%dm", static_cast<int>(span_ms / 60000)) : fmt("%ds", static_cast<int>(span_ms / 1000));
-}
-
-line axis_row(const time_axis& a, int64_t span_ms, int64_t collected_ms) {
+// "-60s ──── busy avg 60% max 100% · each cell 1.0 s ──── now": the column's busy plot over the window,
+// then how long a cell is, which goes first when the row is short.
+line axis_row(const time_axis& a, int64_t span_ms, const window_stats& busy) {
   const double bucket_s = static_cast<double>(a.bucket_ms) / 1000.0;
-  // A sample's worth of slack: the ring can hold slightly under the longest span, and must still end.
-  const bool collecting = collected_ms + static_cast<int64_t>(kGapMs) < span_ms;
-  const std::string left = "-" + span_text(span_ms);
-  const std::string mid = collecting ? fmt("collecting: %d s of %d s", static_cast<int>(collected_ms / 1000), static_cast<int>(span_ms / 1000))
-                          : span_ms > history::kSpanMs ? fmt("peak over mean · %.0f s", bucket_s)
-                                                       : fmt("each cell %.1f s", bucket_s);
-  const int rules = a.cells - display_width(left) - display_width(mid) - 7;  // "-60s ", " mid ", " now"
+  line label = stats_label(busy, busy);
+  if (!label.empty()) label.insert(label.begin(), span{"busy ", tone::dim});
+  line cell = label;
+  cell.push_back({fmt(bucket_s < 10 ? " · each cell %.1f s" : " · each cell %.0f s", bucket_s), tone::dim});
   row r;
-  r.to(kCpuGutter).add(left + " ", tone::dim).add(repeat("─", rules / 2), tone::faint);
-  r.add(" " + mid + " ", collecting ? tone::text : tone::dim).add(repeat("─", rules - rules / 2), tone::faint).add(" now", tone::dim);
+  r.to(kCpuGutter);
+  axis_line(r, a.cells, span_ms, {cell, label});
   return r;
 }
 
@@ -1893,7 +2043,7 @@ bool plan_large_cpu(const snapshot& s, const wsl_view& w, const history& h, int 
 panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms) {
   cpu_rows plan;
   thread_order left_order, right_order;
-  if (!plan_large_cpu(s, w, h, width, height + 1, plan, left_order, right_order)) return cpu_small_frame(s, w, h, width, height, now_ms);
+  if (!plan_large_cpu(s, w, h, width, height + 1, plan, left_order, right_order)) return cpu_small_frame(s, w, h, width, height, now_ms, span_ms);
 
   const int col = (width - kListGap) / 2, right_col = width - col - kListGap;
   // The newest sample is the right edge unless it is late: a redraw between samples must not open an empty
@@ -1902,20 +2052,21 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   const int64_t end = !h.samples().empty() && static_cast<double>(now_ms - last_sample) <= kGapMs ? last_sample : graph_end(h, now_ms);
   const time_axis axis = make_axis(h, end, span_ms, col - kCpuGutter);  // The smaller column: both plots are this wide
   const int64_t collected = h.samples().empty() ? 0 : end - h.samples().front().unix_ms;
-  const auto peak = [&](float history_sample::*series) { return bucket_cells(axis, true, [series](const history_sample& p) { return static_cast<double>(p.*series); }); };
-  const auto mean = [&](float history_sample::*series) { return bucket_cells(axis, false, [series](const history_sample& p) { return static_cast<double>(p.*series); }); };
+  const auto of = [](float history_sample::*series) { return [series](const history_sample& p) { return static_cast<double>(p.*series); }; };
+  const auto mean = [&](float history_sample::*series) { return bucket_cells(axis, of(series)); };
+  const auto windows_cpu = [](const history_sample& p) { return p.windows_cpu; };
 
   std::vector<line> left = windows_heads(s, static_cast<int>(s.cpu.core_pct.size()), col);
   std::vector<line> right = wsl_heads(s, w, right_col, collected);
   const auto append = [](std::vector<line>& to, std::vector<line> from) { to.insert(to.end(), from.begin(), from.end()); };
 
-  const std::vector<double> windows_busy = bucket_cells(axis, true, [](const history_sample& p) { return p.windows_cpu; });
+  const window_stats left_busy = bucket_stats(axis, windows_cpu), right_busy = bucket_stats(axis, of(&history_sample::wsl_busy));
   const int unwatched = unwatched_cells(h, axis);  // One axis, so the same for every plot of both columns
-  append(left, plot_block(windows_busy, plan.busy, "100", "  0", unwatched));
-  append(right, plot_block(peak(&history_sample::wsl_busy), plan.busy, "100", "  0", unwatched));
+  append(left, plot_block(bucket_cells(axis, windows_cpu), plan.busy, "100", "  0", unwatched, left_busy));
+  append(right, plot_block(mean(&history_sample::wsl_busy), plan.busy, "100", "  0", unwatched, right_busy));
   if (plan.ram == kRamRows) {
-    append(left, plot_block(peak(&history_sample::windows_ram), kRamRows, "RAM", "", unwatched));
-    append(right, plot_block(peak(&history_sample::wsl_ram), kRamRows, "RAM", "", unwatched));
+    append(left, plot_block(mean(&history_sample::windows_ram), kRamRows, "RAM", "", unwatched, bucket_stats(axis, of(&history_sample::windows_ram))));
+    append(right, plot_block(mean(&history_sample::wsl_ram), kRamRows, "RAM", "", unwatched, bucket_stats(axis, of(&history_sample::wsl_ram))));
   } else if (plan.ram == 1) {
     left.push_back(lane("RAM", mean(&history_sample::windows_ram)));
     right.push_back(lane("RAM", mean(&history_sample::wsl_ram)));
@@ -1936,8 +2087,8 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   append(right, heat_block(right_rows, axis, wsl_core_at));
   left.resize(std::max(left.size(), right.size()));
   right.resize(left.size());
-  left.push_back(axis_row(axis, span_ms, collected));
-  right.push_back(axis_row(axis, span_ms, collected));
+  left.push_back(axis_row(axis, span_ms, left_busy));
+  right.push_back(axis_row(axis, span_ms, right_busy));
 
   append(left, cpu_windows_list(s, col, plan.lists));
   append(right, cpu_wsl_list(w, right_col, plan.lists));
@@ -2033,6 +2184,8 @@ void history::push(const snapshot& s) {
   n.gpu_util = g.present && g.has_util ? g.util_pct : missing;
   n.gpu_mem_pct = g.present && g.has_mem && g.mem_total > 0 ? 100.0 * static_cast<double>(g.mem_used) / static_cast<double>(g.mem_total) : missing;
   n.gpu_power_pct = g.present && g.has_power && g.power_limit_w > 0 ? 100.0 * g.power_w / g.power_limit_w : missing;
+  n.gpu_mem_gib = std::isnan(n.gpu_mem_pct) ? missing : gib(g.mem_used);
+  n.gpu_power_w = std::isnan(n.gpu_power_pct) ? missing : g.power_w;
   n.vm_pct = s.gpu_split.valid ? s.gpu_split.vm_pct : missing;
   n.windows_pct = s.gpu_split.valid ? s.gpu_split.windows_pct : missing;
   n.windows_cpu = s.cpu.core_pct.empty() ? missing : s.cpu.busy_pct;  // A failed read leaves no cores
@@ -2076,11 +2229,7 @@ int64_t next_span(int64_t span_ms) {
   return kSpansMs[0];
 }
 
-bool span_key_acts(const snapshot& s, const history& hist, view v, int width, int height) {
-  cpu_rows plan;
-  thread_order left, right;
-  return v == view::cpu && plan_large_cpu(s, read_wsl(s.wsl_json), hist, width, height, plan, left, right);
-}
+bool span_key_acts(const snapshot&, const history&, view v, int, int) { return v == view::gpu || v == view::cpu; }
 
 std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, view v, const render_options& options) {
   if (width <= 0 || height <= 0) return {};
@@ -2090,7 +2239,7 @@ std::vector<line> render(const snapshot& s, int width, int height, int64_t now_m
   panel_frame f;
   const int body = height - 1;  // The footer is the last row, whatever else has to give
   if (v == view::overall) f.lines = overall_frame(s, w, width, body, now_ms);
-  else if (v == view::gpu) f = gpu_frame(s, w, *hist, width, body, now_ms);
+  else if (v == view::gpu) f = gpu_frame(s, w, *hist, width, body, now_ms, options.span_ms);
   else f = cpu_frame(s, w, *hist, width, body, now_ms, options.span_ms);
 
   std::vector<line> out;

@@ -27,11 +27,11 @@ class history;
 // The panels of the live screen. render() knows nothing of keys: its caller maps them to a view.
 enum class view : uint8_t { overall, gpu, cpu };
 
-// What `t` steps through on the large layout of panel 3. Nothing else draws anything but the first.
-constexpr int64_t kSpansMs[] = {60000, 300000, 900000};
+// The ranges a graph is drawn over, 1, 5 and 10 minutes, which `t` steps through on panels 2 and 3.
+constexpr int64_t kSpansMs[] = {60000, 300000, 600000};
 
 struct render_options {
-  int64_t span_ms = kSpansMs[0];  // Time across the large CPU layout, one of kSpansMs
+  int64_t span_ms = kSpansMs[0];  // Time across every graph of panels 2 and 3, one of kSpansMs
   bool span_key = false;          // The caller acts on `t`. Only then does the footer offer it
 };
 
@@ -46,7 +46,7 @@ std::vector<line> render(const snapshot& s, int width, int height, int64_t now_m
 // The span after this one, wrapping, for a caller that got `t`.
 int64_t next_span(int64_t span_ms);
 
-// Whether `t` does anything on this frame: only the large layout of panel 3 has a span.
+// Whether `t` does anything on this frame: panels 2 and 3 draw graphs over the range, panel 1 has none.
 bool span_key_acts(const snapshot& s, const history& hist, view v, int width, int height);
 
 std::string as_text(const std::vector<line>& lines);

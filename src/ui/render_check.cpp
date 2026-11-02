@@ -465,10 +465,10 @@ void check_time_axis() {
   h.push(sample_at(back, kNow - 2000000, 40, 1, 1));
   check(h.samples().size() == 1, "a backward step after a long stall drops what is off the span");
   check(known_columns(util_columns(h, kNow - 2000000)) == 1, "a long stall does not join as continuous");
-  back.interval_s = 899;
+  back.interval_s = 599;
   h.push(sample_at(back, kNow - 3000000, 40, 1, 1));
-  check(h.samples().size() == 2 && h.samples()[1].unix_ms - h.samples()[0].unix_ms == 899000, "a stall under what is kept shifts");
-  back.interval_s = 900;
+  check(h.samples().size() == 2 && h.samples()[1].unix_ms - h.samples()[0].unix_ms == 599000, "a stall under what is kept shifts");
+  back.interval_s = 600;
   h.push(sample_at(back, kNow - 4000000, 40, 1, 1));
   check(h.samples().size() == 1, "a stall of exactly what is kept is off every graph too");
 
@@ -486,13 +486,21 @@ void check_time_axis() {
   h.push(sample_at(base, kNow, 40, 1, 1));
   check(known_columns(util_columns(h)) == 2, "samples 1.501 s apart do not");
 
-  // Highest in a column, in either order.
+  // The mean in a column, in either order, and the maximum kept apart for the label and its dot.
   for (const double first : {10.0, 90.0}) {
     h = history();
     h.push(sample_at(base, kNow - 500, first, 1, 1));
     h.push(sample_at(base, kNow, 100 - first, 1, 1));
-    check(plot_columns(h, &history_sample::gpu_util, kNow, 4)[3] == 90, "a column shows its highest sample");
+    const plotted d = plot_series(h, &history_sample::gpu_util, kNow, 4, history::kSpanMs);
+    check(d.cols[3] == 50, "two samples in one column give their mean");
+    check(d.stats.max == 90 && d.stats.max_at == 3 && d.stats.max_count == 2 && d.stats.avg == 50, "the column keeps the window's maximum and how many samples it holds");
   }
+  // A joined gap of two columns takes the later sample in both: it stands for the time since the one before.
+  h = history();
+  h.push(sample_at(base, kNow - 1000, 20, 1, 1));
+  h.push(sample_at(base, kNow, 80, 1, 1));
+  std::vector<double> joined = plot_columns(h, &history_sample::gpu_util, kNow, 121);  // 2 columns a second
+  check(joined[120] == 80 && joined[119] == 80 && joined[118] == 20 && known_columns(joined) == 3, "a joined gap of two columns takes the later sample in both");
 
   // A repeated collector line measured nothing new.
   h = history();
@@ -549,10 +557,10 @@ void check_time_axis() {
 
   h = history();
   for (int i = 0; i < 2000; ++i) h.push(sample_at(base, kNow + i * 1000, 40, 1, 1));
-  check(h.samples().size() == 901 && h.samples().back().unix_ms - h.samples().front().unix_ms == 900000, "the ring keeps 15 minutes, both ends in");
+  check(h.samples().size() == 601 && h.samples().back().unix_ms - h.samples().front().unix_ms == 600000, "the ring keeps 10 minutes, both ends in");
   h = history();
   for (int i = 0; i < 5000; ++i) h.push(sample_at(base, kNow + i, 40, 1, 1));
-  check(h.samples().size() == 901, "the ring is bounded however fast it is pushed");
+  check(h.samples().size() == 601, "the ring is bounded however fast it is pushed");
 }
 
 // What the large layout of panel 3 reads, sample by sample. Everything here is by value: no frame draws it yet.
@@ -572,15 +580,15 @@ void check_history_ring() {
   check(std::isnan(plot_columns(h, &history_sample::gpu_util, kNow, kDots, 900000)[kDots / 2 - 2]), "and 400 s of 900 fill under half of it");
   h = history();
   for (int age = 2000; age >= 0; age -= 100) h.push(sample_at(base, kNow - age * 1000, 40, 1, 1));
-  check(h.samples().size() == 11 && h.samples().front().unix_ms == kNow - 1000000, "kept for 900 s, and the one sample before them");
+  check(h.samples().size() == 8 && h.samples().front().unix_ms == kNow - 700000, "kept for 600 s, and the one sample before them");
 
   // The slots never move once the first push has sized the ring.
   h = history();
   h.push(sample_at(base, kNow, 40, 1, 1));
   const history_sample* const ring = &h.samples().front();
   for (int i = 1; i < 3000; ++i) h.push(sample_at(base, kNow + i * 1000, 40, 1, 1));
-  bool same_block = h.samples().size() == 901;
-  for (const history_sample& p : h.samples()) same_block = same_block && &p >= ring && &p < ring + 901;
+  bool same_block = h.samples().size() == 601;
+  for (const history_sample& p : h.samples()) same_block = same_block && &p >= ring && &p < ring + 601;
   check(same_block, "a full ring writes over its own slots: nothing is allocated per sample");
 
   // Per-thread values, for each side, and NaN past what the sample read.
@@ -598,8 +606,8 @@ void check_history_ring() {
   snapshot narrow = base;
   narrow.cpu.core_pct.assign(2, 50.0);
   h = history();
-  for (int i = 0; i < 901; ++i) h.push(sample_at(wide, kNow + i * 1000, 40, 1, 1));
-  h.push(sample_at(narrow, kNow + 901000, 40, 1, 1));
+  for (int i = 0; i < 601; ++i) h.push(sample_at(wide, kNow + i * 1000, 40, 1, 1));
+  h.push(sample_at(narrow, kNow + 601000, 40, 1, 1));
   check(h.samples().back().windows_threads == 2 && std::isnan(h.samples().back().windows_core[2]) && std::isnan(h.samples().back().windows_core[63]), "a reused slot keeps no old thread");
   snapshot many = base;
   many.cpu.core_pct.assign(128, 50.0);
@@ -745,12 +753,12 @@ void check_buckets() {
   history h = bucket_history({{0, 50}});
   time_axis a = make_axis(h, kNow, 60000, 60);
   check(a.bucket_ms == 1000, "60 s over 60 cells is 1 s a cell");
-  const std::vector<double> first = bucket_cells(a, true, windows_busy);
+  const std::vector<double> first = bucket_cells(a, windows_busy);
   check(first[59] == 50 && known_columns(first) == 1, "a sample at the end is the right edge");
   for (int late = 0; late < 3000; late += 250) {
     const time_axis moved = make_axis(h, kNow + late, 60000, 60);
     const int64_t bucket = kNow / 1000, edge = (kNow + late) / 1000;
-    const std::vector<double> cells = bucket_cells(moved, true, windows_busy);
+    const std::vector<double> cells = bucket_cells(moved, windows_busy);
     check(cells[static_cast<size_t>(59 - (edge - bucket))] == 50, "a sample stays in its bucket, the block moves a whole cell");
   }
   a = make_axis(h, kNow, 60000, 43);
@@ -766,43 +774,44 @@ void check_buckets() {
   a = make_axis(h, bucket_start + 3000, 60000, 15);
   check(a.bucket_ms == 4000, "4 s cells");
   const size_t edge = 14;
-  check(bucket_cells(a, true, windows_busy)[edge] == 90, "a plot's cell is its highest sample, so no spike vanishes");
-  check(bucket_cells(a, false, windows_busy)[edge] == 40, "a heat cell is the mean, and NaN is not in it");
+  check(bucket_cells(a, windows_busy)[edge] == 40, "a cell is the mean, and NaN is not in it");
+  const window_stats st = bucket_stats(a, windows_busy);
+  check(st.max == 90 && st.max_at == static_cast<int>(edge) && st.max_count == 3 && std::fabs(st.avg - 40) < 1e-9, "the window's maximum is its highest sample, in its cell, and NaN is not counted");
 
   // Over the scale: clamped in the cell, as bars are.
   h = bucket_history({{0, 300}});
-  check(bucket_cells(make_axis(h, kNow, 60000, 60), true, windows_busy)[59] == 100, "over 100 clamps in a cell");
+  check(bucket_cells(make_axis(h, kNow, 60000, 60), windows_busy)[59] == 100, "over 100 clamps in a cell");
 
   // Cells narrower than a second: what is between two close samples takes the earlier one.
   h = bucket_history({{1000, 70}, {0, 30}});
   a = make_axis(h, kNow, 60000, 240);
   check(a.bucket_ms == 250, "4 cells a second");
-  std::vector<double> cells = bucket_cells(a, true, windows_busy);
+  std::vector<double> cells = bucket_cells(a, windows_busy);
   check(cells[239] == 30 && cells[238] == 70 && cells[236] == 70 && cells[235] == 70 && std::isnan(cells[234]), "a wide terminal does not stripe");
   h = bucket_history({{1500, 70}, {0, 30}});
-  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy)) == 7, "samples kGapMs apart join");
+  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy)) == 7, "samples kGapMs apart join");
   h = bucket_history({{1501, 70}, {0, 30}});
-  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy)) == 2, "samples further apart do not");
+  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy)) == 2, "samples further apart do not");
   h = bucket_history({{2000, 70}, {1000, kNaN}, {0, 30}});
-  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy)) == 2, "a sample that measured nothing breaks the join");
+  check(known_columns(bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy)) == 2, "a sample that measured nothing breaks the join");
 
   // A gap as wide as a cell shows; a narrower one is inside a cell.
   h = bucket_history({{40000, 70}, {39000, 70}, {3000, 30}, {2000, 30}});
-  cells = bucket_cells(make_axis(h, kNow, 60000, 60), false, windows_busy);
+  cells = bucket_cells(make_axis(h, kNow, 60000, 60), windows_busy);
   check(std::isnan(cells[40]) && !std::isnan(cells[59 - 3]) && !std::isnan(cells[59 - 40]), "a stall is blank cells, never 0");
   h = bucket_history({{20000, 70}, {16000, 70}});
-  check(known_columns(bucket_cells(make_axis(h, kNow, 900000, 45), false, windows_busy)) == 1, "a gap inside a 20 s cell is not visible");
+  check(known_columns(bucket_cells(make_axis(h, kNow, 900000, 45), windows_busy)) == 1, "a gap inside a 20 s cell is not visible");
 
   // The left edge: the sample before it joins, and nothing is drawn from it.
   h = bucket_history({{60500, 70}, {59500, 20}});
-  cells = bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy);
+  cells = bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy);
   check(cells[0] == 70 && cells[1] == 20 && known_columns(cells) == 2, "the left edge starts from the sample before it");
   h = bucket_history({{61500, 10}, {60500, 70}, {59500, 20}});
-  check(bucket_cells(make_axis(h, kNow, 60000, 240), true, windows_busy)[0] == 70, "the newest sample before it, not the oldest");
+  check(bucket_cells(make_axis(h, kNow, 60000, 240), windows_busy)[0] == 70, "the newest sample before it, not the oldest");
   h = bucket_history({{120000, 70}, {119000, 70}, {1000, 30}});
   a = make_axis(h, kNow, 60000, 60);
   check(a.samples.size() == 2 && a.cell[0] < 0, "one sample before the left edge is kept, no more");
-  check(known_columns(bucket_cells(a, true, windows_busy)) == 1, "and a far one does not reach the axis");
+  check(known_columns(bucket_cells(a, windows_busy)) == 1, "and a far one does not reach the axis");
 }
 
 void check_scale() {
@@ -1017,7 +1026,7 @@ void check_graph_rule() {
   for (int age = 10; age >= 0; --age) stepped.push(rule_sample(kNow - age * 1000, 0, age));
   stepped.push(rule_sample(kNow - 3600000, 0, 11));
   check(stepped.watched_from_ms() == stepped.samples().front().unix_ms, "a backward step moves when watching began with the samples");
-  // A stall of 120 s: under the 15 minutes kept, so the samples stay, placed 120 s back, for the longer
+  // A stall of 120 s: under the 10 minutes kept, so the samples stay, placed 120 s back, for the longer
   // span; on the minute's graph it is a gap.
   snapshot stall = rule_sample(kNow - 7200000, 0, 12);
   stall.interval_s = 120;
@@ -1859,7 +1868,7 @@ void check_large_mockup() {
     ++n;
   }
   for (int r = 0; r < 10; ++r) check(columns(as_text({f[static_cast<size_t>(14 + r)]}), 51, 5) == pad("v" + std::to_string(2 * r), 4) + "│", "row v" + std::to_string(2 * r));
-  check(columns(as_text({f[24]}), 5) == "-60s ──────── each cell 1.4 s ───────── now │      -60s ──────── each cell 1.4 s ───────── now", "the axis under both blocks");
+  check(columns(as_text({f[24]}), 5) == "-60s ───── busy avg 61% max 100% ────── now │      -60s ───── busy avg 61% max 100% ────── now", "the axis under both blocks, with each busy plot's average and maximum");
   row_is(25, "Windows  top 6 of 46 by cores                    │ WSL  top 6 of 64 by cores, dxg: no usage measured");
   row_is(26, " cores     pid name            thr WS GiB        │  cores     pid name        thr RSS GiB st dxg");
   row_is(27, " 13.25   31000 cpu_burn.exe     21    0.1        │  19.72    4121 cpu_burn     21     0.1  R");
@@ -2321,13 +2330,12 @@ void check_large_states() {
   launch.unix_ms = base.unix_ms;
   launch.lost = {lost_state::collecting, kNaN};
   std::vector<line> f = large(launch, young);
-  check(has(axis_of(f), "collecting: 8 s of 60 s"), "the axis counts up to the span");
+  // The faint · says how much was watched; the axis no longer counts it (design/panel-grammar.md part 5).
+  check(has(axis_of(f), "busy avg") && !has(as_text(f), "collecting:"), "a fresh launch labels what it has, and counts nothing");
   check(has(as_text(f), "lost CPU collecting") && has(as_text(f), "100%  WINDOWS") && has(as_text(f), "VM ran 5.76"), "instant figures are valid from the first sample");
-  check(has(as_text(large(launch, history())), "collecting: 0 s of 60 s"), "no history yet");
-  check(!has(axis_of(large(base, full)), "collecting"), "a full span has done collecting");
-  check(has(as_text(large(base, full, 100, 34, options_for(300))), "collecting: 60 s of 300 s"), "a longer span collects longer");
-  const history nearly = contended_history(base, 899);
-  check(!has(as_text(large(base, nearly, 100, 34, options_for(900))), "collecting"), "a ring just short of 15 minutes is full: the axis must not count for ever");
+  const std::string none = axis_of(large(launch, history()));
+  check(has(none, "-60s ─") && has(none, "─ now") && !has(none, "avg") && !has(none, "collecting"), "no history yet: no label, no count");
+  check(!has(as_text(large(base, full, 100, 34, options_for(300))), "collecting"), "a longer span counts nothing either");
 
   // WSL starting.
   snapshot starting = base;
@@ -2601,58 +2609,69 @@ void check_large_bytes() {
 
 void check_span_key() {
   const snapshot s = contended();
-  const history h = contended_history(s, 900);
+  const history h = contended_history(s, 600);
   render_options wired;
   wired.span_key = true;
 
-  check(next_span(60000) == 300000 && next_span(300000) == 900000 && next_span(900000) == 60000, "t steps 60 s, 5 min, 15 min, and wraps");
+  check(next_span(60000) == 300000 && next_span(300000) == 600000 && next_span(600000) == 60000, "t steps 1, 5 and 10 minutes, and wraps");
   check(next_span(12345) == 60000, "a span it does not know starts over");
 
   // Only when the caller says the key is wired, and only where it does something.
   check(!has(as_text(large(s, h, 100, 34)), "[t]"), "no dead key: without the option the footer has no [t]");
   check(has(as_text({large(s, h, 100, 34, wired).back()}), "[1] overall  [2] gpu  [3] cpu  [t] span 60s  [q] quit"), "the footer of section 6");
-  for (const int span_s : {300, 900}) {
+  for (const int span_s : {300, 600}) {
     render_options o = options_for(span_s);
-    const std::string t = as_text(large(s, h, 100, 34, o));
-    const std::string name = span_s == 300 ? "5m" : "15m";
+    const std::string t = as_text(large(s, h, 131, 40, o));
+    const std::string name = span_s == 300 ? "5m" : "10m";
     check(has(t, "[t] span " + name), "the footer says the span");
     check(has(t, "-" + name + " ─"), "the axis says the span");
-    check(has(t, span_s == 300 ? "peak over mean · 7 s" : "peak over mean · 21 s"), "past 60 s the axis says what a cell is");
-    check(!has(t, "each cell"), "and not the 60 s wording");
+    const std::string busy = span_s == 300 ? "busy avg 100% max 100%" : "busy avg 60% max 100%";
+    check(has(t, busy + (span_s == 300 ? " · each cell 5.1 s" : " · each cell 10 s")), "past 60 s the axis says what a cell is");
+    check(!has(t, "peak over mean") && !has(t, "collecting"), "and not the old captions");
+    check(has(as_text(large(s, h, 100, 34, o)), busy + " ─") && !has(as_text(large(s, h, 100, 34, o)), "each cell"), "where both do not fit, the cell's length goes first");
   }
-  for (const view v : {view::overall, view::gpu}) {
-    check(!has(as_text(render(s, 131, 40, kNow, &h, v, wired)), "[t]"), "t is absent from the other panels");
-    check(!span_key_acts(s, h, v, 131, 40), "and does nothing there");
-    check(as_text(render(s, 131, 40, kNow, &h, v, options_for(900))) != "" , "those panels ignore a span");
-  }
+  check(!has(as_text(render(s, 131, 40, kNow, &h, view::overall, wired)), "[t]") && !span_key_acts(s, h, view::overall, 131, 40), "t is absent from panel 1, which has no graph");
+  check(as_text(render(s, 131, 40, kNow, &h, view::overall, options_for(600))) == as_text(render(s, 131, 40, kNow, &h, view::overall)), "and panel 1 ignores the range");
+  // Panel 2 and the small layout of panel 3 draw over the range too.
   const std::string plain = as_text(render(s, 131, 40, kNow, &h, view::gpu));
-  render_options unwired;
-  unwired.span_ms = 900000;
-  check(as_text(render(s, 131, 40, kNow, &h, view::gpu, unwired)) == plain, "panel 2 stays at 60 s whatever the span");
-  check(!has(as_text(render(s, 99, 40, kNow, &h, view::cpu, wired)), "[t]") && !span_key_acts(s, h, view::cpu, 99, 40), "t does nothing in the small layout");
-  check(!has(as_text(render(s, 100, 26, kNow, &h, view::cpu, wired)), "[t]") && !span_key_acts(s, h, view::cpu, 100, 26), "nor below the height floor");
+  check(has(plain, "-60s ") && !has(plain, "-5m ") && !has(plain, "[t]"), "panel 2 is at 1 minute by default, and offers no dead key");
+  for (const int span_s : {300, 600}) {
+    render_options o = options_for(span_s);
+    o.span_key = true;
+    const std::string name = span_s == 300 ? "5m" : "10m";
+    const std::string g = as_text(render(s, 131, 40, kNow, &h, view::gpu, o)), c = as_text(render(s, 99, 40, kNow, &h, view::cpu, o));
+    check(has(g, "-" + name + " ─") && !has(g, "-60s") && has(g, "[t] span " + name), "panel 2 draws over the range and says so");
+    check(has(c, "-" + name + " ─") && !has(c, "-60s") && has(c, "[t] span " + name), "the small layout draws over the range and says so");
+  }
+  check(span_key_acts(s, h, view::gpu, 131, 40) && has(as_text(render(s, 131, 40, kNow, &h, view::gpu, wired)), "[t]"), "t acts on panel 2");
+  check(has(as_text(render(s, 99, 40, kNow, &h, view::cpu, wired)), "[t]") && span_key_acts(s, h, view::cpu, 99, 40), "t acts in the small layout");
+  check(has(as_text(render(s, 100, 26, kNow, &h, view::cpu, wired)), "[t]") && span_key_acts(s, h, view::cpu, 100, 26), "and below the height floor");
   check(span_key_acts(s, h, view::cpu, 100, 27) && has(as_text(render(s, 100, 27, kNow, &h, view::cpu, wired)), "[t]"), "at the floor it acts");
   check(span_key_acts(s, h, view::cpu, 100, 34), "and at the design's size");
 
-  // A span shows the samples it covers: 15 minutes reach back past the 60 s the default shows.
-  const std::vector<line> shortest = large(s, h, 100, 34), longest = large(s, h, 100, 34, options_for(900));
+  // A span shows the samples it covers: 10 minutes reach back past the 60 s the default shows.
+  const std::vector<line> shortest = large(s, h, 100, 34), longest = large(s, h, 100, 34, options_for(600));
   check(cells_of(line_at(shortest, 0, "P0"))[5].fg == 179, "60 s of a long load are all hot");
-  check(cells_of(line_at(longest, 0, "P0"))[5].fg == 236, "15 minutes reach back past its onset");
-  // Peak over mean: a burst shows in the plot, not in the block.
+  check(cells_of(line_at(longest, 0, "P0"))[5].fg == 236, "10 minutes reach back past its onset");
+  // A burst: the cell is its mean, the label and one dot say how high.
   snapshot burst = contended();
-  const history bh = build_history(burst, 900, [&](snapshot& t, int age, int seq) {
+  const history bh = build_history(burst, 600, [&](snapshot& t, int age, int seq) {
     quiet_moment(t, seq);
     if (age % 40 == 20) {
       t.cpu.busy_pct = 100;
       t.cpu.core_pct.assign(20, 100.0);
     }
   });
-  const std::vector<line> bf = large(burst, bh, 100, 34, options_for(900));
-  check(has(as_text({line_at(bf, 0, "100 ")}), "⣿"), "a one-second burst reaches the top of a 21 s plot cell");
+  const std::vector<line> bf = large(burst, bh, 100, 34, options_for(600));
+  const std::string burst_top = columns(as_text({line_at(bf, 0, "100 ")}), 5, 43);
+  check(count_braille(burst_top) == 1 && has(burst_top, "⠈"), "a one-second burst in a 14 s cell is its mean, and the latest one's cell carries the maximum's dot: " + burst_top);
+  check(display_width(burst_top.substr(0, burst_top.find("⠈"))) == 41, "the dot is in the latest burst's cell, 20 s before now");
+  check(has(as_text(bf), "busy avg 6% max 100%"), "the label says how high it went");
   const std::vector<painted> burst_row = cells_of(line_at(bf, 0, "P0"));
   check(std::none_of(burst_row.begin(), burst_row.begin() + 48, [](const painted& c) { return c.fg == 179; }), "and does not paint 20 seconds hot");
 
-  // Peak in every plot, mean in every lane: one bucket of 21 s, one sample high among quiet ones.
+  // The mean in every plot and lane, and in each plot the maximum's dot: one bucket of 14 s, one sample high
+  // among quiet ones.
   const auto spike = [&](snapshot& t, int age, int seq) {
     quiet_moment(t, seq);
     const bool high = age == 200;  // In the middle of a full bucket
@@ -2666,17 +2685,20 @@ void check_span_key() {
     t.memory.available = t.memory.total / (high ? 20 : 2);
     t.cpu_derived.own_kernel_pct = high ? 95 : 3;
   };
-  const history sh = build_history(burst, 900, spike);
-  const std::vector<line> sf = large(burst, sh, 100, 40, options_for(900)), lean = large(burst, sh, 120, 30, options_for(900));
-  const auto reaches_top = [&](const char* start, int side) { return has(columns(as_text({line_at(sf, side, start)}), side + 5, 43), "⣿"); };
+  const history sh = build_history(burst, 600, spike);
+  const std::vector<line> sf = large(burst, sh, 100, 40, options_for(600)), lean = large(burst, sh, 120, 30, options_for(600));
+  const auto marked_once = [&](const char* start, int side) {
+    const std::string top = columns(as_text({line_at(sf, side, start)}), side + 5, 43);
+    return count_braille(top) == 1 && has(top, "⠈");
+  };
   const auto any_hot = [](const line& l, int from, int cells_wide = 43) {
     const std::vector<painted> cells = cells_of(l);
     return std::any_of(cells.begin() + from, cells.begin() + from + cells_wide, [](const painted& c) { return c.fg == 179; });
   };
-  check(reaches_top("100 │", 0), "the Windows busy plot takes the peak");
-  check(reaches_top("100 │", kRight(100)), "the WSL busy plot takes the peak");
-  check(reaches_top("RAM │", 0), "the Windows RAM plot takes the peak");
-  check(reaches_top("RAM │", kRight(100)), "the WSL RAM plot takes the peak");
+  check(marked_once("100 │", 0), "the Windows busy plot takes the mean, and one dot marks its maximum");
+  check(marked_once("100 │", kRight(100)), "the WSL busy plot too");
+  check(marked_once("RAM │", 0), "the Windows RAM plot too");
+  check(marked_once("RAM │", kRight(100)), "the WSL RAM plot too");
   check(!any_hot(line_at(sf, 0, "kern"), 5), "the kern lane takes the mean");
   check(!any_hot(line_at(sf, kRight(100), "iowt"), kRight(100) + 5), "the iowait lane takes the mean");
   check(!any_hot(line_at(lean, 0, "RAM │"), 5, 53), "a RAM lane takes the mean");
@@ -2744,7 +2766,7 @@ void check_large_sweep() {
     snapshot s;
     history h;
     cpu_fixture(name, 60, s, h);
-    for (const int span_s : {60, 900}) {
+    for (const int span_s : {60, 600}) {
       const render_options o = options_for(span_s);
       for (int w = 100; w <= 300; w += 7) {
         for (int rows = 17; rows <= 66; ++rows) {
@@ -2984,13 +3006,13 @@ void check_graph_rule_buckets() {
   const time_axis a1 = make_axis(one, kNow, 60000, 60), a2 = make_axis(edge, kNow, 60000, 60);
   check(unwatched_cells(one, a1) == 50 && a1.cell.size() == 1 && a1.cell[0] == 50, "unwatched stops at the first sample's bucket");
   check(unwatched_cells(edge, a2) == 49 && a2.cell.size() == 1 && a2.cell[0] == 49, "a millisecond earlier is the bucket before");
-  check(unwatched_cells(one, make_axis(one, kNow + 900000, 900000, 59)) == 0, "15 minutes later nothing is unwatched");
+  check(unwatched_cells(one, make_axis(one, kNow + 600000, 600000, 59)) == 0, "10 minutes later nothing is unwatched");
 
   // A fresh start on both spans, in the large layout: dots up to the first sample's cell, both busy plots
   // and both RAM plots alike, nothing above a plot's bottom row, nothing in the heat block or the lanes.
   history fresh;
   for (int age = 9; age >= 0; --age) fresh.push(rule_sample(kNow - age * 1000, 50, age));
-  for (const int span_s : {60, 900}) {
+  for (const int span_s : {60, 600}) {
     for (const auto& [w, h] : {std::pair{100, 34}, std::pair{131, 40}, std::pair{200, 60}}) {
       const std::string n = " " + std::to_string(span_s) + " s " + std::to_string(w) + "x" + std::to_string(h);
       const std::vector<line> f = render(rule_sample(kNow, 50, 99), w, h, kNow, &fresh, view::cpu, options_for(span_s));
@@ -3018,18 +3040,18 @@ void check_graph_rule_buckets() {
     }
   }
 
-  // A measured 0 for the whole 15 minutes is ⣀ in every cell of both busy plots.
+  // A measured 0 for the whole 10 minutes is ⣀ in every cell of both busy plots.
   history zero;
-  for (int age = 900; age >= 0; --age) zero.push(rule_sample(kNow - age * 1000, 0, age));
-  const std::vector<line> zf = render(rule_sample(kNow, 0, 999), 131, 40, kNow, &zero, view::cpu, options_for(900));
+  for (int age = 600; age >= 0; --age) zero.push(rule_sample(kNow - age * 1000, 0, age));
+  const std::vector<line> zf = render(rule_sample(kNow, 0, 999), 131, 40, kNow, &zero, view::cpu, options_for(600));
   for (int g = 0; g < 2; ++g) {
     const std::vector<cell> cs = bottom_cells(zf, g);
     bool line_of_zero = !cs.empty();
     for (const cell& c : cs) line_of_zero = line_of_zero && c.text == "⣀" && c.color == tone::bar;
-    check(line_of_zero, "a measured 0 over 15 minutes is ⣀ in the bar tone, graph " + std::to_string(g));
+    check(line_of_zero, "a measured 0 over 10 minutes is ⣀ in the bar tone, graph " + std::to_string(g));
   }
 
-  // A stall of 120 s with the wall clock 100 s behind: a gap on the minute's axis, and on 15 minutes the
+  // A stall of 120 s with the wall clock 100 s behind: a gap on the minute's axis, and on 10 minutes the
   // samples keep their place, with dots only before they began.
   history partial;
   for (int age = 9; age >= 0; --age) partial.push(rule_sample(kNow - 120000 - age * 1000, 50, age));
@@ -3037,7 +3059,7 @@ void check_graph_rule_buckets() {
   late.unix_ms = kNow - 100000;
   late.interval_s = 120;
   partial.push(late);
-  for (const int span_s : {60, 900}) {
+  for (const int span_s : {60, 600}) {
     const std::vector<line> f = render(late, 131, 40, kNow - 100000, &partial, view::cpu, options_for(span_s));
     const std::vector<cell> cs = bottom_cells(f, 0);
     const time_axis axis = make_axis(partial, kNow - 100000, span_s * 1000LL, static_cast<int>(cs.size()));
@@ -3045,19 +3067,19 @@ void check_graph_rule_buckets() {
     if (span_s == 60) {
       check(!cs.empty() && first == static_cast<int>(cs.size()) - 1 && std::count_if(cs.begin(), cs.end(), is_dot) == 0, "a stall on the minute's axis is a gap, not dotted");
     } else {
-      check(!cs.empty() && first == unwatched_cells(partial, axis) && first == axis.cell.front() && alternate(cs, first), "on 15 minutes, dots end where the shifted samples begin");
+      check(!cs.empty() && first == unwatched_cells(partial, axis) && first == axis.cell.front() && alternate(cs, first), "on 10 minutes, dots end where the shifted samples begin");
     }
   }
 
-  // A stall of all that is kept, on 15 minutes: a gap across the axis, no dots.
+  // A stall of all that is kept, on 10 minutes: a gap across the axis, no dots.
   history cleared;
   for (int age = 9; age >= 0; --age) cleared.push(rule_sample(kNow - 2000000 - age * 1000, 50, age));
   snapshot after = rule_sample(kNow, 50, 10);
   after.interval_s = static_cast<double>(history::kKeepMs) / 1000.0;
   cleared.push(after);
-  const std::vector<cell> cc = bottom_cells(render(after, 131, 40, kNow, &cleared, view::cpu, options_for(900)), 0);
+  const std::vector<cell> cc = bottom_cells(render(after, 131, 40, kNow, &cleared, view::cpu, options_for(600)), 0);
   check(cleared.samples().size() == 1 && !cc.empty() && std::count_if(cc.begin(), cc.end(), is_dot) == 0 && lead(cc) == static_cast<int>(cc.size()) - 1,
-        "a stall of what is kept is a gap across 15 minutes, not dotted");
+        "a stall of what is kept is a gap across 10 minutes, not dotted");
 
   // The wall clock a little short of interval_s is jitter and moves nothing; past kStepMs it stepped back.
   history jitter;
@@ -3073,12 +3095,172 @@ void check_graph_rule_buckets() {
         "1.5 s short of interval_s is a step back: the samples and when watching began move");
 }
 
+// design/panel-grammar.md part 5: mean cells, the maximum's dot, window-wide avg and max, scale by measure,
+// over 100 drawn at the ceiling and printed as measured.
+void check_graph_labels() {
+  const snapshot base = busy();
+  const auto util_history = [&](int seconds, const std::vector<std::pair<int, double>>& spikes) {
+    history h;
+    for (int age = seconds; age >= 0; --age) {
+      double v = 0;
+      for (const auto& [at, high] : spikes) v = age == at ? high : v;
+      h.push(rule_sample(kNow - age * 1000, v, age));
+    }
+    return h;
+  };
+  const auto top_row_braille = [](const std::vector<std::string>& rows) { return count_braille(rows.front()); };
+
+  // One 100 among 0s over 10 minutes: the cell is its mean, the label its maximum, and one dot says where.
+  const history spike = util_history(600, {{300, 100}});
+  plotted d = plot_series(spike, &history_sample::gpu_util, kNow, 78, 600000);
+  check(d.stats.max == 100 && d.stats.max_count > 1 && d.cols[static_cast<size_t>(d.stats.max_at)] < 100 && d.cols[static_cast<size_t>(d.stats.max_at)] > 0, "10 minutes: the spike's column is a mean under 100");
+  std::vector<std::string> rows = plot_rows(d.cols, 12, max_mark(d.stats), d.stats.max);
+  check(top_row_braille(rows) == 1 && (has(rows.front(), "⠁") || has(rows.front(), "⠈")), "and that column alone has one dot at the top");
+  int upper = 0;
+  for (size_t y = 0; y + 2 < rows.size(); ++y) upper += count_braille(rows[y]);
+  check(upper == 1, "no other cell has a dot above its mean");
+  const std::vector<std::string> unmarked = plot_rows(d.cols, 12);
+  check(top_row_braille(unmarked) == 0, "without the mark the spike would read as nearly idle");
+  // At 1 minute every sample has its own column: the column is the spike, and no dot is added.
+  const history recent = util_history(60, {{30, 100}});
+  d = plot_series(recent, &history_sample::gpu_util, kNow, 78, 60000);
+  check(d.stats.max == 100 && d.stats.max_count == 1 && max_mark(d.stats) == -1, "1 minute: the maximum's column holds one sample, so no dot");
+  rows = plot_rows(d.cols, 12, max_mark(d.stats), d.stats.max);
+  check(rows == plot_rows(d.cols, 12) && top_row_braille(rows) == 1, "and the column itself reaches the top");
+  // Two cells holding the maximum: the later.
+  const history twice = util_history(600, {{400, 100}, {100, 100}});
+  d = plot_series(twice, &history_sample::gpu_util, kNow, 78, 600000);
+  const plotted only_later = plot_series(util_history(600, {{100, 100}}), &history_sample::gpu_util, kNow, 78, 600000);
+  check(d.stats.max_at == only_later.stats.max_at && d.stats.max_at > 39, "two cells at the maximum: the later one carries the dot");
+  rows = plot_rows(d.cols, 12, max_mark(d.stats), d.stats.max);
+  check(top_row_braille(rows) == 1, "and only one dot is drawn");
+  // A cell whose mean already reaches the maximum's dot row gets none.
+  check(plot_rows({50, 50}, 1, 0, 60) == plot_rows({50, 50}, 1), "a mean at the maximum's dot row: no dot");
+  check(plot_rows({50, 50}, 1, 0, 100) != plot_rows({50, 50}, 1), "a maximum above it: a dot");
+  check(plot_rows({kNaN, kNaN}, 1, 0, 100) == plot_rows({kNaN, kNaN}, 1), "a gap never takes a dot");
+  check(plot_rows({100, 100}, 2, 1, 300) == plot_rows({100, 100}, 2), "a maximum over the ceiling is drawn at it, not past it");
+  // Through panel 2, at 10 minutes: one dot on the device graph's top row, and the label.
+  render_options ten = options_for(600);
+  const std::vector<line> pf = render(rule_sample(kNow, 0, 999), 131, 40, kNow, &spike, view::gpu, ten);
+  const std::string top = panel_cells(upper_graph_rows(as_text(pf)).substr(0, upper_graph_rows(as_text(pf)).find('\n') + 1), 0);
+  check(count_braille(top) == 1, "panel 2 at 10 minutes: the maximum's dot on the device graph's top row: " + top);
+  check(has(line_with(pf, "-10m"), "max 100%"), "and the label says 100");
+
+  // avg and max, from the samples, by hand.
+  history hand;
+  for (const double v : {10.0, 20.0, 30.0, 40.0}) hand.push(rule_sample(kNow - static_cast<int64_t>(4 - v / 10) * 1000, v, static_cast<int>(v)));
+  const window_stats st = series_stats(hand, &history_sample::gpu_util, kNow, 60000);
+  check(st.avg == 25 && st.max == 40, "avg 25 and max 40 of 10, 20, 30, 40");
+  check(has(line_with(render(rule_sample(kNow, 40, 99), 131, 40, kNow, &hand, view::gpu), "-60s"), "avg 25% max 40%"), "and the device graph says so");
+  check(std::isnan(series_stats(hand, &history_sample::gpu_util, kNow + 61000, 60000).avg), "a window with no sample has no figures");
+  history gaps;
+  for (int age = 60; age >= 0; --age) gaps.push(sample_at(bare(), kNow - age * 1000, 0, 0, 0));
+  const std::string blank = as_text(render(bare(), 131, 40, kNow, &gaps, view::gpu));
+  check(!has(blank, "avg") && !has(blank, "max"), "no label where every sample in the range is a gap");
+  check(has(as_text(render(bare(), 99, 40, kNow, &gaps, view::cpu)), "avg") && !has(panel_cells(graph_rows(as_text(render(bare(), 99, 40, kNow, &gaps, view::cpu))), 1), "⣀"), "the Windows graph is labelled while the WSL one, with no line, is blank");
+
+  // Over 100: drawn at the ceiling, printed as measured in the watch tone, and the split's * with its caption.
+  const history demo = demo_minute(base);
+  const std::vector<line> df = render(base, 131, 40, kNow, &demo, view::gpu);
+  bool watched = false, plain_max = true;
+  for (const line& l : df) {
+    for (const span& p : l) {
+      if (p.text == "112%*") watched = p.color == tone::watch;
+      if (has(p.text, "max 95%") || p.text == "95%") plain_max = plain_max && p.color != tone::watch;
+    }
+  }
+  check(watched, "demo_minute: max 112%* in the watch tone");
+  check(plain_max, "a maximum under the ceiling is not");
+  check(has(as_text(df), "VM level, not exact shares*") && has(as_text(df), "avg 37% max 112%*"), "the caption carries the * beside the split's label");
+  const std::string panel_1 = as_text(render(base, 131, 40, kNow, &demo, view::overall));
+  check(!has(panel_1, "shares*"), "panel 1 has no graph, so no *");
+  history under;
+  for (int age = 60; age >= 0; --age) under.push(sample_at(base, kNow - age * 1000, 50, 100, 40));
+  const std::string uf = as_text(render(base, 131, 40, kNow, &under, view::gpu));
+  check(!has(uf, "*") && has(uf, "max 100%"), "every split value at or under 100: no * anywhere");
+  history over_windows;
+  for (int age = 60; age >= 0; --age) over_windows.push(sample_at(base, kNow - age * 1000, 50, 30, age == 10 ? 104 : 40));
+  const std::string ow = as_text(render(base, 131, 40, kNow, &over_windows, view::gpu));
+  check(has(ow, "max 104%*") && has(ow, "shares*"), "the Windows side over 100 carries it too");
+  check(!has(as_text(render(base, 131, 40, kNow, &over_windows, view::gpu, options_for(60))), "max 30%*"), "a side under 100 has no * of its own");
+  history hot_power;
+  for (int age = 60; age >= 0; --age) {
+    snapshot p = sample_at(base, kNow - age * 1000, 50, 30, 40);
+    p.gpu_device.power_w = age == 5 ? 210 : 150;
+    hot_power.push(p);
+  }
+  bool power_watched = false;
+  for (const line& l : render(base, 131, 40, kNow, &hot_power, view::gpu)) {
+    for (const span& p : l) power_watched = power_watched || (p.text == "210 W" && p.color == tone::watch);
+  }
+  check(power_watched, "power over its limit: the watts in the watch tone, and no *, which only the split explains");
+  // The memory and power labels are in their own units, from the samples, not from the heights.
+  double gib_sum = 0, gib_max = 0, w_max = 0;
+  int n = 0;
+  for (const history_sample& p : demo.samples()) {
+    gib_sum += p.gpu_mem_gib;
+    gib_max = std::max(gib_max, p.gpu_mem_gib);
+    w_max = std::max(w_max, p.gpu_power_w);
+    ++n;
+  }
+  check(has(as_text(df), fmt("avg %.1f max %.1f GiB", gib_sum / n, gib_max)) && has(as_text(df), fmt("max %.0f W", w_max)), "memory in GiB and power in W, worked out by hand");
+  snapshot limitless = base;
+  limitless.gpu_device.power_limit_w = 0;
+  limitless.unix_ms = kNow;
+  history nl;
+  nl.push(limitless);
+  check(std::isnan(nl.samples().back().gpu_power_w) && !has(line_with(render(limitless, 131, 40, kNow, &nl, view::gpu), " W ─"), "W"), "no limit, no height: no label either");
+  snapshot huge = base;
+  huge.gpu_split = {true, 1e300, -5, 1, 1};
+  huge.unix_ms = kNow;
+  history hh;
+  hh.push(huge);
+  const std::string ht = as_text(render(huge, 131, 50, kNow, &hh, view::gpu));
+  check(has(ht, "max 1e+300%*") && has(ht, "avg -5% max -5%"), "huge and negative figures are printed as measured: " + line_with(render(huge, 131, 50, kNow, &hh, view::gpu), "-60s"));
+
+  // Scale by measure: 1, 2 or 5 times a power of ten, never below the floor.
+  const struct { double max, floor, top; } scales[] = {{13.25, 0.05, 20}, {0.01, 0.05, 0.05}, {1, 0.05, 1}, {1.0001, 0.05, 2}, {2.5, 0.05, 5}, {7, 0.05, 10},
+                                                       {0, 0.05, 0.05}, {kNaN, 0.05, 0.05}, {100, 0.05, 100}, {0.051, 0.05, 0.1}, {-3, 0.05, 0.05}, {kInf, 0.05, 0.05}};
+  for (const auto& sc : scales) check(scale_top(sc.max, sc.floor) == sc.top, fmt("scale %g for %g", sc.top, sc.max));
+  check(plot_rows({10, 10}, 1, -1, 0, 20) == plot_rows({50, 50}, 1), "a scaled graph draws its value against its top");
+
+  // No minimum and no old caption anywhere; every labelled axis keeps its range and now, at every width.
+  snapshot c;
+  history ch;
+  cpu_fixture("contended", 600, c, ch);
+  for (const int64_t span_ms : kSpansMs) {
+    render_options o;
+    o.span_ms = span_ms;
+    const std::string range = "-" + span_text(span_ms) + " ";
+    for (int w = 36; w <= 300; w += 7) {
+      for (const view v : {view::gpu, view::cpu}) {
+        for (const auto& [sn, hn] : {std::pair<const snapshot*, const history*>{&base, &demo}, {&c, &ch}}) {
+          const std::vector<line> f = render(*sn, w, 40, kNow, hn, v, o);
+          const std::string t = as_text(f);
+          const std::string at = " " + std::to_string(w) + " " + range;
+          check(!has(t, "min ") && !has(t, "peak over mean") && !has(t, "collecting:"), "no minimum and no old caption" + at);
+          for (const line& l : f) {
+            const std::string row_text = as_text({l});
+            if (!has(row_text, range)) continue;
+            size_t ranges = 0, nows = 0;
+            for (size_t i = row_text.find(range); i != std::string::npos; i = row_text.find(range, i + 1)) ++ranges;
+            for (size_t i = row_text.find(" now"); i != std::string::npos; i = row_text.find(" now", i + 1)) ++nows;
+            check(ranges == nows, "every axis keeps its range and now" + at);
+            const size_t avg = row_text.find("avg ");
+            if (avg != std::string::npos) check(row_text.find(range) < avg && avg < row_text.find(" now"), "the label sits between them" + at);
+          }
+        }
+      }
+    }
+  }
+}
+
 }  // namespace
 
 // Frame bytes, and the time to build one from a snapshot: render() and vt_frame(), no terminal.
 int measure_frames() {
   for (const char* name : {"contended", "idle", "stale", "noisy"}) {
-    for (const int span_s : {60, 900}) {
+    for (const int span_s : {60, 600}) {
       for (const auto& [w, rows] : {std::pair{131, 40}, std::pair{100, 34}}) {
         snapshot s;
         history h;
@@ -3092,6 +3274,18 @@ int measure_frames() {
         printf("%-10s %3d s %dx%d  %6zu bytes  %.3f ms a frame\n", name, span_s, w, rows, bytes, took.count() / kFrames);
       }
     }
+  }
+  for (const int span_s : {60, 600}) {  // Panel 2: five graphs, each with its label and the maximum's dot
+    snapshot s;
+    history h;
+    cpu_fixture("noisy", span_s, s, h);
+    const render_options o = options_for(span_s);
+    size_t bytes = 0;
+    constexpr int kFrames = 300;
+    const auto from = std::chrono::steady_clock::now();
+    for (int i = 0; i < kFrames; ++i) bytes = vt_frame(render(s, 131, 40, kNow, &h, view::gpu, o), 40).size();
+    const std::chrono::duration<double, std::milli> took = std::chrono::steady_clock::now() - from;
+    printf("panel 2    %3d s 131x40  %6zu bytes  %.3f ms a frame\n", span_s, bytes, took.count() / kFrames);
   }
   for (const int threads : {40, 64}) {
     const snapshot s = noisy_now(threads);
@@ -3111,7 +3305,7 @@ int main(int argc, char** argv) {
   if (argc == 3) {  // The panels on the real console, keys as the program has them
     snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
     history demo = demo_minute(s);
-    const bool fixture = cpu_fixture(argv[1], 900, s, demo);
+    const bool fixture = cpu_fixture(argv[1], 600, s, demo);
     console c;
     view v = fixture ? view::cpu : view::overall;
     int w = 131, h = 40;
@@ -3204,6 +3398,7 @@ int main(int argc, char** argv) {
   check_span_key();
   check_large_captions();
   check_graph_rule_buckets();
+  check_graph_labels();
   if (!quick) {
     check_denied_note();
     check_holder_wording();
