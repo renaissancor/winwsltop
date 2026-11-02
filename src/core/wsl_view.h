@@ -21,7 +21,8 @@ struct wsl_process {
   // send it, which cannot be taken as measured. PROTOCOL.md, processes.
   bool rated = false;
   // Identity, not a counter: /proc/pid/stat field 22, starttime, clock ticks since the guest booted. Empty
-  // from a collector that does not send it. Ledger "Memory and process collectors checked": constant while a
+  // from a collector that does not send it, and for null or a number that is not whole or not in 0 to 2^63,
+  // so a bad value is never another process's identity. Ledger "Memory and process collectors checked": constant while a
   // process lives; that it differs after reuse is not checked.
   std::optional<uint64_t> start;
 };

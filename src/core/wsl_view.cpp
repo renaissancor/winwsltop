@@ -70,6 +70,17 @@ class reader {
     if (!bad_) out = v;
   }
 
+  // An identity, where a clamped value would name another process: empty unless the number is whole and
+  // 0 <= v <= 2^63. A number out of range leaves it empty, not the line refused, so a reader falls back to
+  // pid and name. Read as a double, so a value above 2^53 is rounded to a neighbour.
+  void identity_or_null(std::optional<uint64_t>& out) {
+    out.reset();
+    if (word("null")) return;
+    double v = 0;
+    number(v);
+    if (!bad_ && v >= 0 && v <= 9223372036854775808.0 && v == std::floor(v)) out = static_cast<uint64_t>(v);
+  }
+
   // For a key whose whole value can be null: consumes it and says so.
   bool null() { return word("null"); }
 
@@ -245,7 +256,7 @@ wsl_view read_wsl(std::string_view json) {
           else if (k == "on_gpu") r.boolean(p.on_gpu);
           else if (k == "threads") r.whole_or_null(p.threads);
           else if (k == "rated") { if (!r.null()) r.boolean(p.rated); }
-          else if (k == "start") r.whole_or_null(p.start);
+          else if (k == "start") r.identity_or_null(p.start);
           else r.skip();
         });
         v.processes.push_back(std::move(p));

@@ -196,3 +196,9 @@ documents true.
   decides quitting too; Ctrl+C stays `stop_requested()`. Any key that reaches `apply_key` redraws, since `view_state`
   has no comparison and a redraw costs one frame. `--help` names the arrows in words, `left/right` and `up/down`:
   it is printed before the console is set up, so a non-UTF-8 code page would garble `←`.
+- 2026-11-02. Audit of slice 1 commits 1 to 5, core's part. `--help` names only the keys that act today: `up/down` and
+  `tab` come back with commit 6, which builds the selection and the second list's focus. `wsl_view` read `start`
+  through `whole()`, which clamps, so -5 or 1e300 became 0, a false identity. It now reads it with
+  `identity_or_null`: a whole number from 0 to 2^63 is kept, anything else leaves `start` empty and the line is
+  still read, so a reader falls back to pid and name. Leaving it empty was chosen over refusing the line, which
+  would blank the whole guest side for one bad field.
