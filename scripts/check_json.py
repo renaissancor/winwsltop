@@ -25,7 +25,8 @@ OBJECTS = {
 }
 ROWS = {
     "cpu_layout": {"core", "thread", "efficiency"},
-    "processes": {"pid", "ppid", "name", "cores", "working_set", "private", "threads", "handles"},
+    "processes": {"pid", "ppid", "name", "cores", "working_set", "private", "threads", "handles", "cores_known",
+                  "create_time"},
     "disks": {"name", "read_bytes_s", "write_bytes_s", "busy_pct"},
     "nets": {"name", "in_bytes_s", "out_bytes_s", "link_bits_s", "hardware"},
     "gpu_engines": {"pid", "engine", "pct", "source"},
@@ -36,7 +37,7 @@ DEVICE_OPTIONAL = {"mem_used", "mem_total", "util_pct", "power_w", "power_limit_
 WSL_DATA = {"schema", "distro", "kernel", "unix_s", "mono_s", "busy_pct", "core_pct", "cpu_split", "load",
             "steal_pct", "memory", "pressure", "process_count", "processes", "dxg_pids", "dxg_denied", "cost_ms"}
 WSL_SPLIT = {"user", "sys", "iowait"}
-WSL_PROCESS = {"pid", "name", "state", "rss", "cores", "threads", "on_gpu"}
+WSL_PROCESS = {"pid", "name", "state", "rss", "cores", "threads", "on_gpu", "rated", "start"}
 LOST_STATES = {"collecting", "no_data", "guest_under_99", "windows_under_95", "vcpus_differ", "known"}
 
 
@@ -88,6 +89,11 @@ if vm["vmmem_pid"]:
         fail(f"vm_ready_threads is {snapshot['vm_ready_threads']} with vmmemWSL found")
 elif snapshot["vm_ready_threads"] is not None or vm["vmmem_cores_known"] is not False:
     fail("no vmmemWSL, yet vm_ready_threads or vmmem_cores_known says it was read")
+if not all(isinstance(row["cores_known"], bool) and count(row["create_time"]) for row in snapshot["processes"]):
+    fail("a processes row's cores_known is not a boolean or its create_time not a count")
+# A first reading's 0 is unmeasured: a row that does not know its cores must not claim any.
+if any(not row["cores_known"] and row["cores"] != 0 for row in snapshot["processes"]):
+    fail("a processes row has cores without cores_known")
 if not isinstance(vm["vmmem_cores_known"], bool) or not isinstance(snapshot["cpu_layout_known"], bool):
     fail("vmmem_cores_known and cpu_layout_known are booleans")
 if snapshot["cpu_layout_known"] != bool(layout) or not all(count(v) for row in layout for v in row.values()):
@@ -118,6 +124,10 @@ if isinstance(data, dict):
     same("wsl.data", data, WSL_DATA)
     for row in data["processes"]:
         same("wsl.data.processes", row, WSL_PROCESS)
+        if not isinstance(row["rated"], bool) or not count(row["start"]):
+            fail(f"wsl.data.processes pid {row['pid']}: rated is not a boolean or start not a count")
+        if not row["rated"] and row["cores"] != 0:
+            fail(f"wsl.data.processes pid {row['pid']} has cores without rated")
     # null is the only unknown here: the screen reads either, and a half-shaped value would be a defect.
     if data["cpu_split"] is not None:
         same("wsl.data.cpu_split", data["cpu_split"], WSL_SPLIT)
@@ -150,6 +160,11 @@ if "--full" in sys.argv:
         fail(f"cpu_layout has {len(layout)} rows for {len(cpu['core_pct'])} logical CPUs")
     if len({(row["core"], row["thread"]) for row in layout}) != len(layout):
         fail("two cpu_layout rows name the same thread of the same core")
+    # Windows' list is read every sample, so after the priming call almost every row was seen before.
+    if not any(row["cores_known"] for row in snapshot["processes"]):
+        fail("no processes row has cores_known: the processes were read last sample")
+    if not any(row["rated"] for row in data["processes"]):
+        fail("no wsl.data.processes row is rated: the collector has read its processes before")
     if not vm["vmmem_pid"] or not vm["vmmem_cores_known"]:
         fail("vmmem_cores_known is false: the VM is running and was seen last sample")
     # Printed to 3 places, so the sum is checked to two of them.

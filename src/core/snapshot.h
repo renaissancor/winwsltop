@@ -47,6 +47,13 @@ struct process_row {
   std::string name;
   double cores = 0;  // 1.0 is one logical CPU busy for the whole interval
   uint64_t working_set = 0, private_bytes = 0;
+  // False on a process's first reading, when there is no earlier time to subtract: cores is then an
+  // unmeasured 0, which a reader of the figure takes as NaN. The same flag as vm.vmmem_cores_known.
+  bool cores_known = false;
+  // Identity, not a counter: SystemProcessInformation CreateTime, 100 ns since 1601-01-01 UTC. With pid it
+  // tells a reused pid apart. Ledger "Memory and process collectors checked": constant while a process
+  // lives; that it differs after reuse is not checked.
+  uint64_t create_time = 0;
 };
 
 // The WSL VM as Windows sees it. vmwp is vmmemWSL's parent, see docs/measurable.md.

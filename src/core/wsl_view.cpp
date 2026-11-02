@@ -244,6 +244,8 @@ wsl_view read_wsl(std::string_view json) {
           else if (k == "rss") r.whole(p.rss);
           else if (k == "on_gpu") r.boolean(p.on_gpu);
           else if (k == "threads") r.whole_or_null(p.threads);
+          else if (k == "rated") { if (!r.null()) r.boolean(p.rated); }
+          else if (k == "start") r.whole_or_null(p.start);
           else r.skip();
         });
         v.processes.push_back(std::move(p));

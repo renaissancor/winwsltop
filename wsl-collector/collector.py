@@ -141,8 +141,11 @@ def main():
         rows = []
         for key, (comm, state, ticks, rss, threads) in now_proc.items():
             old = prev_proc.get(key)
+            # rated false: no earlier reading, so cores is an unmeasured 0. start is starttime, the key's
+            # second half, constant while the process lives (ledger "Memory and process collectors checked").
             rows.append({"pid": key[0], "name": comm, "state": state, "rss": rss, "threads": threads,
-                         "cores": round((ticks - old[2]) / HZ / dt, 3) if old else 0.0})
+                         "cores": round((ticks - old[2]) / HZ / dt, 3) if old else 0.0,
+                         "rated": old is not None, "start": key[1]})
         holders, denied = dxg_holders()
         rows.sort(key=lambda r: (r["cores"], r["rss"]), reverse=True)
         keep = rows[:TOP] + [r for r in rows[TOP:] if r["pid"] in holders]

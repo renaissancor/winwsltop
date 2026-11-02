@@ -43,7 +43,7 @@ starting with `{"pong":` are consumed by the bridge and never reach the snapshot
 | `memory` | bytes from `/proc/meminfo`: `total`, `available`, `cached`, `swap_used` |
 | `pressure` | PSI `some avg10` for `cpu`, `memory`, `io`; `null` when absent |
 | `process_count` | every process seen |
-| `processes` | the top 30 by cores then RSS, plus every `/dev/dxg` holder. `pid`, `name`, `cores`, `rss`, `state`, `threads` (`num_threads` from `/proc/pid/stat`, `null` when it cannot be read), and `on_gpu`, which means it holds `/dev/dxg`, not that it uses the GPU |
+| `processes` | the top 30 by cores then RSS, plus every `/dev/dxg` holder. `pid`, `name`, `cores`, `rss`, `state`, `threads` (`num_threads` from `/proc/pid/stat`, `null` when it cannot be read), `rated`, `start`, and `on_gpu`, which means it holds `/dev/dxg`, not that it uses the GPU. `rated` is a boolean, false on the collector's first reading of a process, when there is no earlier time to subtract and `cores` is an unmeasured 0. `start` is `starttime`, `/proc/pid/stat` field 22, in clock ticks since the guest booted: an identity, not a counter, so `pid` and `start` together tell a reused pid apart. A row without `rated`, from an older collector, is read as not rated; without `start`, as no identity beyond `pid` |
 | `dxg_pids` | PIDs with `/dev/dxg` open: identity, not usage |
 | `dxg_denied` | processes whose fds could not be read, usually root's |
 | `cost_ms` | time this sample took |

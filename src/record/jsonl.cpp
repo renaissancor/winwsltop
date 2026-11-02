@@ -91,6 +91,8 @@ std::string to_json_line(const snapshot& s) {
     key(o, "pid", r.pid); key(o, "ppid", r.ppid); key(o, "name", r.name); key(o, "cores", r.cores);
     key(o, "working_set", r.working_set); key(o, "private", r.private_bytes);
     key(o, "threads", r.threads); key(o, "handles", r.handles);
+    key(o, "cores_known", r.cores_known);  // A 0 is measured only when this is true
+    key(o, "create_time", r.create_time);  // Identity: 100 ns since 1601, constant while the process lives
   });
   key(o, "ready_threads", s.ready_threads); key(o, "vm_ready_threads", s.vm_ready_threads);  // null when unknown
   list(o, "disks", s.disks, [&](const disk_row& r) {

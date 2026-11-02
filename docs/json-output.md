@@ -91,7 +91,7 @@ contended case had WSL at full load on a machine with no such limit, under CPU l
 | `cpu_layout` | One row per logical CPU, in `core_pct` order, read once at start: `core`, `thread`, `efficiency`. Rows with the same `core` are sibling threads, and `thread` is the place within that core. `efficiency` is Windows' class, higher is faster |
 | `memory` | Windows memory: `total`, `available`, `cache`, `commit_used`, `commit_limit` |
 | `vm` | The WSL VM as Windows sees it: `vmmem_pid`, `vmwp_pid`, `vmmem_working_set`, `vmmem_cores`, `vmmem_cores_known`. The PIDs are 0 when not found, and `vmmem_cores_known` is false then and on a new `vmmemWSL`'s first sample |
-| `processes` | Windows processes: `pid`, `ppid`, `name`, `cores`, `working_set`, `private`, `threads`, `handles` |
+| `processes` | Windows processes: `pid`, `ppid`, `name`, `cores`, `working_set`, `private`, `threads`, `handles`, `cores_known` and `create_time`. `cores_known` is false on a process's first reading, when there is no earlier time to subtract and `cores` is an unmeasured 0. `create_time` is the process's creation time in 100 ns units since 1601-01-01 UTC, the Windows `FILETIME` epoch: an identity, not a counter, so `pid` and `create_time` together tell a reused pid apart |
 | `ready_threads`, `vm_ready_threads` | Threads ready to run and not running, at one instant, and `vmmemWSL`'s among them, which are `null` when it isn't found. Noisy, so average several samples. `ready_threads` shows a shortage but not whose; only `vm_ready_threads` names a side. Neither is a count of blocked threads |
 | `disks` | `name`, `read_bytes_s`, `write_bytes_s`, `busy_pct` |
 | `nets` | `name`, `in_bytes_s`, `out_bytes_s`, `link_bits_s`, and `hardware` for a physical adapter |

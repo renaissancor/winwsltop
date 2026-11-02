@@ -17,6 +17,13 @@ struct wsl_process {
   uint64_t rss = 0;
   bool on_gpu = false;  // Holds /dev/dxg: identity, not usage
   std::optional<uint32_t> threads;  // Empty for null, or from a collector that does not send it
+  // False on the process's first reading, when cores is an unmeasured 0, and from a collector that does not
+  // send it, which cannot be taken as measured. PROTOCOL.md, processes.
+  bool rated = false;
+  // Identity, not a counter: /proc/pid/stat field 22, starttime, clock ticks since the guest booted. Empty
+  // from a collector that does not send it. Ledger "Memory and process collectors checked": constant while a
+  // process lives; that it differs after reuse is not checked.
+  std::optional<uint64_t> start;
 };
 
 struct wsl_view {

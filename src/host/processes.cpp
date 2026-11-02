@@ -103,6 +103,9 @@ bool process_collector::sample(std::vector<process_row>& out, vm_view& vm, std::
     const uint64_t cpu = static_cast<uint64_t>(p->UserTime.QuadPart) + static_cast<uint64_t>(p->KernelTime.QuadPart);
     const key k{r.pid, p->CreateTime.QuadPart};
     now[k] = cpu;
+    // Identity for readers: 100 ns since 1601, the same CreateTime this collector keys on. Ledger,
+    // "Memory and process collectors checked": constant while a process lives.
+    r.create_time = static_cast<uint64_t>(p->CreateTime.QuadPart);
     bool rated = false;
     if (have_prev) {
       if (const auto it = prev_.find(k); it != prev_.end() && cpu >= it->second) {
@@ -110,6 +113,9 @@ bool process_collector::sample(std::vector<process_row>& out, vm_view& vm, std::
         rated = true;
       }
     }
+    // A first reading has no earlier time to subtract: cores is then an unmeasured 0 (design
+    // panel-grammar part 3, "A first reading is not a measurement").
+    r.cores_known = rated;
     const auto* threads = reinterpret_cast<const nt_thread*>(p + 1);
     uint32_t ready_here = 0;
     for (ULONG i = 0; i < p->NumberOfThreads; ++i) {

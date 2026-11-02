@@ -185,4 +185,10 @@ documents true.
   reading (`processes.cpp` `rated`); `process_row.create_time`, 100 ns since 1601, `SystemProcessInformation`
   `CreateTime`. Protocol: per-process `rated`, bool, false on a first reading, and `start`, clock ticks since boot,
   `/proc/pid/stat` field 22. A first reading's `cores` keeps its 0, and the flag tells a reader it is unmeasured.
-  The identity fields are not counters; experiment 0 checks that they are stable while a process lives. Not built yet.
+  The identity fields are not counters; experiment 0 checks that they are stable while a process lives.
+- 2026-11-02. Slice 1 seam, built. `create_time` is `uint64_t`, 0 where Windows gives none. In `wsl_view`, `rated` is a
+  `bool` and reads false when absent or `null`, so a row from a collector that does not say is never taken as measured;
+  `start` is `std::optional<uint64_t>`, empty when absent or `null`, so a reader falls back to pid and name. The record
+  writes `cores_known` and `create_time` on every `processes` row; `wsl.data` carries `rated` and `start` as the collector
+  sent them. `check_json.py` requires both pairs, a 0 `cores` wherever the flag is false, and under `--full` at least
+  one known row on each side. `--text` is unchanged.
