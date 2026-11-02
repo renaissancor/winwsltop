@@ -41,8 +41,10 @@ reads schema 1 of the collector's line.
 6. A line with a schema other than 1, or one that does not parse to the end, is reported as
    unreadable, not guessed at.
 7. Thresholds for amber and red are judgement calls and live in one block at the top of `render.cpp`.
-8. Graphs use a fixed 0-100 scale with time on the x axis. A missing sample or a stall is a blank gap,
-   never a zero. Panels are never stacked or summed, and each graph title names its source.
+8. Graphs use a fixed 0-100 scale with time on the x axis. A measured 0 is the bottom dot row (⣀), a
+   missing sample or a stall is a blank gap, never a zero, and time from before watching began is a
+   faint `·` in every other cell of the bottom row. Panels are never stacked or summed, and each graph
+   title names its source.
 
 ## How to validate
 
@@ -53,17 +55,21 @@ reads schema 1 of the collector's line.
 - `render_check busy` draws on the live console until Ctrl+C: colours, braille and Korean text need a
   person's eyes in Windows Terminal. Legacy conhost is unchecked.
 
-## Current state (2026-11-01)
+## Current state (2026-11-02)
 
 | item | value |
 |---|---|
-| source | `src/ui` 3117 lines, of which `render_check.cpp` 1242 |
-| checks | 102504, 0 failed, run on Windows 2026-11-01. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
+| source | `src/ui` 3394 lines, of which `render_check.cpp` 1469 |
+| checks | 102818, 0 failed, on macOS clang 2026-11-02; the Windows build (102504 on 2026-11-01, plus console-only checks) has not been rerun since the graph rule. Mutation testing found and closed gaps; it was not exhaustive and the mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
 | sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66 |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once; conhost not checked |
 
 ## Open questions
+
+- A stall shorter than the span during which the wall clock stepped back by less than the stall still
+  places the earlier samples too close to now; only a step to before the last sample shifts them. A fix
+  would shift whenever the wall-clock gap and `interval_s` disagree beyond a tolerance. Found 2026-11-02.
 
 - PROPOSED (`ROADMAP.md`): GPU holders first in the Windows list, an `unattributed` line between the
   device total and the split, about 10 Windows rows, idle virtual NICs hidden.
@@ -73,6 +79,15 @@ reads schema 1 of the collector's line.
   snapshot and the record but not drawn.
 
 ## Decision log
+
+- 2026-11-02. Graphs follow the rule shared with sshvllmtop and machtop: ⣀ measured 0, blank gap, faint ·
+  every other cell before watching began. The `·` is on the bottom row only, in blank cells, counted from
+  the graph's left edge. `history` keeps when watching began apart from its samples, so the 600-sample cap
+  does not move it. A backward clock step moves it with the samples. A stall of the span or longer,
+  whichever way the wall clock moved, clears the samples and makes the whole window a gap, not unwatched.
+  Before anything is pushed the graph is all unwatched; a pushed sample whose time cannot be placed counts
+  as watching, so the span before the first placed sample is a gap. Audited 2026-11-02 (verdict ship);
+  its findings D1-D3 fixed the same day.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.

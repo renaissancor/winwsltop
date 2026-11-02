@@ -844,6 +844,38 @@ std::vector<std::string> plot_rows(const std::vector<double>& cols, int rows) {
   return out;
 }
 
+// Cells from the left that lie wholly before watching began: no sample can be there, and blank would
+// read as a gap. Before any push, all of them; after pushes that could not be placed, none. Placed as
+// plot_columns places the first sample.
+int unwatched_cells(const history& h, int64_t end_ms, int cells) {
+  if (!h.watching()) return std::max(0, cells);
+  if (h.samples().empty()) return 0;
+  const double span = static_cast<double>(history::kSpanMs), ago = static_cast<double>(end_ms - h.watched_from_ms());
+  if (cells <= 0 || ago >= span) return 0;
+  const long x = std::lround((2.0 * cells - 1) * (1.0 - std::max(0.0, ago) / span));
+  return static_cast<int>(std::clamp(x / 2, 0L, static_cast<long>(cells)));
+}
+
+// A plot row as spans: the braille in the bar tone and, on the bottom row, a faint dot in every other
+// blank cell of the unwatched part, so a fresh start reads as not watched yet rather than as missing.
+// The rule sshvllmtop and machtop share: ⣀ a measured 0, blank a gap, · before watching began.
+line plot_line(const std::string& plot, int unwatched) {
+  line out;
+  const auto put = [&](std::string_view text, tone t) {
+    if (!out.empty() && out.back().color == t) out.back().text += text;
+    else out.push_back({std::string(text), t});
+  };
+  int cell = 0;
+  for (size_t i = 0; i < plot.size(); ++cell) {
+    const size_t from = i;
+    next_cp(plot, i);
+    const std::string_view c(plot.data() + from, i - from);
+    if (cell < unwatched && c == " ") put(cell % 2 == 0 ? "·" : " ", tone::faint);
+    else put(c, tone::bar);
+  }
+  return out;
+}
+
 struct panel {
   std::vector<std::string> title;  // Pieces kept whole when the title wraps, while they fit
   std::string value;               // As measured
@@ -920,11 +952,12 @@ std::vector<line> panel_title(const panel& p, int col) {
 std::vector<line> panel_graph(const panel& p, const history& h, int64_t end_ms, int col, int rows) {
   const int cells = col - kGutter;
   const std::vector<std::string> plot = plot_rows(plot_columns(h, p.series, end_ms, 2 * cells), rows);
+  const int unwatched = unwatched_cells(h, end_ms, cells);
   std::vector<line> out;
   for (int y = 0; y < rows; ++y) {
     row r;
     r.add(y == 0 ? "100" : y == rows - 1 ? "  0" : "   ", tone::dim).add("│", tone::faint);
-    r.add(plot[static_cast<size_t>(y)], tone::bar);
+    for (const span& c : plot_line(plot[static_cast<size_t>(y)], y == rows - 1 ? unwatched : 0)) r.add(c.text, c.color);
     out.push_back(r);
   }
   row axis;
@@ -1267,19 +1300,27 @@ line footer(view v, int width, bool hidden) {
 
 void history::push(const snapshot& s) {
   const int64_t t = s.unix_ms;
+  const bool was_watching = watching_;
+  watching_ = true;  // Even a sample that cannot be placed: the program is watching
   if (t <= 0 || t > kLatestMs) return;  // A sample that cannot be placed in time is a gap
 
-  // The wall clock stepped back. interval_s comes from QPC, so the old samples keep their spacing and
-  // move with the clock: nothing is lost and nothing lands ahead of "now". After a stall as long as
-  // the span they are off the graph anyway, and must not join the new sample as if continuous.
-  if (!samples_.empty() && t <= samples_.back().unix_ms) {
-    if (s.interval_s >= static_cast<double>(kSpanMs) / 1000.0) {
-      samples_.clear();
-    } else {
-      const double gap_s = s.interval_s > 0 ? s.interval_s : 1.0;
-      const int64_t shift = samples_.back().unix_ms + static_cast<int64_t>(gap_s * 1000.0) - t;
-      for (history_sample& old : samples_) old.unix_ms -= shift;
-    }
+  // Watching began here, or earlier at a time that could not be placed: then the graph before t is a gap.
+  if (samples_.empty()) watched_from_ms_ = was_watching ? t - kSpanMs : t;
+
+  // A stall as long as the span, whichever way the wall clock moved meanwhile: interval_s comes from
+  // QPC, so the stored samples are off the graph, must not join the new one as if continuous, and the
+  // graph before t is watched time with nothing measured. The wall clock may have stepped back by less
+  // than the stall, so t alone cannot tell.
+  // Otherwise, the wall clock stepped back: the old samples keep their spacing and move with the
+  // clock, so nothing is lost and nothing lands ahead of "now".
+  if (!samples_.empty() && s.interval_s >= static_cast<double>(kSpanMs) / 1000.0) {
+    samples_.clear();
+    watched_from_ms_ = std::min(watched_from_ms_, t - kSpanMs);
+  } else if (!samples_.empty() && t <= samples_.back().unix_ms) {
+    const double gap_s = s.interval_s > 0 ? s.interval_s : 1.0;
+    const int64_t shift = samples_.back().unix_ms + static_cast<int64_t>(gap_s * 1000.0) - t;
+    for (history_sample& old : samples_) old.unix_ms -= shift;
+    watched_from_ms_ -= shift;
   }
 
   const double missing = std::numeric_limits<double>::quiet_NaN();
