@@ -29,7 +29,7 @@ using line = std::vector<span>;
 
 class history;
 
-// The ranges a graph is drawn over, 1, 5 and 10 minutes, which ← and → step through on panels 2 and 3.
+// The ranges a graph is drawn over, 1, 5 and 10 minutes, which ← and → step through on panels 2, 3 and 4.
 constexpr int64_t kSpansMs[] = {60000, 300000, 600000};
 
 // The eight panels of the shared grammar (docs/panels.md), by number; 0 is not one.
@@ -40,6 +40,7 @@ struct row_key {
   bool set = false;  // Not yet moved: the first row
   uint32_t pid = 0;
   std::string name;
+  uint64_t start = 0;  // Its create time or starttime when last seen: what the per-process ring keys it by, not what selects it
 };
 
 // What the keys have chosen, and nothing else: no offset, no size, nothing per second.
@@ -57,8 +58,10 @@ struct view_state {
 // built have no list; tab needs two lists to move between, which a missing WSL line leaves one of.
 bool apply_key(view_state& v, key_event e, const snapshot& s);
 
-// The rows panel 3 has selected, both lists, as the per-process ring knows them: history::push keeps their
-// slots, so a selected process that leaves for a while keeps its history.
+// The rows panels 3 and 4 have selected, both lists, as the per-process ring knows them, from the keys
+// remembered, so a selected process that has left the list is still named: history::push keeps their slots,
+// and it keeps its history while it is away. A list never moved in names nothing; its first row is in the
+// sample, which push never takes from.
 std::vector<proc_id> selected_processes(const snapshot& s, const view_state& v);
 
 // At most `height` lines of at most `width` columns, wide characters counted as 2. Names from either

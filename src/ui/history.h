@@ -120,6 +120,7 @@ class history {
   };
   using slot_key = std::tuple<uint8_t, uint32_t, uint64_t>;
   int take_slot(const proc_id& id, int64_t t, size_t cap, const std::vector<proc_id>& keep);
+  void let_go(size_t i);
   void write_processes(const snapshot& s, const wsl_view& w, size_t position, bool guest, const std::vector<proc_id>& keep);
 
   std::vector<history_sample> ring_;  // Sized once, by the first push: a sample then allocates nothing
@@ -130,6 +131,10 @@ class history {
   int repeats_ = 0;       // Repeated lines in a row
   std::vector<slot> slots_;            // Never shrinks: a slot let go is reused, so a push allocates only past the most yet
   std::map<slot_key, int> index_;      // Slots in use, by side, pid and start; the name is checked in the slot
+  std::vector<int> free_;              // Slots let go, to reuse first
+  std::vector<int> victims_;           // At the cap, this push's reusable slots, least recently seen last
+  bool victims_ready_ = false;         // victims_ was gathered for this push
+  std::vector<int> found_;             // This push's rows' slots, or -1 for a row with none yet
 };
 
 }  // namespace wwt
