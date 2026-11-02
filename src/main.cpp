@@ -62,7 +62,8 @@ void print_help(FILE* to) {
     "\n"
     "usage: winwsltop [--text | --once | --record N] [--distro NAME]\n"
     "\n"
-    "  (no option)    live screen: 1 overall, 2 GPU, 3 CPU, t span, q quit\n"
+    "  (no option)    live screen. Keys: 1-8 panel, left/right range 1, 5 or 10 minutes,\n"
+    "                 up/down select a row, tab other list, esc panel 1, q or Alt+Q quit\n"
     "  --text         print one text frame and exit\n"
     "  --once         print one JSON line and exit; about 3 s, about 8 s if WSL does not answer\n"
     "  --record N     print N JSON lines, one a second, N at least 1\n"
@@ -129,37 +130,25 @@ int main(int argc, char** argv) {
   double next = last;
   wwt::console* screen = run == mode::live ? new wwt::console : nullptr;  // restores the terminal when deleted
   wwt::history hist;
-  wwt::view panel = wwt::view::overall;
-  int64_t span = wwt::kSpansMs[0];
+  wwt::view_state view;  // What the keys have chosen: panel, range, focus and selections
   bool have_frame = false, quit = false;  // nothing to draw until the first sample after priming
   const auto draw = [&] {
     int w = 131, h = 40;
     screen->size(w, h);
-    // A redirected live run has no panels to switch, so it gets the plain frame.
-    if (screen->is_terminal()) {
-      wwt::render_options o;
-      o.span_ms = span;
-      o.span_key = true;
-      screen->draw(wwt::render(s, w, h, unix_ms(), &hist, panel, o));
-    }
-    else screen->draw(wwt::render(s, w, h, unix_ms()));
+    // A redirected live run has no panels to switch, so it gets the plain frame: no history, no footer.
+    if (screen->is_terminal()) screen->draw(wwt::render(s, w, h, unix_ms(), &hist, view));
+    else screen->draw(wwt::render(s, w, h, unix_ms(), nullptr, wwt::view_state{}));
   };
-  // Called inside the wait, so a switch redraws the last snapshot at once instead of up to a second later.
+  // Called inside the wait, so a key redraws the last snapshot at once instead of up to a second later.
+  // apply_key decides what each key does, quitting included; Ctrl+C is the console's, stop_requested().
   const auto handle_keys = [&] {
     if (!screen) return;
-    const wwt::view was = panel;
-    const int64_t was_span = span;
-    for (char key = screen->poll_key(); key != 0; key = screen->poll_key()) {
-      if (key == '1') panel = wwt::view::overall;
-      else if (key == '2') panel = wwt::view::gpu;
-      else if (key == '3') panel = wwt::view::cpu;
-      else if (key == 't') {
-        int w = 131, h = 40;
-        screen->size(w, h);
-        if (have_frame && wwt::span_key_acts(s, hist, panel, w, h)) span = wwt::next_span(span);
-      } else if (key == 'q') quit = true;
+    bool acted = false;
+    for (wwt::key_event e = screen->poll(); e.k != wwt::key::none && !quit; e = screen->poll()) {
+      if (!wwt::apply_key(view, e, s)) quit = true;
+      acted = true;
     }
-    if ((panel != was || span != was_span) && have_frame && !quit && screen->is_terminal()) draw();
+    if (acted && have_frame && !quit && screen->is_terminal()) draw();
   };
   for (int i = 0; run == mode::live || i <= lines; ++i) {  // The first pass only primes the deltas.
     if (i) {
@@ -199,7 +188,7 @@ int main(int argc, char** argv) {
       // A reader that has gone must end the run, or a pipeline outlives it for N seconds.
       if (fwrite(line.data(), 1, line.size(), stdout) != line.size() || fflush(stdout) != 0) return 1;
     } else if (run == mode::text) {
-      const std::string frame = wwt::as_text(wwt::render(s, 131, 50, unix_ms()));
+      const std::string frame = wwt::as_text(wwt::render(s, 131, 50, unix_ms(), nullptr, wwt::view_state{}));
       if (fwrite(frame.data(), 1, frame.size(), stdout) != frame.size() || fflush(stdout) != 0) return 1;
     } else {
       draw();

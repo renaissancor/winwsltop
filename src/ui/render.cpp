@@ -1305,7 +1305,6 @@ int64_t graph_end(const history& h, int64_t now_ms) {  // A clock behind the new
 struct panel_frame {
   std::vector<line> lines;
   bool hidden = false;        // A block was dropped for want of rows
-  bool span_applies = false;  // Drawn on a span the caller can change
 };
 
 std::vector<line> gpu_users_list(const snapshot& s, int col, int rows, bool& cut) {
@@ -1440,7 +1439,6 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   const std::vector<panel> second = {std::move(memory), std::move(power)};
 
   panel_frame f;
-  f.span_applies = true;
   f.lines.push_back(title_row(s, now_ms));
   int room = height - 1;
   std::vector<grid_row> rows;
@@ -1494,7 +1492,6 @@ panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history&
       std::move(guest)};
 
   panel_frame f;
-  f.span_applies = true;
   f.lines.push_back(title_row(s, now_ms));
   int room = height - 1;
   std::vector<grid_row> rows;
@@ -2106,7 +2103,6 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   append(right, cpu_wsl_list(w, right_col, plan.lists));
 
   panel_frame f;
-  f.span_applies = true;
   f.hidden = plan.lanes == 0 || plan.ram == 0;
   f.lines.push_back(title_row(s, now_ms));
   f.lines.push_back(rule("CPU", "two systems' own views of overlapping work, never added", width));
@@ -2172,25 +2168,6 @@ line panel_footer(const view_state& v, int lists, int width, bool hidden) {
   return {};
 }
 
-constexpr int kHiddenNote = 21;  // Columns of the note below, after the 39 of the keys
-
-// The keys main.cpp reads until slice 1's commit 5, which removes this footer with the overload that uses it.
-line footer(view v, int width, bool hidden, const std::string& span) {
-  row r;
-  const auto key = [&](const char* text, view which) {
-    const bool on = v == which;
-    r.add(text, on ? tone::title : tone::dim, on).add("  ");
-  };
-  // Too narrow for the note, a marker first: the cut at the right edge cannot take it.
-  if (hidden && width < 39 + kHiddenNote) r.add("… ", tone::watch);
-  key("[1] overall", view::overall);
-  key("[2] gpu", view::gpu);
-  key("[3] cpu", view::cpu);
-  if (!span.empty()) r.add("[t] span " + span + "  ", tone::dim);
-  r.add("[q] quit", tone::dim);
-  if (hidden) r.add_if_fits("   … some rows hidden", width, tone::watch);
-  return r;
-}
 
 }  // namespace
 
@@ -2292,15 +2269,6 @@ int display_width(std::string_view s) {
   return w;
 }
 
-int64_t next_span(int64_t span_ms) {
-  for (size_t i = 0; i + 1 < std::size(kSpansMs); ++i) {
-    if (kSpansMs[i] == span_ms) return kSpansMs[i + 1];
-  }
-  return kSpansMs[0];
-}
-
-bool span_key_acts(const snapshot&, const history&, view v, int, int) { return v == view::gpu || v == view::cpu; }
-
 namespace {
 
 // One panel above the footer, body rows high.
@@ -2396,15 +2364,6 @@ std::vector<line> render(const snapshot& s, int width, int height, int64_t now_m
   shown.panel = panel;
   const int lists = panel_draws_selection(panel) ? selectable_count(selectable_lists(s, panel)) : 0;
   return with_footer(f, width, body, panel_footer(shown, lists, width, f.hidden));
-}
-
-std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, view v, const render_options& options) {
-  if (width <= 0 || height <= 0) return {};
-  const wsl_view w = read_wsl(s.wsl_json);
-  if (!hist) return overall_frame(s, w, width, height, now_ms);
-  const int body = height - 1;
-  const panel_frame f = panel_body(s, w, *hist, static_cast<int>(v) + 1, width, body, now_ms, options.span_ms);
-  return with_footer(f, width, body, footer(v, width, f.hidden, options.span_key && f.span_applies ? span_text(options.span_ms) : std::string()));
 }
 
 std::string as_text(const std::vector<line>& lines) {

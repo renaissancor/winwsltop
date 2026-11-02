@@ -108,6 +108,14 @@ snapshot bare() {
   return s;
 }
 
+// The panel and range a caller of the view_state overload would ask for.
+view_state state_for(int panel, int span_s = 60) {
+  view_state v;
+  v.panel = panel;
+  v.range = span_s >= 600 ? 2 : span_s >= 300 ? 1 : 0;
+  return v;
+}
+
 bool has(const std::string& text, const char* what) { return text.find(what) != std::string::npos; }
 bool has(const std::string& text, const std::string& what) { return text.find(what) != std::string::npos; }
 
@@ -456,7 +464,7 @@ void check_time_axis() {
   h = history();
   h.push(sample_at(stale, kNow, 40, 1, 1));
   check(std::isnan(h.samples().back().wsl_cpu), "a stale collector line is a gap, not a flat line");
-  const std::string t = as_text(render(stale, 99, 40, kNow, &h, view::cpu));
+  const std::string t = as_text(render(stale, 99, 40, kNow, &h, state_for(3)));
   check(has(t, "23%  WSL CPU") && has(t, "collector line 8.0 s old"), "a stale figure is printed with its age");
 
   // The clock steps back: spacing survives, nothing lands ahead of now, a graph is still sane.
@@ -470,7 +478,7 @@ void check_time_axis() {
   check(ordered && all.size() == 13 && all.back().unix_ms == kNow - 3599000, "a backward step keeps the spacing");
   check(known_columns(util_columns(h, kNow - 3599000)) >= 48, "the graph survives a backward step");
   check(graph_end(h, kNow - 7200000) == kNow - 3599000, "a clock behind the newest sample is not the graph's end");
-  check(count_braille(graph_rows(as_text(render(busy(), 131, 40, kNow - 7200000, &h, view::gpu)))) > 0, "drawing behind the newest sample still draws");
+  check(count_braille(graph_rows(as_text(render(busy(), 131, 40, kNow - 7200000, &h, state_for(2))))) > 0, "drawing behind the newest sample still draws");
 
   h = history();
   h.push(sample_at(base, kNow, 40, 1, 1));
@@ -556,7 +564,7 @@ void check_time_axis() {
   check(known_columns(plot_columns(h, &history_sample::wsl_cpu, kNow, kDots)) == 0, "an unreadable line is not a sample");
   snapshot unreadable = base;
   unreadable.wsl_json = "{\"schema\":1,\"busy";
-  const std::string cells = graph_rows(as_text(render(unreadable, 99, 30, kNow, &h, view::cpu)));
+  const std::string cells = graph_rows(as_text(render(unreadable, 99, 30, kNow, &h, state_for(3))));
   check(count_braille(panel_cells(cells, 0)) > 0, "the Windows CPU graph is drawn");
   check(count_braille(panel_cells(cells, 1)) == 0, "an unreadable line draws no cell in the WSL graph");
 
@@ -852,7 +860,7 @@ void check_scale() {
   const std::vector<double> c = plot_columns(h, &history_sample::vm_pct, kNow, kDots);
   check(c[kDots - 1] == 100, "over 100 clamps in the graph");
   check(h.samples().back().vm_pct == 112, "the sample keeps what was measured");
-  const std::string t = as_text(render(s, 131, 50, kNow, &h, view::gpu));
+  const std::string t = as_text(render(s, 131, 50, kNow, &h, state_for(2)));
   check(has(t, "112%  WSL VM"), "the printed number stays as measured");
 
   s = busy();
@@ -861,9 +869,9 @@ void check_scale() {
   history huge;
   huge.push(s);
   check(plot_columns(huge, &history_sample::vm_pct, kNow, kDots)[kDots - 1] == 100 && plot_columns(huge, &history_sample::windows_pct, kNow, kDots)[kDots - 1] == 0, "out of range clamps both ways");
-  check(has(as_text(render(s, 131, 50, kNow, &huge, view::gpu)), "1e+300%"), "a huge number is printed, short enough to fit");
+  check(has(as_text(render(s, 131, 50, kNow, &huge, state_for(2))), "1e+300%"), "a huge number is printed, short enough to fit");
 
-  for (const view v : {view::gpu, view::cpu}) {
+  for (const view_state& v : {state_for(2), state_for(3)}) {
     for (const auto& [w, h2] : {std::pair{99, 50}, std::pair{80, 24}}) {
       const history demo = demo_minute(busy());
       const std::string f = as_text(render(busy(), w, h2, kNow, &demo, v));
@@ -950,7 +958,7 @@ snapshot rule_sample(int64_t t, double v, int k) {
 void check_graph_rule() {
   const auto is_dot = [](const cell& c) { return c.text == "·" && c.color == tone::faint; };
   const auto dots_in = [&](const std::vector<cell>& cs) { return static_cast<int>(std::count_if(cs.begin(), cs.end(), is_dot)); };
-  const struct { view v; int graphs; const char* name; } panels[] = {{view::gpu, 5, " gpu"}, {view::cpu, 2, " cpu"}};
+  const struct { view_state v; int graphs; const char* name; } panels[] = {{state_for(2), 5, " gpu"}, {state_for(3), 2, " cpu"}};
 
   history fresh, zero, gap, empty;
   for (int age = 9; age >= 0; --age) fresh.push(rule_sample(kNow - age * 1000, 50, age));
@@ -1024,9 +1032,9 @@ void check_graph_rule() {
 
   // A minute watched with nothing measured is a gap all along: blank, no dots.
   const history watched_bare = demo_minute(bare());
-  const std::string bare_gpu = graph_rows(as_text(render(bare(), 131, 40, kNow, &watched_bare, view::gpu)));
+  const std::string bare_gpu = graph_rows(as_text(render(bare(), 131, 40, kNow, &watched_bare, state_for(2))));
   check(!has(bare_gpu, "·") && count_braille(bare_gpu) == 0, "watched with nothing measured is blank, not dotted");
-  const std::string bare_wsl = panel_cells(graph_rows(as_text(render(bare(), 131, 40, kNow, &watched_bare, view::cpu))), 1);
+  const std::string bare_wsl = panel_cells(graph_rows(as_text(render(bare(), 131, 40, kNow, &watched_bare, state_for(3)))), 1);
   check(!has(bare_wsl, "·") && count_braille(bare_wsl) == 0, "a watched minute with no WSL line is blank, not dotted");
 
   // When watching began, through the history's own changes.
@@ -1052,14 +1060,14 @@ void check_graph_rule() {
   check(kept.size() == 13 && kept[11].unix_ms == kNow - 7200000 - 120000 && stepped.watched_from_ms() == kept.front().unix_ms,
         "a stall under what is kept keeps the samples, shifted with when watching began");
   check(unwatched_cells(stepped, kNow - 7200000, kCells) == 0, "a stall longer than the span is a gap, not unwatched");
-  check(dots_in(bottom_cells(render(stall, 131, 40, kNow - 7200000, &stepped, view::gpu), 0)) == 0, "after a long stall no dots");
+  check(dots_in(bottom_cells(render(stall, 131, 40, kNow - 7200000, &stepped, state_for(2)), 0)) == 0, "after a long stall no dots");
   // A stall of all that is kept clears the samples, and every span before it is watched with nothing measured.
   snapshot clear = rule_sample(kNow - 9000000, 0, 13);
   clear.interval_s = static_cast<double>(history::kKeepMs) / 1000.0;
   stepped.push(clear);
   check(stepped.samples().size() == 1 && stepped.watched_from_ms() <= kNow - 9000000 - history::kKeepMs && unwatched_cells(stepped, kNow - 9000000, kCells) == 0,
         "a stall that clears the history is a gap, not unwatched");
-  check(dots_in(bottom_cells(render(clear, 131, 40, kNow - 9000000, &stepped, view::gpu), 0)) == 0, "after a stall of what is kept no dots");
+  check(dots_in(bottom_cells(render(clear, 131, 40, kNow - 9000000, &stepped, state_for(2)), 0)) == 0, "after a stall of what is kept no dots");
   history forward;
   forward.push(rule_sample(kNow, 0, 0));
   forward.push(rule_sample(kNow + 600000, 0, 1));
@@ -1103,7 +1111,7 @@ void check_graph_rule() {
   // samples measured nothing (the WSL CPU before the collector's first line, the device before NVML
   // answers). The dots stop where the first sample is, as the series measured from the start shows it,
   // and the unmeasured start is a blank gap. The sub-second offsets move the boundary across cells.
-  const struct { view v; int whole, partial; const char* name; } pairs[] = {{view::gpu, 1, 0, " device"}, {view::cpu, 0, 1, " WSL CPU"}};
+  const struct { view_state v; int whole, partial; const char* name; } pairs[] = {{state_for(2), 1, 0, " device"}, {state_for(3), 0, 1, " WSL CPU"}};
   for (const int ahead : {1000, 3000, 5000}) {
     for (int frac = 0; frac < 1000; frac += 125) {
       history h;
@@ -1140,40 +1148,40 @@ void check_panels() {
   // itself: it cannot show that the frames match any older version.
   for (const auto& s : {busy(), bare()}) {
     const std::string plain = as_text(render(s, 131, 50, kNow));
-    check(as_text(render(s, 131, 50, kNow, nullptr, view::gpu)) == plain && as_text(render(s, 131, 50, kNow, nullptr, view::cpu)) == plain, "no history, no panels");
-    check(!has(plain, "[q] quit"), "no history, no footer");
+    check(as_text(render(s, 131, 50, kNow, nullptr, state_for(2))) == plain && as_text(render(s, 131, 50, kNow, nullptr, state_for(3))) == plain, "no history, no panels");
+    check(!has(plain, "q quit") && !has(plain, "1 overview"), "no history, no footer");
     // The overall panel is the screen without a history, one row shorter, then the footer.
-    const auto with = render(s, 131, 50, kNow, &demo, view::overall);
+    const auto with = render(s, 131, 50, kNow, &demo, state_for(1));
     const auto without = render(s, 131, 49, kNow);
     check(with.size() == without.size() + 1 && as_text({with.begin(), with.end() - 1}) == as_text(without), "the overall panel is the screen without a history");
     check(count_braille(graph_rows(as_text(with))) == 0 && !has(as_text(with), "-60s"), "the overall panel has no graphs");
   }
 
-  const auto footer_of = [&](view v, int w = 131, int h = 50) {
+  const auto footer_of = [&](const view_state& v, int w = 131, int h = 50) {
     const auto f = render(full, w, h, kNow, &demo, v);
     return f.back();
   };
-  const struct { view v; const char* name; } keys[] = {{view::overall, "[1] overall"}, {view::gpu, "[2] gpu"}, {view::cpu, "[3] cpu"}};
+  const struct { view_state v; const char* name; } keys[] = {{state_for(1), "1 overview"}, {state_for(2), "2 gpu"}, {state_for(3), "3 cpu"}};
   for (const auto& k : keys) {
     const line f = footer_of(k.v);
     const std::string text = as_text({f});
-    check(has(text, "[1] overall  [2] gpu  [3] cpu  [q] quit"), "the footer names the keys");
+    check(has(text, "1 overview  2 gpu  3 cpu  4 mem") && has(text, "q quit"), "the footer names the panels and q");
     for (const auto& o : keys) {
       bool on = false;
       for (const span& p : f) on = on || (has(p.text, o.name) && p.bold && p.color == tone::title);
-      check(on == (o.v == k.v), std::string("only the active panel is highlighted: ") + o.name);
+      check(on == (o.v.panel == k.v.panel), std::string("only the active panel is highlighted: ") + o.name);
     }
     check(render(full, 131, 50, kNow, &demo, k.v).size() <= 50, "the footer is counted in height");
-    check(has(as_text({render(full, 131, 1, kNow, &demo, k.v).back()}), "[1]"), "one row is the footer");
+    check(has(as_text({render(full, 131, 1, kNow, &demo, k.v).back()}), k.name), "one row is the footer");
   }
 
   // GPU panel labels, at a width where each title is on one line, then wrapped.
-  const std::string g = as_text(render(full, 200, 60, kNow, &demo, view::gpu));
+  const std::string g = as_text(render(full, 200, 60, kNow, &demo, state_for(2)));
   for (const char* label : {"device · NVML", "WSL VM · engine counters, VM level, not exact shares", "Windows · engine counters", "GPU memory · NVML, used of total", "power · NVML, of limit", "/dev/dxg holders, no usage measured"}) {
     check(has(g, label), std::string("labelled: ") + label);
   }
   for (const int w : {40, 80, 112, 131}) {
-    const std::string t = as_text(render(full, w, 66, kNow, &demo, view::gpu));
+    const std::string t = as_text(render(full, w, 66, kNow, &demo, state_for(2)));
     const std::string n = " at " + std::to_string(w);
     check(has(t, "device · NVML") && has(t, "engine counters,") && has(t, "VM level, not exact shares") && has(t, "Windows · engine counters"), "wrapped titles stay whole" + n);
     check(has(t, "dxg_denied 36") && has(t, "no usage measured"), "holders carry no usage" + n);
@@ -1183,7 +1191,7 @@ void check_panels() {
   check(has(g, "9.0/12.0 GiB") && has(g, "187/200 W") && !has(g, "75%") && !has(g, "94%"), "bytes and watts stay in their units");
 
   // The GPU lists: Windows by GPU%, holders apart, no Linux figure.
-  const auto frame = render(full, 131, 50, kNow, &demo, view::gpu);
+  const auto frame = render(full, 131, 50, kNow, &demo, state_for(2));
   bool seen_right = false;
   size_t vmwp = 0, game = 0, n = 0;
   for (const line& l : frame) {
@@ -1201,15 +1209,15 @@ void check_panels() {
   check(seen_right && vmwp && game && vmwp < game, "Windows GPU users sorted by GPU%");
   snapshot resort = full;
   resort.gpu_engines = {{11736, "3D", 5}, {9002, "3D", 80}};
-  const std::string rs = as_text(render(resort, 131, 50, kNow, &demo, view::gpu));
+  const std::string rs = as_text(render(resort, 131, 50, kNow, &demo, state_for(2)));
   check(rs.find("Game.Shipping") < rs.find("vmwp.exe"), "the GPU list follows GPU%, not cores");
-  check(!has(as_text(render(full, 131, 50, kNow, &demo, view::gpu)), "svchost.exe"), "no process without GPU use in that list");
-  const std::string stacked = as_text(render(full, 60, 66, kNow, &demo, view::gpu));
+  check(!has(as_text(render(full, 131, 50, kNow, &demo, state_for(2))), "svchost.exe"), "no process without GPU use in that list");
+  const std::string stacked = as_text(render(full, 60, 66, kNow, &demo, state_for(2)));
   check(stacked.rfind("vmwp.exe") < stacked.find("한글추론기", stacked.find("PROCESSES")), "stacked GPU lists do not interleave");
 
   // The CPU panel's small layout, which is every window under 100 columns.
   for (const int w : {80, 90, 99}) {
-    const std::string t = as_text(render(full, w, 60, kNow, &demo, view::cpu));
+    const std::string t = as_text(render(full, w, 60, kNow, &demo, state_for(3)));
     const std::string where = " at " + std::to_string(w);
     check(has(t, "whole machine, includes the WSL VM") && has(t, "guest view, inside the VM"), "CPU graphs name their source" + where);
     check(has(t, "hottest core 3 at 96%") && has(t, "hottest core 6 at 97%"), "both sets of core rows" + where);
@@ -1218,16 +1226,16 @@ void check_panels() {
   }
   // The title rows themselves: the WINDOWS and WSL rule rows hold the same words.
   for (const int w : {131, 200}) {  // 26 rows are under the large layout's floor, at any width
-    const auto f = render(full, w, 26, kNow, &demo, view::cpu);
+    const auto f = render(full, w, 26, kNow, &demo, state_for(3));
     const std::string title = line_with(f, "%  Windows CPU");
     check(has(title, "Windows CPU · whole machine, includes the WSL VM"), "the Windows graph title names its source");
     check(has(title, "WSL CPU · guest view, inside the VM"), "the WSL graph title names its source");
     check(has(as_text(f), "two systems' own views of overlapping work, never added"), "the CPU rule says the views overlap");
   }
-  const auto wrapped = render(full, 80, 60, kNow, &demo, view::cpu);
+  const auto wrapped = render(full, 80, 60, kNow, &demo, state_for(3));
   const std::string second = line_with(wrapped, "%  Windows CPU", 1);
   check(has(second, "includes the WSL VM") && has(second, "guest view, inside the VM"), "wrapped titles keep their source");
-  const auto cpu = render(full, 131, 26, kNow, &demo, view::cpu);
+  const auto cpu = render(full, 131, 26, kNow, &demo, state_for(3));
   for (const line& l : cpu) {
     const std::string t = as_text({l});
     if (has(t, "ollama")) check(t.find("ollama") > t.find(" │ "), "CPU panel: Linux names right of the divider");
@@ -1235,18 +1243,18 @@ void check_panels() {
   }
 
   // Missing is n/a, in every panel, and history does not fill in for it.
-  const std::string bg = as_text(render(bare(), 131, 50, kNow, &demo_bare, view::gpu));
+  const std::string bg = as_text(render(bare(), 131, 50, kNow, &demo_bare, state_for(2)));
   for (const char* v : {"n/a  device · NVML", "n/a  WSL VM ·", "n/a  Windows · engine counters", "n/a  GPU memory", "n/a  power"}) check(has(bg, v), std::string("missing: ") + v);
   check(count_braille(graph_rows(bg)) == 0, "no measurement, a blank graph");
   check(has(bg, "device  unavailable") && has(bg, "unavailable: no GPU engine data") && has(bg, "unavailable: no WSL data"), "bare GPU panel says what is missing");
   check(!has(bg.substr(0, bg.find("PROCESSES")), " 0%"), "the GPU panel shows no zero");
 
-  const std::string bc = as_text(render(bare(), 99, 50, kNow, &demo_bare, view::cpu));
+  const std::string bc = as_text(render(bare(), 99, 50, kNow, &demo_bare, state_for(3)));
   check(has(bc, "n/a  WSL CPU") && has(bc, "WSL data unavailable"), "no WSL line is n/a");
   check(!has(bc, "  0%  WSL"), "no WSL line is not 0");
   snapshot no_cpu = bare();
   no_cpu.cpu = {};
-  check(has(as_text(render(no_cpu, 99, 50, kNow, &demo_bare, view::cpu)), "n/a  Windows CPU"), "a failed CPU read is n/a");
+  check(has(as_text(render(no_cpu, 99, 50, kNow, &demo_bare, state_for(3))), "n/a  Windows CPU"), "a failed CPU read is n/a");
   const std::string no_cpu_screen = as_text(render(no_cpu, 131, 50, kNow));
   const std::string windows_block = no_cpu_screen.substr(no_cpu_screen.find("WINDOWS"));
   check(has(windows_block, "CPU   n/a") && !has(windows_block.substr(0, windows_block.find("cores")), "0%"), "a failed CPU read is n/a on the overall screen too");
@@ -1260,25 +1268,25 @@ void check_panels() {
   part.gpu_device.has_util = part.gpu_device.has_power = false;
   part.gpu_device.has_mem = false;
   part.gpu_split.valid = false;
-  const std::string pt = as_text(render(part, 131, 50, kNow, &demo, view::gpu));
+  const std::string pt = as_text(render(part, 131, 50, kNow, &demo, state_for(2)));
   for (const char* v : {"n/a  device · NVML", "n/a  WSL VM", "n/a  Windows ·", "n/a  GPU memory", "n/a  power"}) check(has(pt, v), std::string("has_* false: ") + v);
   part = busy();
   part.gpu_device.power_limit_w = 0;
   part.unix_ms = kNow;
   history nl;
   nl.push(part);
-  check(has(as_text(render(part, 131, 50, kNow, &nl, view::gpu)), "187 W") && std::isnan(nl.samples().back().gpu_power_pct), "no limit: watts printed, no height invented");
+  check(has(as_text(render(part, 131, 50, kNow, &nl, state_for(2))), "187 W") && std::isnan(nl.samples().back().gpu_power_pct), "no limit: watts printed, no height invented");
 
   // Blank with little history.
-  const std::string eg = as_text(render(full, 131, 50, kNow, &empty, view::gpu));
+  const std::string eg = as_text(render(full, 131, 50, kNow, &empty, state_for(2)));
   check(count_braille(graph_rows(eg)) == 0 && has(eg, "-60s") && has(eg, "91%"), "an empty history is blank graphs and the live number");
   check(has(graph_rows(eg), "· · ·"), "an empty history is not watched yet: dotted, not a gap");
 
   // Short windows: graphs shrink, then lower blocks go, the footer stays.
-  const std::string tall = as_text(render(full, 131, 50, kNow, &demo, view::gpu));
+  const std::string tall = as_text(render(full, 131, 50, kNow, &demo, state_for(2)));
   check(has(tall, "device  util") && has(tall, "PROCESSES") && !has(tall, "rows hidden"), "a tall window shows everything");
-  const std::string mid = as_text(render(full, 131, 12, kNow, &demo, view::gpu));
-  check(has(mid, "100│") && has(mid, "some rows hidden") && has(mid, "[q] quit"), "a short window says it dropped something");
+  const std::string mid = as_text(render(full, 131, 12, kNow, &demo, state_for(2)));
+  check(has(mid, "100│") && has(mid, "some rows hidden") && has(mid, "q quit"), "a short window says it dropped something");
   panel one{{"title"}, "1%", tone::text, &history_sample::gpu_util};
   const std::vector<panel> pair = {one, one};
   std::vector<grid_row> fitted;
@@ -1287,26 +1295,26 @@ void check_panels() {
   check(!fit_rows(fitted, whole) && fitted[0].plot, "what fits is not hidden");
   check(fit_rows(fitted, whole - 1) && !fitted[0].plot, "a plot that does not fit is reported");
   // The rule row is the first to go; it counts as hidden too.
-  const auto no_rule = render(full, 80, 23, kNow, &demo, view::gpu);
+  const auto no_rule = render(full, 80, 23, kNow, &demo, state_for(2));
   check(!has(as_text(no_rule), "GPU ─") && has(as_text(no_rule), "vmwp.exe") && marks_hidden(no_rule), "a dropped GPU rule is marked");
   // Too narrow for the note: a marker the right edge cannot cut.
   for (const int w : {1, 10, 36, 40, 48, 59}) {
-    for (const view v : {view::gpu, view::cpu}) {
+    for (const view_state& v : {state_for(2), state_for(3)}) {
       const auto f = render(full, w, 8, kNow, &demo, v);
       check(as_text({f.back()}).rfind("…", 0) == 0, "hidden is marked at width " + std::to_string(w));
     }
   }
-  check(has(as_text({render(full, 60, 8, kNow, &demo, view::gpu).back()}), "[q] quit   … some rows hidden"), "60 columns hold the note");
-  check(!marks_hidden(render(full, 40, 66, kNow, &demo, view::cpu)), "nothing hidden, no marker");
+  check(has(as_text({render(full, 131, 8, kNow, &demo, state_for(2)).back()}), "8 vm cost   … some rows hidden"), "a footer with the panels' names holds the note");
+  check(!marks_hidden(render(full, 40, 66, kNow, &demo, state_for(3))), "nothing hidden, no marker");
 
   // /dev/dxg holders: a count, and the warning whenever the block is drawn.
   const snapshot many = with_holders(full, 22);
-  const auto crowded = render(many, 131, 50, kNow, &demo, view::gpu);
+  const auto crowded = render(many, 131, 50, kNow, &demo, state_for(2));
   check(has(as_text(crowded), "of 22") && has(as_text(crowded), "dxg_denied 36") && marks_hidden(crowded), "a cut holder list counts itself");
-  check(has(as_text(render(full, 131, 50, kNow, &demo, view::gpu)), "top 2 of 2"), "a whole holder list counts too");
+  check(has(as_text(render(full, 131, 50, kNow, &demo, state_for(2))), "top 2 of 2"), "a whole holder list counts too");
   for (const int w : {30, 40, 50, 63, 64, 80, 100, 131, 200}) {
     for (int rows = 1; rows <= 66; ++rows) {
-      const auto f = render(many, w, rows, kNow, &demo, view::gpu);
+      const auto f = render(many, w, rows, kNow, &demo, state_for(2));
       const std::string text = as_text(f);
       const std::string at = " at " + std::to_string(w) + "x" + std::to_string(rows);
       if (!has(text, "no usage measured")) continue;
@@ -1316,7 +1324,7 @@ void check_panels() {
       check(!has(text, "top 0 of 22"), "a drawn list has a name in it" + at);
     }
   }
-  check(!has(as_text(render(no_wsl(), 131, 50, kNow, &demo, view::gpu)), "dxg_denied"), "no WSL line, no warning row");
+  check(!has(as_text(render(no_wsl(), 131, 50, kNow, &demo, state_for(2))), "dxg_denied"), "no WSL line, no warning row");
   bool no_room_cut = false;
   const wsl_view many_view = read_wsl(many.wsl_json);
   check(has(as_text(dxg_holder_list(many_view, 60, 0, no_room_cut)), "dxg_denied 36") && no_room_cut, "the warning needs no name row");
@@ -1326,8 +1334,8 @@ void check_panels() {
   unread.wsl_json = R"({"schema":2,"busy_pct":1,"memory":{},"dxg_denied":36})";
   for (const int w : {60, 131}) {
     for (int rows = 1; rows <= 66; ++rows) {
-      const bool drawn = has(as_text(render(unread, w, rows, kNow, &demo, view::gpu)), "PROCESSES");
-      check(drawn == has(as_text(render(no_wsl(), w, rows, kNow, &demo, view::gpu)), "PROCESSES"), "no warning row without WSL data, " + std::to_string(w) + "x" + std::to_string(rows));
+      const bool drawn = has(as_text(render(unread, w, rows, kNow, &demo, state_for(2))), "PROCESSES");
+      check(drawn == has(as_text(render(no_wsl(), w, rows, kNow, &demo, state_for(2))), "PROCESSES"), "no warning row without WSL data, " + std::to_string(w) + "x" + std::to_string(rows));
     }
   }
 
@@ -1337,7 +1345,7 @@ void check_panels() {
   for (uint32_t i = 0; i < 15; ++i) users.gpu_engines.push_back({10000 + i * 4, "3D", 50.0 - i});
   snapshot few_holders = users;
   few_holders.wsl_json = full.wsl_json;
-  const auto cut_users = render(few_holders, 131, 50, kNow, &demo, view::gpu);
+  const auto cut_users = render(few_holders, 131, 50, kNow, &demo, state_for(2));
   check(has(as_text(cut_users), "of 15 by GPU%") && has(as_text(cut_users), "top 2 of 2") && marks_hidden(cut_users), "a cut Windows list is marked");
   const auto top_of = [](const std::string& t, const char* tail) {
     const size_t end = t.find(tail);
@@ -1345,7 +1353,7 @@ void check_panels() {
   };
   int odd = 0;
   for (int rows = 1; rows <= 66; ++rows) {
-    const std::string t = as_text(render(users, 60, rows, kNow, &demo, view::gpu));
+    const std::string t = as_text(render(users, 60, rows, kNow, &demo, state_for(2)));
     const int windows = top_of(t, " of 15 by GPU%"), holders = top_of(t, " of 22");
     if (windows < 0 || holders < 0) continue;
     check(windows - holders == 0 || windows - holders == 1, "stacked lists split the rows evenly at 60x" + std::to_string(rows) + ": " + std::to_string(windows) + "," + std::to_string(holders));
@@ -1356,20 +1364,20 @@ void check_panels() {
   // A process at zero is no GPU use.
   snapshot zero = busy();
   zero.gpu_engines.push_back({4, "3D", 0});
-  const auto zf = render(zero, 131, 50, kNow, &demo, view::gpu);
+  const auto zf = render(zero, 131, 50, kNow, &demo, state_for(2));
   check(has(as_text(zf), "top 3 of 3 by GPU%") && !has(as_text(zf), "System"), "an engine at 0% is not a GPU user");
 
   // Without a limit the watts stand alone and the title says why the graph is blank.
   snapshot limitless = busy();
   limitless.gpu_device.power_limit_w = 0;
-  check(has(as_text(render(limitless, 200, 50, kNow, &empty, view::gpu)), "no limit reported, not graphed"), "no limit is named in the title");
-  const std::string low = as_text(render(full, 131, 6, kNow, &demo, view::gpu));
-  check(has(low, "91%  device · NVML") && has(low, "52%  WSL VM") && has(low, "[q] quit") && !has(low, "100│"), "a very short window keeps the values and labels");
-  const std::string narrow_low = as_text(render(full, 50, 12, kNow, &demo, view::gpu));
-  check(has(narrow_low, "100│") && has(narrow_low, "36%  Windows ·") && marks_hidden(render(full, 50, 12, kNow, &demo, view::gpu)), "a stack that cannot fit keeps every value it can");
-  const std::string cpu_low = as_text(render(full, 80, 24, kNow, &demo, view::cpu));
+  check(has(as_text(render(limitless, 200, 50, kNow, &empty, state_for(2))), "no limit reported, not graphed"), "no limit is named in the title");
+  const std::string low = as_text(render(full, 131, 6, kNow, &demo, state_for(2)));
+  check(has(low, "91%  device · NVML") && has(low, "52%  WSL VM") && has(low, "q quit") && !has(low, "100│"), "a very short window keeps the values and labels");
+  const std::string narrow_low = as_text(render(full, 50, 12, kNow, &demo, state_for(2)));
+  check(has(narrow_low, "100│") && has(narrow_low, "36%  Windows ·") && marks_hidden(render(full, 50, 12, kNow, &demo, state_for(2))), "a stack that cannot fit keeps every value it can");
+  const std::string cpu_low = as_text(render(full, 80, 24, kNow, &demo, state_for(3)));
   check(has(cpu_low, "svchost.exe") || has(cpu_low, "vmmemWSL"), "at 80x24 the CPU panel's Windows list has rows");
-  const std::string gpu_low = as_text(render(full, 80, 24, kNow, &demo, view::gpu));
+  const std::string gpu_low = as_text(render(full, 80, 24, kNow, &demo, state_for(2)));
   check(has(gpu_low, "vmwp.exe") && has(gpu_low, "python3") && has(gpu_low, "dxg_denied"), "at 80x24 the GPU panel's lists have names");
 
   // Names, as a Windows GPU user and as a /dev/dxg holder.
@@ -1377,11 +1385,11 @@ void check_panels() {
   evil.gpu_engines.push_back({9003, "3D", 60});
   const std::string pids = "\"dxg_pids\":[4121,4388";
   evil.wsl_json.replace(evil.wsl_json.find(pids), pids.size(), pids + ",4400");
-  for (const view v : {view::overall, view::gpu, view::cpu}) {
+  for (const view_state& v : {state_for(1), state_for(2), state_for(3)}) {
     check(vt_clean(vt_frame(render(evil, 131, 50, kNow, &demo, v), 50)), "names stay safe in every panel");
     check(vt_clean(vt_frame(render(evil, 60, 66, kNow, &demo, v), 66)), "names stay safe when stacked");
   }
-  check(has(as_text(render(evil, 131, 50, kNow, &demo, view::gpu)), "bad.exe"), "the hostile name is on the panel");
+  check(has(as_text(render(evil, 131, 50, kNow, &demo, state_for(2))), "bad.exe"), "the hostile name is on the panel");
 }
 
 // 1, 1 + step, ... and top itself.
@@ -1419,8 +1427,8 @@ void check_denied_note() {
     for (int w = 37; w <= 300; ++w) {
       const std::string at = " at " + std::to_string(w) + ", " + head;
       const int list = w >= 64 ? w - 3 - (w - 3) / 2 : w;  // The holders' column, stacked below 64
-      const std::string gpu = row_of(as_text(render(s, w, 66, kNow, &demo, view::gpu)), "dxg_denied");
-      const std::string overall = row_of(as_text(render(s, w, 66, kNow, &demo, view::overall)), "dxg_denied");
+      const std::string gpu = row_of(as_text(render(s, w, 66, kNow, &demo, state_for(2))), "dxg_denied");
+      const std::string overall = row_of(as_text(render(s, w, 66, kNow, &demo, state_for(1))), "dxg_denied");
       check(ends(gpu, static_cast<int>(full.size()) <= list ? full : brief), "the warning is whole in the GPU panel" + at);
       check(ends(overall, static_cast<int>(full.size()) <= w - 8 ? full : brief), "the warning is whole in the overall panel" + at);
     }
@@ -1428,8 +1436,8 @@ void check_denied_note() {
     // The clear wording where it has room, on the frames people read.
     for (const int w : {80, 100, 131, 200}) {
       const std::string at = " at " + std::to_string(w) + "x24, " + head;
-      check(ends(row_of(as_text(render(s, w, 24, kNow, &demo, view::gpu)), "dxg_denied"), full), "the clear wording fits the GPU panel" + at);
-      check(ends(row_of(as_text(render(s, w, 24, kNow, &demo, view::overall)), "dxg_denied"), full), "the clear wording fits the overall panel" + at);
+      check(ends(row_of(as_text(render(s, w, 24, kNow, &demo, state_for(2))), "dxg_denied"), full), "the clear wording fits the GPU panel" + at);
+      check(ends(row_of(as_text(render(s, w, 24, kNow, &demo, state_for(1))), "dxg_denied"), full), "the clear wording fits the overall panel" + at);
       check(ends(row_of(as_text(render(s, w, 24, kNow)), "dxg_denied"), full), "the clear wording fits the plain screen" + at);
     }
   }
@@ -1472,7 +1480,7 @@ void check_holder_wording() {
     for (int w = 1; w <= 300; ++w) {
       for (const int rows : {24, 66}) {
         std::string frames = as_text(render(*s, w, rows, kNow));
-        for (const view v : {view::overall, view::gpu, view::cpu}) frames += as_text(render(*s, w, rows, kNow, &demo, v));
+        for (const view_state& v : {state_for(1), state_for(2), state_for(3)}) frames += as_text(render(*s, w, rows, kNow, &demo, v));
         check(!has(frames, "on GPU") && !has(frames, "on G…") && !has(frames, "on GP…"), "holders are never called on GPU at " + std::to_string(w) + "x" + std::to_string(rows));
       }
     }
@@ -1502,8 +1510,8 @@ void check_holder_wording() {
   // The list under PROCESSES, side by side or stacked, both panels that draw it.
   for (int w = 41; w <= 300; ++w) {
     for (const snapshot* s : {&base, &long_distro}) {
-      for (const view v : {view::overall, view::cpu}) {
-        const std::string t = as_text(render(*s, w, 66, kNow, &demo, v)), at = " at " + std::to_string(w) + " view " + std::to_string(static_cast<int>(v));
+      for (const view_state& v : {state_for(1), state_for(3)}) {
+        const std::string t = as_text(render(*s, w, 66, kNow, &demo, v)), at = " at " + std::to_string(w) + " view " + std::to_string(v.panel);
         const std::string head = after_bar(row_of(t, " of 64,"));
         if (head.empty() || has(t, "vCPUs, not Windows cores")) continue;  // No room for the list; the large layout has its own check
         check(head.size() >= 18 && head.compare(head.size() - 18, 18, " no usage measured") == 0, "the WSL list says no usage is measured" + at);
@@ -1527,7 +1535,7 @@ void check_holder_wording() {
 }
 
 void check_sweep(const snapshot& s, const history& h, const char* name, int step = 3) {
-  for (const view v : {view::overall, view::gpu, view::cpu}) {
+  for (const view_state& v : {state_for(1), state_for(2), state_for(3)}) {
     for (const int w : sizes(300, step)) {
       for (const int rows : sizes(66, step)) {
         const auto frame = render(s, w, rows, kNow, &h, v);
@@ -1537,7 +1545,7 @@ void check_sweep(const snapshot& s, const history& h, const char* name, int step
           for (const span& p : l) cols += display_width(p.text);
           fits = fits && cols <= w;
         }
-        check(fits, std::string(name) + " view " + std::to_string(static_cast<int>(v)) + " " + std::to_string(w) + "x" + std::to_string(rows));
+        check(fits, std::string(name) + " view " + std::to_string(v.panel) + " " + std::to_string(w) + "x" + std::to_string(rows));
       }
     }
   }
@@ -1779,25 +1787,11 @@ bool cpu_fixture(const std::string& name, int seconds, snapshot& s, history& h) 
   return true;
 }
 
-// The panel and range a caller of the view_state overload would ask for.
-view_state state_for(int panel, int span_s = 60) {
-  view_state v;
-  v.panel = panel;
-  v.range = span_s >= 600 ? 2 : span_s >= 300 ? 1 : 0;
-  return v;
-}
-
-render_options options_for(int span_s) {
-  render_options o;
-  o.span_ms = span_s * 1000;
-  o.span_key = true;
-  return o;
-}
 
 // ---- The large layout of panel 3, against docs/design/cpu-panel.md -----------------------------------
 
-std::vector<line> large(const snapshot& s, const history& h, int w = 100, int rows = 34, const render_options& o = {}) {
-  return render(s, w, rows, kNow, &h, view::cpu, o);
+std::vector<line> large(const snapshot& s, const history& h, int w = 100, int rows = 34, const view_state& o = state_for(3)) {
+  return render(s, w, rows, kNow, &h, o);
 }
 
 // Text of a row from column `from`, `cols` wide; wide characters count as they are drawn.
@@ -1902,7 +1896,7 @@ void check_large_mockup() {
   row_is(30, "  0.31   11736 vmwp.exe         40    0.1 WSL VM │   0.03    2001 sshd          1     0.0  S");
   row_is(31, "  0.22    9001 카카오톡.exe     60    0.4        │   0.02    2002 systemd       1     0.0  S");
   row_is(32, "  0.20   10000 svchost.exe      12    0.0        │   0.01    2003 dbus-daemon   1     0.0  S");
-  row_is(33, "[1] overall  [2] gpu  [3] cpu  [q] quit");
+  row_is(33, "1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                  ←→ 1 min  q quit");
 
   // Both plots are as wide as the smaller column, whichever side is wider, and share the axis.
   for (const int w : {100, 101, 131, 132, 200}) {
@@ -1957,7 +1951,7 @@ void check_large_allocation() {
     const auto f = large(s, h, 120, rows);
     const std::string at = " at 120x" + std::to_string(rows);
     check(static_cast<int>(f.size()) == rows && frame_fits(f, 120, rows), "the frame fills its rows" + at);
-    check(has(as_text({f.back()}), "[q] quit"), "the footer is the last row" + at);
+    check(has(as_text({f.back()}), "q quit"), "the footer is the last row" + at);
     check(is_large(f), "this layout" + at);
     check(has(as_text({f.back()}), "some rows hidden") == (rows < 30), "the footer says when lanes or RAM went" + at);
   }
@@ -1988,8 +1982,7 @@ void check_large_floors() {
     check(is_large(f), "the floor is 17 plus heat rows" + at);
     check(!is_large(large(s, h, 100, floor - 1)), "one row less is the small layout" + at);
     check(!is_large(large(s, h, 99, 66)), "99 columns are the small layout" + at);
-    check(has(as_text(large(s, h, 100, floor - 1)), "[q] quit"), "the small layout has its footer" + at);
-    check(!has(as_text(large(s, h, 100, floor - 1)), "[t]"), "and no [t]" + at);
+    check(has(as_text({large(s, h, 100, floor - 1).back()}), "←→ 1 min  q quit"), "the small layout has its footer, and ←→ acts there too" + at);
     check(frame_fits(f, 100, floor), "the floor fits" + at);
     check(has(as_text(f), "highest of each row") == c.highest, "the caption says when rows hold more" + at);
     for (const char* label : {"whole machine, includes the WSL VM", "guest view, inside the VM", "no usage measured", "WSL VM", "vCPUs, not Windows cores", "inferred"}) {
@@ -2190,7 +2183,7 @@ void check_heat_cells() {
   back.unix_ms = kNow - 3600000;
   back.interval_s = 1;
   stepped.push(back);
-  const std::vector<line> bf = render(back, 100, 34, kNow - 3600000, &stepped, view::cpu);
+  const std::vector<line> bf = render(back, 100, 34, kNow - 3600000, &stepped, state_for(3));
   c = cells_of(line_at(bf, 0, "P0"));
   check(c[5 + 40].glyph == "▀" && c[5 + 42].fg == 179, "a clock that steps back keeps the block");
 
@@ -2360,7 +2353,7 @@ void check_large_states() {
   check(has(as_text(f), "lost CPU collecting") && has(as_text(f), "100%  WINDOWS") && has(as_text(f), "VM ran 5.76"), "instant figures are valid from the first sample");
   const std::string none = axis_of(large(launch, history()));
   check(has(none, "-60s ─") && has(none, "─ now") && !has(none, "avg") && !has(none, "collecting"), "no history yet: no label, no count");
-  check(!has(as_text(large(base, full, 100, 34, options_for(300))), "collecting"), "a longer span counts nothing either");
+  check(!has(as_text(large(base, full, 100, 34, state_for(3, 300))), "collecting"), "a longer span counts nothing either");
 
   // WSL starting.
   snapshot starting = base;
@@ -2450,7 +2443,7 @@ void check_large_states() {
   failing.push(one_fail);
   one_fail.unix_ms += 1000;
   failing.push(one_fail);
-  f = render(one_fail, 100, 34, kNow + 3000, &failing, view::cpu);
+  f = render(one_fail, 100, 34, kNow + 3000, &failing, state_for(3));
   check(row_at(f, 0, "P0") > 0, "a failed read keeps the block in place");
   check(cells_of(line_at(f, 0, "P0")).back().fg == -1 || cells_of(line_at(f, 0, "P0"))[47].glyph == " ", "and its newest cell is blank");
 
@@ -2574,13 +2567,13 @@ void check_large_lists() {
   snapshot empty = contended();
   empty.processes.clear();
   const std::vector<line> sparse = large(empty, h, 100, 66);
-  check(sparse.size() == 66 && has(as_text({sparse.back()}), "[q] quit") && has(as_text({sparse[60]}), "│ ") == false, "a short list leaves the footer on the last row");
+  check(sparse.size() == 66 && has(as_text({sparse.back()}), "q quit") && has(as_text({sparse[60]}), "│ ") == false, "a short list leaves the footer on the last row");
   check(has(as_text(large(empty, h)), "Windows  ") && has(as_text(large(empty, h)), "unavailable"), "an empty list is unavailable");
   check(frame_fits(large(empty, h), 100, 34), "and fits");
 
   // More rows than processes: the footer stays on the last row.
   const auto tall = large(contended(), h, 100, 66);
-  check(tall.size() == 66 && has(as_text({tall.back()}), "[q] quit"), "short lists leave the footer in place");
+  check(tall.size() == 66 && has(as_text({tall.back()}), "q quit"), "short lists leave the footer in place");
 }
 
 // Windows and WSL describe overlapping work, and no figure here adds them.
@@ -2635,47 +2628,50 @@ void check_large_bytes() {
 void check_span_key() {
   const snapshot s = contended();
   const history h = contended_history(s, 600);
-  render_options wired;
-  wired.span_key = true;
 
-  check(next_span(60000) == 300000 && next_span(300000) == 600000 && next_span(600000) == 60000, "t steps 1, 5 and 10 minutes, and wraps");
-  check(next_span(12345) == 60000, "a span it does not know starts over");
-
-  // Only when the caller says the key is wired, and only where it does something.
-  check(!has(as_text(large(s, h, 100, 34)), "[t]"), "no dead key: without the option the footer has no [t]");
-  check(has(as_text({large(s, h, 100, 34, wired).back()}), "[1] overall  [2] gpu  [3] cpu  [t] span 60s  [q] quit"), "the footer of section 6");
+  // ← and → step the range, clamped, and the frame follows it: apply_key, then render, as main.cpp does.
+  view_state v = state_for(3);
+  std::string seen;
+  for (const key_event k : {key_event{key::left}, key_event{key::left}, key_event{key::left}, key_event{key::right}}) {
+    apply_key(v, k, s);
+    seen += as_text({large(s, h, 131, 40, v).back()});
+  }
+  check(has(seen, "←→ 5 min") && has(seen, "←→ 10 min") && v.range == 1, "← steps 1, 5, 10 minutes and stops; → comes back, and the footer says each");
+  check(has(as_text({large(s, h, 100, 34).back()}), "1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost") &&
+            has(as_text({large(s, h, 100, 34).back()}), "←→ 1 min  q quit"),
+        "panel 3's footer at 100 by 34");
   for (const int span_s : {300, 600}) {
-    render_options o = options_for(span_s);
+    const view_state o = state_for(3, span_s);
     const std::string t = as_text(large(s, h, 131, 40, o));
     const std::string name = span_s == 300 ? "5m" : "10m";
-    check(has(t, "[t] span " + name), "the footer says the span");
-    check(has(t, "-" + name + " ─"), "the axis says the span");
+    check(has(t, span_s == 300 ? "←→ 5 min" : "←→ 10 min"), "the footer says the range");
+    check(has(t, "-" + name + " ─"), "the axis says the range");
     const std::string busy = span_s == 300 ? "busy avg 100% max 100%" : "busy avg 60% max 100%";
     check(has(t, busy + (span_s == 300 ? " · each cell 5.1 s" : " · each cell 10 s")), "past 60 s the axis says what a cell is");
     check(!has(t, "peak over mean") && !has(t, "collecting"), "and not the old captions");
     check(has(as_text(large(s, h, 100, 34, o)), busy + " ─") && !has(as_text(large(s, h, 100, 34, o)), "each cell"), "where both do not fit, the cell's length goes first");
   }
-  check(!has(as_text(render(s, 131, 40, kNow, &h, view::overall, wired)), "[t]") && !span_key_acts(s, h, view::overall, 131, 40), "t is absent from panel 1, which has no graph");
-  check(as_text(render(s, 131, 40, kNow, &h, view::overall, options_for(600))) == as_text(render(s, 131, 40, kNow, &h, view::overall)), "and panel 1 ignores the range");
+  view_state one = state_for(1);
+  apply_key(one, key_event{key::left}, s);
+  check(one.range == 0 && !has(as_text(render(s, 131, 40, kNow, &h, one)), "←→"), "← is absent from panel 1, which has no graph, and does nothing there");
+  check(as_text(render(s, 131, 40, kNow, &h, state_for(1, 600))) == as_text(render(s, 131, 40, kNow, &h, state_for(1))), "and panel 1 ignores the range");
   // Panel 2 and the small layout of panel 3 draw over the range too.
-  const std::string plain = as_text(render(s, 131, 40, kNow, &h, view::gpu));
-  check(has(plain, "-60s ") && !has(plain, "-5m ") && !has(plain, "[t]"), "panel 2 is at 1 minute by default, and offers no dead key");
+  const std::string plain = as_text(render(s, 131, 40, kNow, &h, state_for(2)));
+  check(has(plain, "-60s ") && !has(plain, "-5m ") && has(plain, "←→ 1 min"), "panel 2 is at 1 minute by default, and offers ←→");
   for (const int span_s : {300, 600}) {
-    render_options o = options_for(span_s);
-    o.span_key = true;
-    const std::string name = span_s == 300 ? "5m" : "10m";
-    const std::string g = as_text(render(s, 131, 40, kNow, &h, view::gpu, o)), c = as_text(render(s, 99, 40, kNow, &h, view::cpu, o));
-    check(has(g, "-" + name + " ─") && !has(g, "-60s") && has(g, "[t] span " + name), "panel 2 draws over the range and says so");
-    check(has(c, "-" + name + " ─") && !has(c, "-60s") && has(c, "[t] span " + name), "the small layout draws over the range and says so");
+    const std::string name = span_s == 300 ? "5m" : "10m", minutes = span_s == 300 ? "←→ 5 min" : "←→ 10 min";
+    const std::string g = as_text(render(s, 131, 40, kNow, &h, state_for(2, span_s))), c = as_text(render(s, 99, 40, kNow, &h, state_for(3, span_s)));
+    check(has(g, "-" + name + " ─") && !has(g, "-60s") && has(g, minutes), "panel 2 draws over the range and says so");
+    check(has(c, "-" + name + " ─") && !has(c, "-60s") && has(c, minutes), "the small layout draws over the range and says so");
   }
-  check(span_key_acts(s, h, view::gpu, 131, 40) && has(as_text(render(s, 131, 40, kNow, &h, view::gpu, wired)), "[t]"), "t acts on panel 2");
-  check(has(as_text(render(s, 99, 40, kNow, &h, view::cpu, wired)), "[t]") && span_key_acts(s, h, view::cpu, 99, 40), "t acts in the small layout");
-  check(has(as_text(render(s, 100, 26, kNow, &h, view::cpu, wired)), "[t]") && span_key_acts(s, h, view::cpu, 100, 26), "and below the height floor");
-  check(span_key_acts(s, h, view::cpu, 100, 27) && has(as_text(render(s, 100, 27, kNow, &h, view::cpu, wired)), "[t]"), "at the floor it acts");
-  check(span_key_acts(s, h, view::cpu, 100, 34), "and at the design's size");
+  for (const auto& [w, rows] : {std::pair{99, 40}, std::pair{100, 26}, std::pair{100, 27}, std::pair{100, 34}}) {
+    view_state x = state_for(3);
+    apply_key(x, key_event{key::left}, s);
+    check(x.range == 1 && has(as_text({render(s, w, rows, kNow, &h, x).back()}), "←→ 5 min"), "← acts on panel 3 in either layout, at " + std::to_string(w) + "x" + std::to_string(rows));
+  }
 
   // A span shows the samples it covers: 10 minutes reach back past the 60 s the default shows.
-  const std::vector<line> shortest = large(s, h, 100, 34), longest = large(s, h, 100, 34, options_for(600));
+  const std::vector<line> shortest = large(s, h, 100, 34), longest = large(s, h, 100, 34, state_for(3, 600));
   check(cells_of(line_at(shortest, 0, "P0"))[5].fg == 179, "60 s of a long load are all hot");
   check(cells_of(line_at(longest, 0, "P0"))[5].fg == 236, "10 minutes reach back past its onset");
   // A burst: the cell is its mean, the label and one dot say how high.
@@ -2687,7 +2683,7 @@ void check_span_key() {
       t.cpu.core_pct.assign(20, 100.0);
     }
   });
-  const std::vector<line> bf = large(burst, bh, 100, 34, options_for(600));
+  const std::vector<line> bf = large(burst, bh, 100, 34, state_for(3, 600));
   const std::string burst_top = columns(as_text({line_at(bf, 0, "100 ")}), 5, 43);
   check(count_braille(burst_top) == 1 && has(burst_top, "⠈"), "a one-second burst in a 14 s cell is its mean, and the latest one's cell carries the maximum's dot: " + burst_top);
   check(display_width(burst_top.substr(0, burst_top.find("⠈"))) == 41, "the dot is in the latest burst's cell, 20 s before now");
@@ -2711,7 +2707,7 @@ void check_span_key() {
     t.cpu_derived.own_kernel_pct = high ? 95 : 3;
   };
   const history sh = build_history(burst, 600, spike);
-  const std::vector<line> sf = large(burst, sh, 100, 40, options_for(600)), lean = large(burst, sh, 120, 30, options_for(600));
+  const std::vector<line> sf = large(burst, sh, 100, 40, state_for(3, 600)), lean = large(burst, sh, 120, 30, state_for(3, 600));
   const auto marked_once = [&](const char* start, int side) {
     const std::string top = columns(as_text({line_at(sf, side, start)}), side + 5, 43);
     return count_braille(top) == 1 && has(top, "⠈");
@@ -2792,10 +2788,10 @@ void check_large_sweep() {
     history h;
     cpu_fixture(name, 60, s, h);
     for (const int span_s : {60, 600}) {
-      const render_options o = options_for(span_s);
+      const view_state o = state_for(3, span_s);
       for (int w = 100; w <= 300; w += 7) {
         for (int rows = 17; rows <= 66; ++rows) {
-          check(frame_fits(render(s, w, rows, kNow, &h, view::cpu, o), w, rows), std::string(name) + " " + std::to_string(w) + "x" + std::to_string(rows));
+          check(frame_fits(render(s, w, rows, kNow, &h, o), w, rows), std::string(name) + " " + std::to_string(w) + "x" + std::to_string(rows));
         }
       }
     }
@@ -2915,7 +2911,7 @@ void check_console() {
   DWORD before = 0;
   if (in == INVALID_HANDLE_VALUE || !GetConsoleMode(in, &before)) {
     console c;
-    check(c.poll_key() == 0, "no console, no key");
+    check(c.poll().k == key::none, "no console, no key");
     printf("console input: no console here, key checks skipped\n");
     if (in != INVALID_HANDLE_VALUE) CloseHandle(in);
     return;
@@ -2934,8 +2930,8 @@ void check_console() {
     check(SetConsoleCtrlHandler(on_ctrl, FALSE) != 0, "Ctrl+C is caught whatever stdout is");
     SetConsoleCtrlHandler(on_ctrl, TRUE);
     FlushConsoleInputBuffer(in);
-    check(c.poll_key() == 0, "no key waiting, no wait");
-    const auto key = [](WORD vk, WCHAR ch, BOOL down = TRUE, DWORD state = 0) {
+    check(c.poll().k == key::none, "no key waiting, no wait");
+    const auto record = [](WORD vk, WCHAR ch, BOOL down = TRUE, DWORD state = 0) {
       INPUT_RECORD r{};
       r.EventType = KEY_EVENT;
       r.Event.KeyEvent.bKeyDown = down;
@@ -2948,26 +2944,33 @@ void check_console() {
     INPUT_RECORD other{};
     other.EventType = FOCUS_EVENT;
     const INPUT_RECORD events[] = {
-        other, key('Q', L'q'), key('Q', L'q', FALSE),
-        key(VK_LEFT, 0), key(0, 0xD55C), key('2', L'2'), key('2', L'2', FALSE),
-        key('Q', 0x3142),                                       // q under Hangul input mode
-        key('T', L't'), key('T', 0x3145), key('T', 0x14, TRUE, LEFT_CTRL_PRESSED),  // t, t under Hangul input mode, Ctrl+T
-        key(VK_DELETE, 0x7F), key(VK_PACKET, 0xD83D), key(VK_PACKET, 0xDE00),  // Delete, a surrogate pair
-        key(0, L'q'), key('X', L'x'), key('Q', 0x11, TRUE, LEFT_CTRL_PRESSED),  // A character alone, another key, Ctrl+Q
-        key(VK_NUMPAD3, L'3'), key('1', L'!', TRUE, SHIFT_PRESSED), key('Q', L'Q', TRUE, SHIFT_PRESSED)};
+        other, record('Q', L'q'), record('Q', L'q', FALSE),
+        record(VK_LEFT, 0), record(0, 0xD55C), record('2', L'2'), record('2', L'2', FALSE),
+        record('Q', 0x3142),                                       // q under Hangul input mode
+        record('T', L't'), record('T', 0x3145), record('T', 0x14, TRUE, LEFT_CTRL_PRESSED),  // t, t under Hangul input mode, Ctrl+T: nothing now
+        record(VK_DELETE, 0x7F), record(VK_PACKET, 0xD83D), record(VK_PACKET, 0xDE00),  // Delete, a surrogate pair
+        record(0, L'q'), record('X', L'x'), record('Q', 0x11, TRUE, LEFT_CTRL_PRESSED),  // A character alone, another key, Ctrl+Q
+        record(VK_NUMPAD3, L'3'), record('1', L'!', TRUE, SHIFT_PRESSED), record('Q', L'Q', TRUE, SHIFT_PRESSED),
+        record(VK_PROCESSKEY, 0x3134), record(VK_TAB, L'\t', TRUE, SHIFT_PRESSED), record(VK_ESCAPE, 0x1B), record('Q', L'q', TRUE, LEFT_ALT_PRESSED)};
     const DWORD total = static_cast<DWORD>(std::size(events));
     DWORD put = 0;
     WriteConsoleInputW(in, events, total, &put);
     check(put == total, "events written");
-    check(c.poll_key() == 'q', "a key comes back");
-    check(c.poll_key() == '2', "releases, focus, arrows and non-ASCII are passed over");
-    check(c.poll_key() == 'q', "q under Hangul input mode");
-    check(c.poll_key() == 't', "t, for the span");
-    check(c.poll_key() == 't', "t under Hangul input mode");
-    check(c.poll_key() == '3', "Delete, a surrogate pair, Ctrl+Q and a bare character are passed over; the numeric keypad counts");
-    check(c.poll_key() == '1', "Shift on a digit, for the layouts that need it");
-    check(c.poll_key() == 'q', "Shift on q");
-    check(c.poll_key() == 0, "then nothing");
+    const auto next_is = [&](wwt::key k, int n = 0, bool alt = false) {
+      const key_event e = c.poll();
+      return e.k == k && e.panel == n && e.esc_first == alt;
+    };
+    check(next_is(key::quit), "a key comes back");
+    check(next_is(key::left), "releases and focus are passed over; an arrow is a key now");
+    check(next_is(key::panel, 2), "a lone non-ASCII character with no key is passed over");
+    check(next_is(key::quit), "q under Hangul input mode");
+    check(next_is(key::panel, 3), "t, Ctrl+T, Delete, a surrogate pair, a bare character, another key and Ctrl+Q are passed over; the numeric keypad counts");
+    check(next_is(key::panel, 1), "Shift on a digit, for the layouts that need it");
+    check(next_is(key::quit), "Shift on q");
+    check(next_is(key::sort), "VK_PROCESSKEY with ㄴ is s");
+    check(next_is(key::esc), "Shift+Tab is passed over; esc comes back");
+    check(next_is(key::quit, 0, true), "Alt+Q is esc, then q, in one record");
+    check(c.poll().k == key::none, "then nothing");
   }
   DWORD after = 0;
   GetConsoleMode(in, &after);
@@ -2984,7 +2987,7 @@ void check_console() {
     check(gone == INVALID_HANDLE_VALUE, "CONIN$ cannot be opened without a console");
     if (gone != INVALID_HANDLE_VALUE) CloseHandle(gone);
     console c;
-    check(c.poll_key() == 0 && !c.is_terminal(), "a failed CONIN$ open gives no key");
+    check(c.poll().k == key::none && !c.is_terminal(), "a failed CONIN$ open gives no key");
     printf("console input: CONIN$ failure checked\n");
   }
 }
@@ -3040,7 +3043,7 @@ void check_graph_rule_buckets() {
   for (const int span_s : {60, 600}) {
     for (const auto& [w, h] : {std::pair{100, 34}, std::pair{131, 40}, std::pair{200, 60}}) {
       const std::string n = " " + std::to_string(span_s) + " s " + std::to_string(w) + "x" + std::to_string(h);
-      const std::vector<line> f = render(rule_sample(kNow, 50, 99), w, h, kNow, &fresh, view::cpu, options_for(span_s));
+      const std::vector<line> f = render(rule_sample(kNow, 50, 99), w, h, kNow, &fresh, state_for(3, span_s));
       if (!is_large(f)) { check(false, "the large layout draws" + n); continue; }
       const std::vector<cell> win = bottom_cells(f, 0), wsl = bottom_cells(f, 1);
       const int cells = static_cast<int>(win.size()), first = lead(win);
@@ -3068,7 +3071,7 @@ void check_graph_rule_buckets() {
   // A measured 0 for the whole 10 minutes is ⣀ in every cell of both busy plots.
   history zero;
   for (int age = 600; age >= 0; --age) zero.push(rule_sample(kNow - age * 1000, 0, age));
-  const std::vector<line> zf = render(rule_sample(kNow, 0, 999), 131, 40, kNow, &zero, view::cpu, options_for(600));
+  const std::vector<line> zf = render(rule_sample(kNow, 0, 999), 131, 40, kNow, &zero, state_for(3, 600));
   for (int g = 0; g < 2; ++g) {
     const std::vector<cell> cs = bottom_cells(zf, g);
     bool line_of_zero = !cs.empty();
@@ -3085,7 +3088,7 @@ void check_graph_rule_buckets() {
   late.interval_s = 120;
   partial.push(late);
   for (const int span_s : {60, 600}) {
-    const std::vector<line> f = render(late, 131, 40, kNow - 100000, &partial, view::cpu, options_for(span_s));
+    const std::vector<line> f = render(late, 131, 40, kNow - 100000, &partial, state_for(3, span_s));
     const std::vector<cell> cs = bottom_cells(f, 0);
     const time_axis axis = make_axis(partial, kNow - 100000, span_s * 1000LL, static_cast<int>(cs.size()));
     const int first = lead(cs);
@@ -3102,7 +3105,7 @@ void check_graph_rule_buckets() {
   snapshot after = rule_sample(kNow, 50, 10);
   after.interval_s = static_cast<double>(history::kKeepMs) / 1000.0;
   cleared.push(after);
-  const std::vector<cell> cc = bottom_cells(render(after, 131, 40, kNow, &cleared, view::cpu, options_for(600)), 0);
+  const std::vector<cell> cc = bottom_cells(render(after, 131, 40, kNow, &cleared, state_for(3, 600)), 0);
   check(cleared.samples().size() == 1 && !cc.empty() && std::count_if(cc.begin(), cc.end(), is_dot) == 0 && lead(cc) == static_cast<int>(cc.size()) - 1,
         "a stall of what is kept is a gap across 10 minutes, not dotted");
 
@@ -3290,15 +3293,7 @@ void check_view_keys() {
   }
   check(has(as_text(render(s, 100, 34, kNow, &demo, state_for(5))), "DISK ───────────────────────────────────────────────────────────────────────────────── not built yet"), "the DISK rule, as the design draws it");
 
-  // The view_state overload draws what the old one draws above the footer, and the same without a history.
-  for (int p = 1; p <= 3; ++p) {
-    for (const int span_s : {60, 300, 600}) {
-      for (const auto& [w, h] : {std::pair{131, 40}, std::pair{100, 34}, std::pair{80, 24}}) {
-        std::vector<line> now = render(s, w, h, kNow, &demo, state_for(p, span_s)), before = render(s, w, h, kNow, &demo, static_cast<view>(p - 1), options_for(span_s));
-        check(now.size() == before.size() && as_text({now.begin(), now.end() - 1}) == as_text({before.begin(), before.end() - 1}), "the same panel above the footer, " + std::to_string(p) + " at " + std::to_string(span_s) + " s");
-      }
-    }
-  }
+  // Without a history every panel is the one plain screen.
   for (const snapshot& t : {busy(), bare()}) {
     for (int p = 1; p <= 8; ++p) check(as_text(render(t, 131, 50, kNow, nullptr, state_for(p))) == as_text(render(t, 131, 50, kNow)), "--text is unchanged: no history, no panel, no footer");
   }
@@ -3398,8 +3393,7 @@ void check_graph_labels() {
   check(plot_rows({kNaN, kNaN}, 1, 0, 100) == plot_rows({kNaN, kNaN}, 1), "a gap never takes a dot");
   check(plot_rows({100, 100}, 2, 1, 300) == plot_rows({100, 100}, 2), "a maximum over the ceiling is drawn at it, not past it");
   // Through panel 2, at 10 minutes: one dot on the device graph's top row, and the label.
-  render_options ten = options_for(600);
-  const std::vector<line> pf = render(rule_sample(kNow, 0, 999), 131, 40, kNow, &spike, view::gpu, ten);
+  const std::vector<line> pf = render(rule_sample(kNow, 0, 999), 131, 40, kNow, &spike, state_for(2, 600));
   const std::string top = panel_cells(upper_graph_rows(as_text(pf)).substr(0, upper_graph_rows(as_text(pf)).find('\n') + 1), 0);
   check(count_braille(top) == 1, "panel 2 at 10 minutes: the maximum's dot on the device graph's top row: " + top);
   check(has(line_with(pf, "-10m"), "max 100%"), "and the label says 100");
@@ -3409,17 +3403,17 @@ void check_graph_labels() {
   for (const double v : {10.0, 20.0, 30.0, 40.0}) hand.push(rule_sample(kNow - static_cast<int64_t>(4 - v / 10) * 1000, v, static_cast<int>(v)));
   const window_stats st = series_stats(hand, &history_sample::gpu_util, kNow, 60000);
   check(st.avg == 25 && st.max == 40, "avg 25 and max 40 of 10, 20, 30, 40");
-  check(has(line_with(render(rule_sample(kNow, 40, 99), 131, 40, kNow, &hand, view::gpu), "-60s"), "avg 25% max 40%"), "and the device graph says so");
+  check(has(line_with(render(rule_sample(kNow, 40, 99), 131, 40, kNow, &hand, state_for(2)), "-60s"), "avg 25% max 40%"), "and the device graph says so");
   check(std::isnan(series_stats(hand, &history_sample::gpu_util, kNow + 61000, 60000).avg), "a window with no sample has no figures");
   history gaps;
   for (int age = 60; age >= 0; --age) gaps.push(sample_at(bare(), kNow - age * 1000, 0, 0, 0));
-  const std::string blank = as_text(render(bare(), 131, 40, kNow, &gaps, view::gpu));
+  const std::string blank = as_text(render(bare(), 131, 40, kNow, &gaps, state_for(2)));
   check(!has(blank, "avg") && !has(blank, "max"), "no label where every sample in the range is a gap");
-  check(has(as_text(render(bare(), 99, 40, kNow, &gaps, view::cpu)), "avg") && !has(panel_cells(graph_rows(as_text(render(bare(), 99, 40, kNow, &gaps, view::cpu))), 1), "⣀"), "the Windows graph is labelled while the WSL one, with no line, is blank");
+  check(has(as_text(render(bare(), 99, 40, kNow, &gaps, state_for(3))), "avg") && !has(panel_cells(graph_rows(as_text(render(bare(), 99, 40, kNow, &gaps, state_for(3)))), 1), "⣀"), "the Windows graph is labelled while the WSL one, with no line, is blank");
 
   // Over 100: drawn at the ceiling, printed as measured in the watch tone, and the split's * with its caption.
   const history demo = demo_minute(base);
-  const std::vector<line> df = render(base, 131, 40, kNow, &demo, view::gpu);
+  const std::vector<line> df = render(base, 131, 40, kNow, &demo, state_for(2));
   bool watched = false, plain_max = true;
   for (const line& l : df) {
     for (const span& p : l) {
@@ -3430,17 +3424,17 @@ void check_graph_labels() {
   check(watched, "demo_minute: max 112%* in the watch tone");
   check(plain_max, "a maximum under the ceiling is not");
   check(has(as_text(df), "VM level, not exact shares*") && has(as_text(df), "avg 37% max 112%*"), "the caption carries the * beside the split's label");
-  const std::string panel_1 = as_text(render(base, 131, 40, kNow, &demo, view::overall));
+  const std::string panel_1 = as_text(render(base, 131, 40, kNow, &demo, state_for(1)));
   check(!has(panel_1, "shares*"), "panel 1 has no graph, so no *");
   history under;
   for (int age = 60; age >= 0; --age) under.push(sample_at(base, kNow - age * 1000, 50, 100, 40));
-  const std::string uf = as_text(render(base, 131, 40, kNow, &under, view::gpu));
+  const std::string uf = as_text(render(base, 131, 40, kNow, &under, state_for(2)));
   check(!has(uf, "*") && has(uf, "max 100%"), "every split value at or under 100: no * anywhere");
   history over_windows;
   for (int age = 60; age >= 0; --age) over_windows.push(sample_at(base, kNow - age * 1000, 50, 30, age == 10 ? 104 : 40));
-  const std::string ow = as_text(render(base, 131, 40, kNow, &over_windows, view::gpu));
+  const std::string ow = as_text(render(base, 131, 40, kNow, &over_windows, state_for(2)));
   check(has(ow, "max 104%*") && has(ow, "shares*"), "the Windows side over 100 carries it too");
-  check(!has(as_text(render(base, 131, 40, kNow, &over_windows, view::gpu, options_for(60))), "max 30%*"), "a side under 100 has no * of its own");
+  check(!has(as_text(render(base, 131, 40, kNow, &over_windows, state_for(2, 60))), "max 30%*"), "a side under 100 has no * of its own");
   history hot_power;
   for (int age = 60; age >= 0; --age) {
     snapshot p = sample_at(base, kNow - age * 1000, 50, 30, 40);
@@ -3448,7 +3442,7 @@ void check_graph_labels() {
     hot_power.push(p);
   }
   bool power_watched = false;
-  for (const line& l : render(base, 131, 40, kNow, &hot_power, view::gpu)) {
+  for (const line& l : render(base, 131, 40, kNow, &hot_power, state_for(2))) {
     for (const span& p : l) power_watched = power_watched || (p.text == "210 W" && p.color == tone::watch);
   }
   check(power_watched, "power over its limit: the watts in the watch tone, and no *, which only the split explains");
@@ -3467,14 +3461,14 @@ void check_graph_labels() {
   limitless.unix_ms = kNow;
   history nl;
   nl.push(limitless);
-  check(std::isnan(nl.samples().back().gpu_power_w) && !has(line_with(render(limitless, 131, 40, kNow, &nl, view::gpu), " W ─"), "W"), "no limit, no height: no label either");
+  check(std::isnan(nl.samples().back().gpu_power_w) && !has(line_with(render(limitless, 131, 40, kNow, &nl, state_for(2)), " W ─"), "W"), "no limit, no height: no label either");
   snapshot huge = base;
   huge.gpu_split = {true, 1e300, -5, 1, 1};
   huge.unix_ms = kNow;
   history hh;
   hh.push(huge);
-  const std::string ht = as_text(render(huge, 131, 50, kNow, &hh, view::gpu));
-  check(has(ht, "max 1e+300%*") && has(ht, "avg -5% max -5%"), "huge and negative figures are printed as measured: " + line_with(render(huge, 131, 50, kNow, &hh, view::gpu), "-60s"));
+  const std::string ht = as_text(render(huge, 131, 50, kNow, &hh, state_for(2)));
+  check(has(ht, "max 1e+300%*") && has(ht, "avg -5% max -5%"), "huge and negative figures are printed as measured: " + line_with(render(huge, 131, 50, kNow, &hh, state_for(2)), "-60s"));
 
   // Scale by measure: 1, 2 or 5 times a power of ten, never below the floor.
   const struct { double max, floor, top; } scales[] = {{13.25, 0.05, 20}, {0.01, 0.05, 0.05}, {1, 0.05, 1}, {1.0001, 0.05, 2}, {2.5, 0.05, 5}, {7, 0.05, 10},
@@ -3486,17 +3480,16 @@ void check_graph_labels() {
   snapshot c;
   history ch;
   cpu_fixture("contended", 600, c, ch);
-  for (const int64_t span_ms : kSpansMs) {
-    render_options o;
-    o.span_ms = span_ms;
-    const std::string range = "-" + span_text(span_ms) + " ";
+  for (const int span_s : {60, 300, 600}) {
+    const std::string range = "-" + span_text(span_s * 1000LL) + " ";
     for (int w = 36; w <= 300; w += 7) {
-      for (const view v : {view::gpu, view::cpu}) {
+      for (const view_state& v : {state_for(2, span_s), state_for(3, span_s)}) {
         for (const auto& [sn, hn] : {std::pair<const snapshot*, const history*>{&base, &demo}, {&c, &ch}}) {
-          const std::vector<line> f = render(*sn, w, 40, kNow, hn, v, o);
+          const std::vector<line> f = render(*sn, w, 40, kNow, hn, v);
           const std::string t = as_text(f);
           const std::string at = " " + std::to_string(w) + " " + range;
-          check(!has(t, "min ") && !has(t, "peak over mean") && !has(t, "collecting:"), "no minimum and no old caption" + at);
+          const std::string body = as_text({f.begin(), f.end() - 1});  // The footer's "←→ 1 min" is the range, not a minimum
+          check(!has(body, "min ") && !has(t, "peak over mean") && !has(t, "collecting:"), "no minimum and no old caption" + at);
           for (const line& l : f) {
             const std::string row_text = as_text({l});
             if (!has(row_text, range)) continue;

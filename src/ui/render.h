@@ -25,16 +25,8 @@ using line = std::vector<span>;
 
 class history;
 
-// The panels of the live screen. render() knows nothing of keys: its caller maps them to a view.
-enum class view : uint8_t { overall, gpu, cpu };
-
-// The ranges a graph is drawn over, 1, 5 and 10 minutes, which `t` steps through on panels 2 and 3.
+// The ranges a graph is drawn over, 1, 5 and 10 minutes, which ← and → step through on panels 2 and 3.
 constexpr int64_t kSpansMs[] = {60000, 300000, 600000};
-
-struct render_options {
-  int64_t span_ms = kSpansMs[0];  // Time across every graph of panels 2 and 3, one of kSpansMs
-  bool span_key = false;          // The caller acts on `t`. Only then does the footer offer it
-};
 
 // The eight panels of the shared grammar (docs/panels.md), by number; 0 is not one.
 constexpr int kPanels = 8;
@@ -66,17 +58,7 @@ bool apply_key(view_state& v, key_event e, const snapshot& s);
 // now_ms is the wall clock when drawing; 0 means unknown, and the title then gives no data age.
 // Without hist there are no panels: the one overall screen, v ignored and no key footer. With hist,
 // the panel v.panel and a key footer as the last of the `height` rows, offering only keys that act there.
-std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, const view_state& v);
-
-// The same with the keys main.cpp reads until slice 1's commit 5: 1, 2, 3, t and q, and their footer.
-std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms = 0, const history* hist = nullptr,
-                         view v = view::overall, const render_options& options = {});
-
-// The span after this one, wrapping, for a caller that got `t`.
-int64_t next_span(int64_t span_ms);
-
-// Whether `t` does anything on this frame: panels 2 and 3 draw graphs over the range, panel 1 has none.
-bool span_key_acts(const snapshot& s, const history& hist, view v, int width, int height);
+std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms = 0, const history* hist = nullptr, const view_state& v = {});
 
 std::string as_text(const std::vector<line>& lines);
 

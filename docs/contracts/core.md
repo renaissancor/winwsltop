@@ -192,3 +192,7 @@ documents true.
   writes `cores_known` and `create_time` on every `processes` row; `wsl.data` carries `rated` and `start` as the collector
   sent them. `check_json.py` requires both pairs, a 0 `cores` wherever the flag is false, and under `--full` at least
   one known row on each side. `--text` is unchanged.
+- 2026-11-02. Slice 1 commit 5, `main.cpp`: the loop reads `console::poll()` and hands each key to `apply_key`, which
+  decides quitting too; Ctrl+C stays `stop_requested()`. Any key that reaches `apply_key` redraws, since `view_state`
+  has no comparison and a redraw costs one frame. `--help` names the arrows in words, `left/right` and `up/down`:
+  it is printed before the console is set up, so a non-UTF-8 code page would garble `←`.

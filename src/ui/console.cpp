@@ -40,21 +40,6 @@ void write_utf8(HANDLE out, std::string_view s) {
   write_wide(out, w);
 }
 
-// The key pressed, not the character it made. Under Hangul input mode q should arrive as U+3142 with
-// its usual key code, so it should work; not tried with a real IME. Delete has no character worth
-// reading. Shift stays allowed, because some layouts need it for the digits.
-char key_of(const KEY_EVENT_RECORD& k) {
-  if (k.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED | LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) return 0;
-  switch (k.wVirtualKeyCode) {
-    case '1': case VK_NUMPAD1: return '1';
-    case '2': case VK_NUMPAD2: return '2';
-    case '3': case VK_NUMPAD3: return '3';
-    case 'Q': return 'q';
-    case 'T': return 't';
-    default: return 0;
-  }
-}
-
 }  // namespace
 
 console::console() {
@@ -63,7 +48,7 @@ console::console() {
 
   // Input on its own: a redirected stdout does not take the keyboard away. Echo needs line input, so
   // both go; ENABLE_PROCESSED_INPUT stays so that Ctrl+C still reaches on_ctrl. VT input would turn a
-  // key like Delete into text, and poll_key wants the key.
+  // key like Delete or an arrow into text, and poll() wants the key: esc then is never the start of a sequence.
   HANDLE in = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
   DWORD in_mode = 0;
   if (in != INVALID_HANDLE_VALUE && GetConsoleMode(in, &in_mode) &&
@@ -118,19 +103,6 @@ void console::draw(const std::vector<line>& lines) {
 }
 
 bool console::stop_requested() { return g_stop; }
-
-char console::poll_key() {
-  if (!in_) return 0;
-  DWORD waiting = 0;
-  while (GetNumberOfConsoleInputEvents(in_, &waiting) && waiting > 0) {  // Only then can a read not block
-    INPUT_RECORD e;
-    DWORD got = 0;
-    if (!ReadConsoleInputW(in_, &e, 1, &got) || got == 0) return 0;
-    if (e.EventType != KEY_EVENT || !e.Event.KeyEvent.bKeyDown) continue;  // Releases, resizes, the mouse
-    if (const char key = key_of(e.Event.KeyEvent)) return key;
-  }
-  return 0;
-}
 
 key_event console::poll() {
   if (!in_) return {};
