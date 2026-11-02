@@ -3,6 +3,7 @@
 // result on a Windows console.
 #pragma once
 #include "core/snapshot.h"
+#include "ui/keys.h"
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -35,11 +36,39 @@ struct render_options {
   bool span_key = false;          // The caller acts on `t`. Only then does the footer offer it
 };
 
+// The eight panels of the shared grammar (docs/panels.md), by number; 0 is not one.
+constexpr int kPanels = 8;
+
+// A row of a list, remembered by pid and name, so that it survives a reorder (design/panel-grammar.md part 3).
+struct row_key {
+  bool set = false;  // Not yet moved: the first row
+  uint32_t pid = 0;
+  std::string name;
+};
+
+// What the keys have chosen, and nothing else: no offset, no size, nothing per second.
+struct view_state {
+  int panel = 1;  // 1-8
+  int range = 0;  // Index into kSpansMs: one range for the whole screen
+  struct panel_view {
+    int focus = 0;     // The focused list: 0 Windows, 1 WSL
+    row_key rows[2];   // Each list's own selection
+  } panels[kPanels + 1];
+};
+
+// Applies one key: false when it asks to quit. esc_first is esc, then the key. Pure: it reads the snapshot
+// only for the lists a key moves through, in the order the panel draws them. Panels 1 and 2 and those not
+// built have no list; tab needs two lists to move between, which a missing WSL line leaves one of.
+bool apply_key(view_state& v, key_event e, const snapshot& s);
+
 // At most `height` lines of at most `width` columns, wide characters counted as 2. Names from either
 // system are made safe here: control characters and malformed UTF-8 never reach the terminal.
 // now_ms is the wall clock when drawing; 0 means unknown, and the title then gives no data age.
 // Without hist there are no panels: the one overall screen, v ignored and no key footer. With hist,
-// the panel v and a key footer as the last of the `height` rows.
+// the panel v.panel and a key footer as the last of the `height` rows, offering only keys that act there.
+std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, const view_state& v);
+
+// The same with the keys main.cpp reads until slice 1's commit 5: 1, 2, 3, t and q, and their footer.
 std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms = 0, const history* hist = nullptr,
                          view v = view::overall, const render_options& options = {});
 

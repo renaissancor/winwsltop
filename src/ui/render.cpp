@@ -1930,18 +1930,35 @@ std::vector<line> wsl_heads(const snapshot& s, const wsl_view& parsed, int col, 
 // Rounded to 0.1 and then PID, so that rows of similar cores do not swap each second.
 int64_t cores_key(double cores) { return std::isfinite(cores) ? std::llround(std::clamp(cores, 0.0, 1e9) * 10) : -1; }
 
-std::vector<line> cpu_windows_list(const snapshot& s, int col, int rows) {
+// Panel 3's lists in the order they are drawn, which is the order the selection moves through.
+std::vector<const process_row*> windows_cpu_order(const snapshot& s) {
   std::vector<const process_row*> list;
   for (const process_row& p : s.processes) {
     if (p.pid != 0) list.push_back(&p);  // PID 0 is the idle process: its cores are idle time
   }
-  row head;
-  head.add("Windows", tone::title, true);
-  if (list.empty()) return {head, message("", "unavailable", tone::watch, 0)};
   std::stable_sort(list.begin(), list.end(), [](const process_row* a, const process_row* b) {
     const int64_t ka = cores_key(a->cores), kb = cores_key(b->cores);
     return ka != kb ? ka > kb : a->pid < b->pid;
   });
+  return list;
+}
+
+std::vector<const wsl_process*> wsl_cpu_order(const wsl_view& w) {
+  std::vector<const wsl_process*> list;
+  if (!w.ok) return list;
+  for (const wsl_process& p : w.processes) list.push_back(&p);
+  std::stable_sort(list.begin(), list.end(), [](const wsl_process* a, const wsl_process* b) {
+    const int64_t ka = cores_key(a->cores), kb = cores_key(b->cores);
+    return ka != kb ? ka > kb : a->pid < b->pid;
+  });
+  return list;
+}
+
+std::vector<line> cpu_windows_list(const snapshot& s, int col, int rows) {
+  const std::vector<const process_row*> list = windows_cpu_order(s);
+  row head;
+  head.add("Windows", tone::title, true);
+  if (list.empty()) return {head, message("", "unavailable", tone::watch, 0)};
   const size_t shown = std::min(list.size(), static_cast<size_t>(std::max(0, rows)));
   head.add(fmt("  top %d of %d by cores", static_cast<int>(shown), static_cast<int>(list.size())), tone::dim);
 
@@ -1969,12 +1986,7 @@ std::vector<line> cpu_wsl_list(const wsl_view& w, int col, int rows) {
   row head;
   head.add("WSL", tone::title, true);
   if (!w.ok) return {head, message("", "unavailable", tone::watch, 0)};
-  std::vector<const wsl_process*> list;
-  for (const wsl_process& p : w.processes) list.push_back(&p);
-  std::stable_sort(list.begin(), list.end(), [](const wsl_process* a, const wsl_process* b) {
-    const int64_t ka = cores_key(a->cores), kb = cores_key(b->cores);
-    return ka != kb ? ka > kb : a->pid < b->pid;
-  });
+  const std::vector<const wsl_process*> list = wsl_cpu_order(w);
   const size_t shown = std::min(list.size(), static_cast<size_t>(std::max(0, rows)));
   // The "holder" column is /dev/dxg open, not GPU use, and this head is where the list says so.
   const std::string count = fmt("  top %d of %lld", static_cast<int>(shown), static_cast<long long>(w.process_count));
@@ -2103,8 +2115,66 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   return f;
 }
 
+// ---- Panels not built, and the footer --------------------------------------------------------------
+
+// machtop's short labels, and winwsltop's 8.
+constexpr const char* kPanelLabel[kPanels + 1] = {"", "overview", "gpu", "cpu", "mem", "disk", "net", "procs", "vm cost"};
+
+bool panel_built(int p) { return p >= 1 && p <= 3; }  // 4 is slice 1's commit 7
+bool panel_has_range(int p) { return p == 2 || p == 3; }  // Panels whose graphs ←→ change
+bool panel_draws_selection(int) { return false; }  // Panel 3 from slice 1's commit 6: until then ↑↓ and tab show nothing
+
+// docs/panels.md's question for each panel not built, and where its figures are meanwhile.
+std::vector<line> unbuilt_frame(const snapshot& s, int p, int width, int64_t now_ms) {
+  static constexpr const char* kTitle[kPanels + 1] = {"", "", "", "", "MEMORY", "DISK", "NETWORK", "PROCESSES", "VM COST"};
+  static constexpr const char* kText[kPanels + 1] = {
+      "", "", "", "",
+      "Where is physical memory going, and is the guest holding host memory it does not use? Memory is on panels 1 and 3 until this panel is built.",
+      "Which disk is busy, and is it the WSL disk? The disk rows are on panel 1 until this panel is built.",
+      "Which interface is busy? The network rows are on panel 1 until this panel is built.",
+      "Every process, every measure. The process lists are on panels 1 and 3 until this panel is built.",
+      "What has each side cost the other, and when? The GPU split is on panel 2 and the VM's CPU on panel 3 until this panel is built."};
+  std::vector<line> out = {title_row(s, now_ms), rule(kTitle[p], "not built yet", width), {}};
+  for (const std::string& l : wrap({kText[p]}, std::max(1, width))) out.push_back({{l, tone::text}});
+  return out;
+}
+
+std::string range_text(int range) { return fmt("%d min", static_cast<int>(kSpansMs[std::clamp(range, 0, 2)] / 60000)); }
+
+// machtop's footer: the panels on the left, current lit, built dim, not built faint; on the right the keys
+// that act on this panel. Short of room every panel but the current one is its number, then the keys go,
+// then the other panels. Rows a panel had to leave out are said after the panels, or by a leading … .
+line panel_footer(const view_state& v, int lists, int width, bool hidden) {
+  std::string hints;
+  if (panel_draws_selection(v.panel) && lists > 0) hints += "↑↓ select  ";
+  if (panel_draws_selection(v.panel) && lists > 1) hints += "tab list  ";
+  if (panel_has_range(v.panel)) hints += "←→ " + range_text(v.range) + "  ";
+  hints += "q quit";
+  static constexpr std::string_view kNote = "… some rows hidden";
+  for (int form = 0; form < 4; ++form) {  // Names and keys, numbers and keys, numbers, the current panel
+    const bool names = form == 0, keys = form < 2;
+    row r;
+    const bool marker = hidden && form > 0;  // The note did not fit: a mark the right edge cannot cut
+    if (marker) r.add("… ", tone::watch);
+    for (int i = 1; i <= kPanels; ++i) {
+      const bool lit = i == v.panel;
+      if (form == 3 && !lit) continue;
+      const std::string item = names || lit ? fmt("%d %s", i, kPanelLabel[i]) : fmt("%d", i);
+      if (i > 1 && form < 3) r.add(names ? "  " : " ");
+      r.add(item, lit ? tone::title : panel_built(i) ? tone::dim : tone::faint, lit);
+    }
+    const int need = r.cols() + (keys ? 3 + display_width(hints) : 0) + (hidden && names ? 3 + display_width(kNote) : 0);
+    if (need > width && form < 3) continue;
+    if (hidden && names) r.add("   ").add(kNote, tone::watch);
+    if (keys) r.to(width - display_width(hints)).add(hints, tone::dim);
+    return r;
+  }
+  return {};
+}
+
 constexpr int kHiddenNote = 21;  // Columns of the note below, after the 39 of the keys
 
+// The keys main.cpp reads until slice 1's commit 5, which removes this footer with the overload that uses it.
 line footer(view v, int width, bool hidden, const std::string& span) {
   row r;
   const auto key = [&](const char* text, view which) {
@@ -2231,21 +2301,110 @@ int64_t next_span(int64_t span_ms) {
 
 bool span_key_acts(const snapshot&, const history&, view v, int, int) { return v == view::gpu || v == view::cpu; }
 
+namespace {
+
+// One panel above the footer, body rows high.
+panel_frame panel_body(const snapshot& s, const wsl_view& w, const history& h, int panel, int width, int body, int64_t now_ms, int64_t span_ms) {
+  panel_frame f;
+  if (panel == 1) f.lines = overall_frame(s, w, width, body, now_ms);
+  else if (panel == 2) f = gpu_frame(s, w, h, width, body, now_ms, span_ms);
+  else if (panel == 3) f = cpu_frame(s, w, h, width, body, now_ms, span_ms);
+  else f.lines = unbuilt_frame(s, panel, width, now_ms);
+  if (panel > 3) f.lines.resize(static_cast<size_t>(std::max(0, body)));  // The footer stays on the bottom row
+  return f;
+}
+
+std::vector<line> with_footer(const panel_frame& f, int width, int body, const line& foot) {
+  std::vector<line> out;
+  for (size_t i = 0; i < f.lines.size() && i < static_cast<size_t>(body); ++i) out.push_back(clip(f.lines[i], width));
+  out.push_back(clip(foot, width));
+  return out;
+}
+
+// The selectable lists of a panel, each as its rows' keys in the order drawn: panel 3's Windows and WSL
+// lists. A list with no row is not selectable.
+std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel) {
+  std::vector<std::vector<row_key>> lists(2);
+  if (panel != 3) return {};
+  for (const process_row* p : windows_cpu_order(s)) lists[0].push_back({true, p->pid, p->name});
+  const wsl_view w = read_wsl(s.wsl_json);
+  for (const wsl_process* p : wsl_cpu_order(w)) lists[1].push_back({true, p->pid, p->name});
+  return lists;
+}
+
+int selectable_count(const std::vector<std::vector<row_key>>& lists) {
+  return static_cast<int>(std::count_if(lists.begin(), lists.end(), [](const std::vector<row_key>& l) { return !l.empty(); }));
+}
+
+// Where a list's selection is: its key's row, or the first row when the key is unset or has left the list.
+size_t selected_row(const std::vector<row_key>& rows, const row_key& k) {
+  const auto it = std::find_if(rows.begin(), rows.end(), [&](const row_key& r) { return k.set && r.pid == k.pid && r.name == k.name; });
+  return it == rows.end() ? 0 : static_cast<size_t>(it - rows.begin());
+}
+
+}  // namespace
+
+bool apply_key(view_state& v, key_event e, const snapshot& s) {
+  if (e.esc_first) {
+    apply_key(v, key_event{key::esc}, s);
+    e.esc_first = false;
+  }
+  v.panel = std::clamp(v.panel, 1, kPanels);
+  v.range = std::clamp(v.range, 0, 2);
+  view_state::panel_view& pv = v.panels[v.panel];
+  switch (e.k) {
+    case key::quit: return false;
+    case key::panel:
+      if (e.panel >= 1 && e.panel <= kPanels) v.panel = e.panel;
+      break;
+    case key::esc: v.panel = 1; break;  // Every panel keeps its focus and selections, and the range stays
+    case key::left:
+      if (panel_has_range(v.panel)) v.range = std::min(v.range + 1, 2);  // Further back
+      break;
+    case key::right:
+      if (panel_has_range(v.panel)) v.range = std::max(v.range - 1, 0);
+      break;
+    case key::tab: {
+      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel);
+      if (selectable_count(lists) > 1) pv.focus = (pv.focus + 1) % static_cast<int>(lists.size());
+      break;
+    }
+    case key::up:
+    case key::down: {
+      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel);
+      const int focus = std::clamp(pv.focus, 0, 1);
+      if (static_cast<size_t>(focus) >= lists.size() || lists[static_cast<size_t>(focus)].empty()) break;
+      const std::vector<row_key>& rows = lists[static_cast<size_t>(focus)];
+      const size_t at = selected_row(rows, pv.rows[focus]);
+      const size_t to = e.k == key::down ? std::min(at + 1, rows.size() - 1) : at == 0 ? 0 : at - 1;  // Stops at the ends
+      pv.rows[focus] = rows[to];
+      break;
+    }
+    case key::sort:  // Panel 7's, which is not built
+    case key::none: break;
+  }
+  return true;
+}
+
+std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, const view_state& v) {
+  if (width <= 0 || height <= 0) return {};
+  const wsl_view w = read_wsl(s.wsl_json);
+  if (!hist) return overall_frame(s, w, width, height, now_ms);
+  const int panel = std::clamp(v.panel, 1, kPanels), body = height - 1;  // The footer is the last row, whatever else has to give
+  const panel_frame f = panel_body(s, w, *hist, panel, width, body, now_ms, kSpansMs[std::clamp(v.range, 0, 2)]);
+  view_state shown = v;
+  shown.panel = panel;
+  const int lists = panel_draws_selection(panel) ? selectable_count(selectable_lists(s, panel)) : 0;
+  return with_footer(f, width, body, panel_footer(shown, lists, width, f.hidden));
+}
+
 std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, view v, const render_options& options) {
   if (width <= 0 || height <= 0) return {};
   const wsl_view w = read_wsl(s.wsl_json);
   if (!hist) return overall_frame(s, w, width, height, now_ms);
-
-  panel_frame f;
-  const int body = height - 1;  // The footer is the last row, whatever else has to give
-  if (v == view::overall) f.lines = overall_frame(s, w, width, body, now_ms);
-  else if (v == view::gpu) f = gpu_frame(s, w, *hist, width, body, now_ms, options.span_ms);
-  else f = cpu_frame(s, w, *hist, width, body, now_ms, options.span_ms);
-
-  std::vector<line> out;
-  for (size_t i = 0; i < f.lines.size() && i < static_cast<size_t>(body); ++i) out.push_back(clip(f.lines[i], width));
-  out.push_back(clip(footer(v, width, f.hidden, options.span_key && f.span_applies ? span_text(options.span_ms) : std::string()), width));
-  return out;
+  const int body = height - 1;
+  const panel_frame f = panel_body(s, w, *hist, static_cast<int>(v) + 1, width, body, now_ms, options.span_ms);
+  return with_footer(f, width, body, footer(v, width, f.hidden, options.span_key && f.span_applies ? span_text(options.span_ms) : std::string()));
 }
 
 std::string as_text(const std::vector<line>& lines) {

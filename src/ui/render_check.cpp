@@ -1,6 +1,7 @@
 // Checks the renderer on hand-built snapshots. render_check <busy|bare> W H prints a frame as text,
-// the one overall screen with no history; add overall, gpu or cpu for that panel over a made-up minute.
-// render_check <busy|bare|contended|idle|stale|noisy> live draws the panels on the console, keys 1 2 3 t q.
+// the one overall screen with no history; add overall, gpu, cpu or a panel's number 1-8 for that panel over
+// a made-up minute. render_check <busy|bare|contended|idle|stale|noisy> live draws the panels on the
+// console with the keys of keys.h: 1-8, ←→, ↑↓, tab, esc, q.
 // render_check <busy|bare> draws the plain screen on the console until Ctrl+C.
 // render_check <contended|idle|stale|noisy> W H [span_s] prints the large layout of panel 3.
 // render_check vt <fixture> W H FILE [span_s] writes one frame's VT bytes to FILE, to render as an image.
@@ -1778,6 +1779,14 @@ bool cpu_fixture(const std::string& name, int seconds, snapshot& s, history& h) 
   return true;
 }
 
+// The panel and range a caller of the view_state overload would ask for.
+view_state state_for(int panel, int span_s = 60) {
+  view_state v;
+  v.panel = panel;
+  v.range = span_s >= 600 ? 2 : span_s >= 300 ? 1 : 0;
+  return v;
+}
+
 render_options options_for(int span_s) {
   render_options o;
   o.span_ms = span_s * 1000;
@@ -3111,6 +3120,191 @@ void check_graph_rule_buckets() {
         "1.5 s short of interval_s is a step back: the samples and when watching began move");
 }
 
+// design/panel-grammar.md part 2: view_state, apply_key, the footer and the panels not built.
+void check_view_keys() {
+  const snapshot s = busy();
+  const history demo = demo_minute(s);
+  const auto press = [&](view_state& v, std::initializer_list<key_event> keys) {
+    bool going = true;
+    for (const key_event& k : keys) going = apply_key(v, k, s) && going;
+    return going;
+  };
+  const key_event down{key::down}, up{key::up}, tab{key::tab}, esc{key::esc}, left{key::left}, right{key::right};
+  const auto digit = [](int n) { return key_event{key::panel, static_cast<uint8_t>(n)}; };
+
+  view_state v;
+  check(v.panel == 1 && v.range == 0 && v.panels[3].focus == 0 && !v.panels[3].rows[0].set, "a fresh view: panel 1, 1 minute, Windows focused, first rows");
+  check(press(v, {digit(3), tab, tab}) && v.panel == 3 && v.panels[3].focus == 0, "3 tab tab returns focus to Windows");
+  v = {};
+  press(v, {digit(3), tab, esc, digit(3)});
+  check(v.panels[3].focus == 1, "3 tab esc 3 keeps WSL focused");
+  v = {};
+  press(v, {digit(3), down, down, down});
+  const row_key third = v.panels[3].rows[0];
+  const std::vector<const process_row*> order = windows_cpu_order(s);
+  check(third.set && third.pid == order[3]->pid && third.name == order[3]->name, "↓↓↓ moves to the fourth row of the Windows list as drawn: pid " + std::to_string(third.pid));
+  press(v, {esc, digit(3)});
+  check(v.panels[3].rows[0].pid == third.pid && v.panels[3].rows[0].name == third.name, "↓↓↓ esc 3 keeps that row");
+  press(v, {tab, down});
+  check(v.panels[3].rows[1].set && v.panels[3].rows[1].pid == wsl_cpu_order(read_wsl(s.wsl_json))[1]->pid && v.panels[3].rows[0].pid == third.pid, "each list keeps its own selection");
+  v = {};
+  press(v, {digit(3), up});
+  check(v.panels[3].rows[0].pid == order[0]->pid, "↑ on the first row stays");
+  for (size_t i = 0; i < order.size() + 5; ++i) press(v, {down});
+  check(v.panels[3].rows[0].pid == order.back()->pid, "↓ stops at the last row, no wrap");
+  press(v, {down});
+  check(v.panels[3].rows[0].pid == order.back()->pid, "and stays there");
+  // A row that leaves the list: the selection reads as the first row, and the key is kept until a key moves it.
+  snapshot gone = s;
+  const uint32_t leaving = order[5]->pid;
+  v = {};
+  press(v, {digit(3), down, down, down, down, down});
+  check(v.panels[3].rows[0].pid == leaving, "the sixth row is selected");
+  gone.processes.erase(std::find_if(gone.processes.begin(), gone.processes.end(), [&](const process_row& p) { return p.pid == leaving; }));
+  check(apply_key(v, key_event{key::sort}, gone) && v.panels[3].rows[0].pid == leaving, "a key that moves nothing keeps the key of a row that left");
+  apply_key(v, down, gone);
+  check(v.panels[3].rows[0].pid == windows_cpu_order(gone)[1]->pid, "from a row that left, ↓ moves on from the first row");
+  // A reused pid under another name is another row.
+  snapshot renamed = s;
+  for (process_row& p : renamed.processes) {
+    if (p.pid == third.pid) p.name = "other.exe";
+  }
+  v = {};
+  press(v, {digit(3), down, down, down});
+  apply_key(v, down, renamed);
+  check(v.panels[3].rows[0].pid == windows_cpu_order(renamed)[1]->pid, "a pid under another name is not the row selected");
+
+  // The range: one for the screen, clamped, only where there is a graph to change.
+  v = {};
+  press(v, {digit(2), left, left, left});
+  check(v.range == 2, "←←← stops at 10 minutes");
+  press(v, {right, right, right});
+  check(v.range == 0, "→→→ stops at 1 minute");
+  press(v, {left, digit(3)});
+  check(v.range == 1, "the range is the screen's, kept across panels");
+  press(v, {digit(1), left, left});
+  check(v.range == 1, "← on panel 1 leaves the range");
+  for (int p = 4; p <= 8; ++p) {
+    press(v, {digit(p), left, right, right});
+    check(v.range == 1 && v.panel == p, "←→ on a panel not built leaves the range: " + std::to_string(p));
+  }
+  press(v, {esc});
+  check(v.panel == 1 && v.range == 1, "esc goes to panel 1 and keeps the range");
+
+  // tab: only where two lists can be selected.
+  v = {};
+  press(v, {tab});
+  check(v.panels[1].focus == 0, "tab on panel 1 changes nothing");
+  press(v, {digit(2), tab});
+  check(v.panels[2].focus == 0, "tab on panel 2 changes nothing");
+  for (const snapshot& one_side : {no_wsl(), [] { snapshot t = busy(); t.wsl_json = "{\"schema\":2}"; return t; }()}) {
+    view_state w;
+    apply_key(w, digit(3), one_side);
+    apply_key(w, tab, one_side);
+    check(w.panels[3].focus == 0, "tab on panel 3 with WSL unavailable changes nothing");
+  }
+  snapshot windows_unread = s;
+  windows_unread.processes.clear();
+  v = {};
+  apply_key(v, digit(3), windows_unread);
+  apply_key(v, tab, windows_unread);
+  check(v.panels[3].focus == 0, "nor with the Windows list empty");
+
+  // Panels, quitting, and Alt.
+  v = {};
+  for (int p = 1; p <= 8; ++p) {
+    apply_key(v, digit(p), s);
+    check(v.panel == p, "digit " + std::to_string(p) + " opens its panel");
+  }
+  check(!apply_key(v, key_event{key::quit}, s), "q quits");
+  check(apply_key(v, key_event{key::sort}, s) && apply_key(v, key_event{}, s) && v.panel == 8, "s and nothing change nothing");
+  v = {};
+  apply_key(v, digit(2), s);
+  apply_key(v, key_for('3', U'3', kLeftAlt), s);
+  check(v.panel == 3, "Alt+3 is esc, then 3");
+  v = {};
+  press(v, {digit(3), tab});
+  apply_key(v, key_for(vk::escape, 0x1B, kLeftAlt), s);
+  check(v.panel == 1 && v.panels[3].focus == 1, "Alt+esc is esc twice, and focus stays");
+  check(!apply_key(v, key_for('Q', U'q', kLeftAlt), s), "Alt+Q quits");
+  view_state odd;
+  odd.panel = 42;
+  odd.range = -3;
+  check(apply_key(odd, right, s) && odd.panel >= 1 && odd.panel <= 8 && odd.range == 0, "a view out of range is brought back into it");
+
+  // The footer: never wider than the screen, the current panel named and lit, built dim, not built faint,
+  // only the keys that act there, no [t] and no s.
+  for (int p = 1; p <= 8; ++p) {
+    for (int w = 1; w <= 300; ++w) {
+      const std::vector<line> f = render(s, w, 40, kNow, &demo, state_for(p));
+      const line& foot = f.back();
+      const std::string t = as_text({foot});
+      const std::string at = " panel " + std::to_string(p) + " at " + std::to_string(w);
+      check(width_of(foot) <= w && static_cast<int>(f.size()) <= 40, "the footer fits" + at);
+      const std::string name = fmt("%d %s", p, kPanelLabel[p]);
+      if (w >= display_width(name) + 2) check(has(t, name), "the current panel is named" + at);
+      check(!has(t, "[t]") && !has(t, " s ") && !has(t, "sort"), "no t and no s" + at);
+      check(!has(t, "↑↓") && !has(t, "tab list"), "no ↑↓ or tab before a panel draws a selection" + at);
+      check(has(t, "←→") == (panel_has_range(p) && w >= 38), "←→ only on panels 2 and 3, where it fits beside the panels' numbers" + at);
+      for (const span& q : foot) {
+        if (q.text.empty() || q.text[0] < '1' || q.text[0] > '8' || (q.text.size() > 1 && q.text[1] != ' ')) continue;
+        const int n = q.text[0] - '0';
+        const tone want = n == p ? tone::title : panel_built(n) ? tone::dim : tone::faint;
+        check(q.color == want && q.bold == (n == p), "panel " + std::to_string(n) + "'s tone" + at);
+      }
+    }
+  }
+  const auto foot_text = [&](int p, int w, int range = 0) {
+    view_state x = state_for(p);
+    x.range = range;
+    return as_text({render(s, w, 40, kNow, &demo, x).back()});
+  };
+  check(foot_text(1, 131) == "1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost" + std::string(59, ' ') + "q quit\n", "panel 1's footer at 131, as the design draws it");
+  check(foot_text(3, 80) == "1 2 3 cpu 4 5 6 7 8" + std::string(45, ' ') + "←→ 1 min  q quit\n", "panel 3's footer at 80: the other panels are numbers");
+  check(has(foot_text(2, 131, 1), "←→ 5 min  q quit") && has(foot_text(3, 131, 2), "←→ 10 min  q quit"), "the footer says the range");
+  check(foot_text(3, 6) == "3 cpu\n", "too narrow for the numbers: the current panel alone");
+  // Hidden rows are still said: after the panels, or by a leading … where that does not fit.
+  check(has(as_text({render(s, 131, 12, kNow, &demo, state_for(2)).back()}), "8 vm cost   … some rows hidden"), "a short window says it dropped something");
+  for (const int w : {1, 10, 36, 60, 80}) {
+    check(as_text({render(s, w, 8, kNow, &demo, state_for(2)).back()}).rfind("…", 0) == 0, "hidden is marked at width " + std::to_string(w));
+  }
+  check(!marks_hidden(render(s, 131, 50, kNow, &demo, state_for(2))), "nothing hidden, no marker");
+
+  // The panels not built: their question, where their figures are meanwhile, the footer on the bottom row.
+  const struct { int p; const char* title; const char* question; const char* where; } pages[] = {
+      {4, "MEMORY", "Where is physical memory going", "on panels 1 and 3"}, {5, "DISK", "Which disk is busy, and is it the WSL disk?", "on panel 1"},
+      {6, "NETWORK", "Which interface is busy?", "on panel 1"}, {7, "PROCESSES", "Every process, every measure.", "on panels 1 and 3"},
+      {8, "VM COST", "What has each side cost the other, and when?", "on panel 2 and the VM's CPU on panel 3"}};
+  for (const auto& pg : pages) {
+    const std::vector<line> f = render(s, 100, 34, kNow, &demo, state_for(pg.p));
+    const std::string t = as_text(f);
+    const std::string n = std::string(" ") + pg.title;
+    check(f.size() == 34 && line_with(f, pg.title).rfind(pg.title, 0) == 0 && has(line_with(f, pg.title), "not built yet"), "a page not built says so in its rule" + n);
+    const std::string wide = as_text(render(s, 300, 34, kNow, &demo, state_for(pg.p)));  // One line: no phrase is broken
+    check(has(wide, pg.question) && has(wide, pg.where) && has(wide, "until this panel is built"), "and asks its question, and says where its figures are" + n);
+    check(count_braille(t) == 0 && !has(t, "0%"), "and draws nothing it does not have" + n);
+    check(has(as_text({f.back()}), "q quit"), "the footer is the bottom row" + n);
+    for (int w = 1; w <= 300; w += 3) {
+      for (const int h : {1, 2, 5, 24, 34}) check(frame_fits(render(s, w, h, kNow, &demo, state_for(pg.p)), w, h), n + " fits " + std::to_string(w) + "x" + std::to_string(h));
+    }
+  }
+  check(has(as_text(render(s, 100, 34, kNow, &demo, state_for(5))), "DISK ───────────────────────────────────────────────────────────────────────────────── not built yet"), "the DISK rule, as the design draws it");
+
+  // The view_state overload draws what the old one draws above the footer, and the same without a history.
+  for (int p = 1; p <= 3; ++p) {
+    for (const int span_s : {60, 300, 600}) {
+      for (const auto& [w, h] : {std::pair{131, 40}, std::pair{100, 34}, std::pair{80, 24}}) {
+        std::vector<line> now = render(s, w, h, kNow, &demo, state_for(p, span_s)), before = render(s, w, h, kNow, &demo, static_cast<view>(p - 1), options_for(span_s));
+        check(now.size() == before.size() && as_text({now.begin(), now.end() - 1}) == as_text({before.begin(), before.end() - 1}), "the same panel above the footer, " + std::to_string(p) + " at " + std::to_string(span_s) + " s");
+      }
+    }
+  }
+  for (const snapshot& t : {busy(), bare()}) {
+    for (int p = 1; p <= 8; ++p) check(as_text(render(t, 131, 50, kNow, nullptr, state_for(p))) == as_text(render(t, 131, 50, kNow)), "--text is unchanged: no history, no panel, no footer");
+  }
+  check(vt_clean(vt_frame(render(s, 131, 40, kNow, &demo, state_for(7)), 40)), "a page not built is only our own sequences");
+}
+
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
 void check_keys() {
   const auto is = [](const key_event& e, key k, int panel = 0, bool esc_first = false) { return e.k == k && e.panel == panel && e.esc_first == esc_first; };
@@ -3328,12 +3522,12 @@ int measure_frames() {
       for (const auto& [w, rows] : {std::pair{131, 40}, std::pair{100, 34}}) {
         snapshot s;
         history h;
-        const render_options o = options_for(span_s);
+        const view_state o = state_for(3, span_s);
         cpu_fixture(name, span_s, s, h);
         size_t bytes = 0;
         constexpr int kFrames = 300;
         const auto from = std::chrono::steady_clock::now();
-        for (int i = 0; i < kFrames; ++i) bytes = vt_frame(render(s, w, rows, kNow, &h, view::cpu, o), rows).size();
+        for (int i = 0; i < kFrames; ++i) bytes = vt_frame(render(s, w, rows, kNow, &h, o), rows).size();
         const std::chrono::duration<double, std::milli> took = std::chrono::steady_clock::now() - from;
         printf("%-10s %3d s %dx%d  %6zu bytes  %.3f ms a frame\n", name, span_s, w, rows, bytes, took.count() / kFrames);
       }
@@ -3343,18 +3537,18 @@ int measure_frames() {
     snapshot s;
     history h;
     cpu_fixture("noisy", span_s, s, h);
-    const render_options o = options_for(span_s);
+    const view_state o = state_for(2, span_s);
     size_t bytes = 0;
     constexpr int kFrames = 300;
     const auto from = std::chrono::steady_clock::now();
-    for (int i = 0; i < kFrames; ++i) bytes = vt_frame(render(s, 131, 40, kNow, &h, view::gpu, o), 40).size();
+    for (int i = 0; i < kFrames; ++i) bytes = vt_frame(render(s, 131, 40, kNow, &h, o), 40).size();
     const std::chrono::duration<double, std::milli> took = std::chrono::steady_clock::now() - from;
     printf("panel 2    %3d s 131x40  %6zu bytes  %.3f ms a frame\n", span_s, bytes, took.count() / kFrames);
   }
   for (const int threads : {40, 64}) {
     const snapshot s = noisy_now(threads);
     const history h = noisy_history(s);
-    printf("noisy, %d threads, 131x40  %zu bytes\n", threads, vt_frame(render(s, 131, 40, kNow, &h, view::cpu), 40).size());
+    printf("noisy, %d threads, 131x40  %zu bytes\n", threads, vt_frame(render(s, 131, 40, kNow, &h, state_for(3)), 40).size());
   }
   return 0;
 }
@@ -3371,16 +3565,11 @@ int main(int argc, char** argv) {
     history demo = demo_minute(s);
     const bool fixture = cpu_fixture(argv[1], 600, s, demo);
     console c;
-    view v = fixture ? view::cpu : view::overall;
+    view_state v = state_for(fixture ? 3 : 1);
     int w = 131, h = 40;
-    render_options o = options_for(60);
-    for (char k = 0; k != 'q' && !console::stop_requested(); k = c.poll_key()) {
-      if (k == '1') v = view::overall;
-      if (k == '2') v = view::gpu;
-      if (k == '3') v = view::cpu;
+    for (key_event k; !console::stop_requested() && apply_key(v, k, s); k = c.poll()) {
       c.size(w, h);
-      if (k == 't' && span_key_acts(s, demo, v, w, h)) o.span_ms = next_span(o.span_ms);
-      c.draw(render(s, w, h, kNow, &demo, v, o));
+      c.draw(render(s, w, h, kNow, &demo, v));
       if (!c.is_terminal()) break;
       Sleep(50);
     }
@@ -3400,12 +3589,12 @@ int main(int argc, char** argv) {
   }
 #endif
   if (argc >= 6 && strcmp(argv[1], "vt") == 0) {  // render_check vt <fixture> W H FILE [span_s]: one frame's VT bytes
-    const render_options o = options_for(argc >= 7 ? atoi(argv[6]) : 60);
+    const int span_s = argc >= 7 ? atoi(argv[6]) : 60;
     snapshot s;
     history h;
-    if (!cpu_fixture(argv[2], static_cast<int>(o.span_ms / 1000), s, h)) return 2;
+    if (!cpu_fixture(argv[2], span_s, s, h)) return 2;
     const int rows = atoi(argv[4]);
-    const std::string vt = vt_frame(render(s, atoi(argv[3]), rows, kNow, &h, view::cpu, o), rows);
+    const std::string vt = vt_frame(render(s, atoi(argv[3]), rows, kNow, &h, state_for(3, span_s)), rows);
     std::ofstream out(argv[5], std::ios::binary);
     out.write(vt.data(), static_cast<std::streamsize>(vt.size()));
     out.close();
@@ -3413,11 +3602,11 @@ int main(int argc, char** argv) {
     return out ? 0 : 1;
   }
   if (argc >= 4) {  // render_check <contended|idle|stale|noisy> W H [span_s]: the large layout of panel 3
-    const render_options o = options_for(argc >= 5 ? atoi(argv[4]) : 60);
+    const int span_s = argc >= 5 ? atoi(argv[4]) : 60;
     snapshot s;
     history h;
-    if (cpu_fixture(argv[1], static_cast<int>(o.span_ms / 1000), s, h)) {
-      const std::string t = as_text(render(s, atoi(argv[2]), atoi(argv[3]), kNow, &h, view::cpu, o));
+    if (cpu_fixture(argv[1], span_s, s, h)) {
+      const std::string t = as_text(render(s, atoi(argv[2]), atoi(argv[3]), kNow, &h, state_for(3, span_s)));
       fwrite(t.data(), 1, t.size(), stdout);
       return 0;
     }
@@ -3425,8 +3614,13 @@ int main(int argc, char** argv) {
   if (argc == 4 || argc == 5) {
     const snapshot s = strcmp(argv[1], "bare") == 0 ? bare() : busy();
     const history demo = demo_minute(s);
-    const view v = argc == 4 || strcmp(argv[4], "overall") == 0 ? view::overall : strcmp(argv[4], "gpu") == 0 ? view::gpu : view::cpu;
-    const std::string t = as_text(render(s, atoi(argv[2]), atoi(argv[3]), kNow, argc == 5 ? &demo : nullptr, v));
+    int panel = 1;
+    if (argc == 5) {
+      static constexpr const char* kNames[] = {"", "overall", "gpu", "cpu", "mem", "disk", "net", "procs", "vm"};
+      for (int i = 1; i <= kPanels; ++i) panel = strcmp(argv[4], kNames[i]) == 0 ? i : panel;
+      if (argv[4][0] >= '1' && argv[4][0] <= '8' && argv[4][1] == 0) panel = argv[4][0] - '0';
+    }
+    const std::string t = as_text(render(s, atoi(argv[2]), atoi(argv[3]), kNow, argc == 5 ? &demo : nullptr, state_for(panel)));
     fwrite(t.data(), 1, t.size(), stdout);
     return 0;
   }
@@ -3464,6 +3658,7 @@ int main(int argc, char** argv) {
   check_graph_rule_buckets();
   check_graph_labels();
   check_keys();
+  check_view_keys();
   if (!quick) {
     check_denied_note();
     check_holder_wording();
