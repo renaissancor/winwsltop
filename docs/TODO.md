@@ -35,6 +35,7 @@ re-reads the code.
 | 25 | low | collect, core | `src/wsl/bridge.cpp`, `src/record/jsonl.cpp` | Any line starting with `{` is spliced into `wsl.data` unparsed, so a malformed line would make `--once` invalid JSON. No trigger with the real collector | open |
 | 26 | nit | core | `src/record/jsonl.cpp` | The JSON carries `source` only on `gpu_engines` and `gpu_split`; other sources are stated in `docs/json-output.md` | open |
 | 27 | low | core, collect | `src/main.cpp`, `src/analysis/attribution.cpp` | The GPU memory read result is ignored, so `vm_local` and `windows_local` read 0 with `gpu_split.valid` true when it fails | open |
+| 28 | medium | collect, evidence, ui | `src/host/memory.cpp`, `src/host/processes.cpp`, `wsl-collector/collector.py`, `src/ui/render.cpp` | The screen shows figures with no row in `docs/measurable.md`, against `CLAUDE.md` rule 2, as item 20 was for disk and network: Windows available, used, free, commit and cache; Windows per-process working set; guest per-process cores and RSS; guest swap. Found by the slice 1 systems review, 2026-11-02 (`design/panel-grammar.md`, part 1). Until fixed they are marked `?` on screen, the owner's decision | open: experiment 0 is running; slice 1 adds the `?` marks |
 
 Checked and found correct in the same audit: the `nt_process` layout, the `/proc/<pid>/stat` field
 indices, the NVML v2 struct version, the clock-offset sign and midpoint maths, the JSON parser's
