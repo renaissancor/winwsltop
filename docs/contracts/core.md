@@ -174,3 +174,9 @@ documents true.
   mid-contention.
 - 2026-11-01. `lost` needs as many guest vCPUs as Windows logical CPUs, state `vcpus_differ`: the audit showed
   a 4 vCPU guest reading `known` on 20 logical CPUs, against the design's own edge of the evidence.
+- 2026-11-02. `docs/panels.md` checked against its audit: eleven findings, each verified against the ledger,
+  `ROADMAP.md`, `README.md`, `contracts/ui.md` and `src/ui/render.cpp`, all fixed. The owner's decisions of the
+  same day are recorded there and in `contracts/ui.md` and `design/cpu-panel.md`: machtop's shared grammar
+  overrules winwsltop's panel design and its three refusals in `design/cpu-panel.md`; the range is 1, 5, 10
+  minutes; keys follow machtop and sshvllmtop; `tab` as machtop decided. The contention verdict's threshold
+  stays open.

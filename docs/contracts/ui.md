@@ -125,6 +125,14 @@ which core owns, reads schema 1 of the collector's line.
   partial step back during a stall. On the large layout the unwatched cells are the buckets before the one
   watching began in, `floor(t / bucket)` as `make_axis` places a sample; the 60 s panels keep main's placement,
   as `plot_columns` places one. `render_check` reads both gutters, `  0│` and `  0 │`.
+- 2026-11-02, the owner, recorded by core. The shared panel grammar from machtop (`docs/panels.md`, "Shared
+  grammar" and "Decisions") overrules winwsltop's existing panel design. It supersedes three refusals in
+  `docs/design/cpu-panel.md`: list focus and the sort key (section 6), the `[s]` sort (section 4, "Refused, and
+  why") and per-process history (section 11). The range on `←`/`→` is 1, 5, 10 minutes, replacing `t`'s 60 s,
+  5 min, 15 min. Keys follow machtop and sshvllmtop. `tab` moves between a panel's selectable lists as machtop
+  decided 2026-11-02, the details in `docs/panels.md`. Nothing is built yet; rule 3 stands, since `tab` moves
+  between the lists and never merges them. Graph labels of average and maximum would change rule 8 and are
+  not yet adopted here.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.

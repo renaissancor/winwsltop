@@ -1,7 +1,9 @@
 # CPU panel design
 
 Status: approved to build, 2026-11-01, after a product design review, a systems review, experiment 05 and
-a third review of the rewrite. Evidence is
+a third review of the rewrite. Partly superseded 2026-11-02: the owner adopted the shared panel grammar
+([`../panels.md`](../panels.md), "Decisions"), which overrules this design where they differ; each
+superseded line below says so. Evidence is
 [`measurable.md`](../measurable.md), sections "CPU counters checked" (experiment 04) and "CPU contention
 checked" (experiment 05). This file cites rows by claim, and each number it repeats is one a decision
 depends on. Experiment 05 is one trial per case.
@@ -191,7 +193,7 @@ the panel 2 VRAM grammar: `41.2/63.7 GiB  free 22.5 GiB`, and `left_tone`.
 | `Hv LP % Guest Run Time` | Is Root VP plus `Hv VP`: Windows runs as a guest too |
 | Last CPU per process | "A process's `/proc/pid/stat` `processor` is where it works": False here |
 | Command line | Protocol choice (`PROTOCOL.md`): arguments can hold secrets and `--record` writes them to disk. Stays out |
-| `[s]` sort by memory | Serves no job above, and alone would need a wider collector line. Cut |
+| `[s]` sort by memory | Serves no job above, and alone would need a wider collector line. Cut. Superseded 2026-11-02: `s` sorts the selected list on every panel ([`../panels.md`](../panels.md), "Decisions") |
 | Per-thread DPC and interrupt | No place in the layout, meaning `Not checked`, largest ever seen 6.250. Cut |
 
 ### Traps the screen must not fall into
@@ -257,6 +259,11 @@ stay out of scope, stated in the README, not half-fixed here.
 Footer in this layout: `[1] overall  [2] gpu  [3] cpu  [t] span 60s  [q] quit`.
 
 No sort key, text entry, scrolling or list focus. Each costs a mode.
+
+Superseded 2026-11-02 by the owner's adoption of the shared grammar ([`../panels.md`](../panels.md)):
+`↑`/`↓` select a row, `tab` moves between the Windows and WSL lists, `s` sorts the list holding the
+selection, and `←`/`→` set the range to 1, 5 or 10 minutes in place of `t`. The table and footer above are
+today's build, not the target.
 
 On this panel lists sort strictly on cores, rounded to 0.1, then PID, so rows of similar cores do not
 swap each second. `holders first` stays on the panels that have it. `dxg` and its label stay here.
@@ -327,5 +334,7 @@ A fresh auditor reads after commits 3 and 7, and the whole at the end.
 ## 11. Out of this design
 
 Scrolling, filtering, grouping `svchost`, per-process history, clock speed, and `lost` for a partly busy guest
-or under `.wslconfig` limits, which needs another approved load. The network panel is a separate design,
+or under `.wslconfig` limits, which needs another approved load. Per-process history is no longer out, from
+2026-11-02: the shared grammar ([`../panels.md`](../panels.md), "Decisions") shows the
+selected process's history below the lists. The network panel is a separate design,
 after this one ships.
