@@ -121,6 +121,11 @@ If that gives nothing, as under an IME reporting `VK_PROCESSKEY`, the character 
 2-set Korean table: U+3142 `ㅂ` is `q`, U+3134 `ㄴ` is `s`. Ctrl held means no key. Shift is allowed,
 because some layouts need it for digits, except with Tab.
 
+Alt+key is `esc` then the key, with one exception: **Alt+arrow is the arrow alone**. A terminal sends it as
+one CSI sequence (`ESC [ 1 ; 3 D`), and machtop's parser reads it as the arrow, so the grammar has no `esc`
+in it. Keys that arrive as `VK_PACKET`, or as plain ASCII with no virtual key, through the character path
+only, are out of scope for slice 1: the character path reads the jamo table and nothing else.
+
 Three cases only a person can check live, at 100 by 34 and 131 by 40:
 
 | case | what happens | mitigation in this slice |
@@ -142,6 +147,10 @@ machtop's `footer()`: the panels on the left, the keys that act on this panel on
 not fit, every panel but the current one shrinks to its number. Labels are machtop's short ones with
 winwsltop's 8: `overview gpu cpu mem disk net procs vm cost`. The current panel is lit (`title`, bold), a
 built one `dim`, one not built `faint`, which 246c2cb made shared grammar.
+
+The footer offers `←→` only when the frame draws a graph over the range. A panel that has a range but is too
+short to draw any graph shows no `←→`, since the key would change nothing on screen; the range is still
+kept and still applied by `apply_key`.
 
 Footers, in order: panel 1 at 131 and 100 columns, panel 3 at 131 and 100, panel 4 at 100, panel 2 at 80:
 
@@ -183,7 +192,7 @@ snapshot at once, as `1`-`3` do today.
   third row; `←←←` stops at 10 minutes, `→→→` at 1; `←` on panel 1 leaves the range; `tab` on 1 and 2
   changes nothing; `tab` on 3 with WSL unavailable changes nothing; `↑` on the first row stays.
 - Footer at widths 1 to 300 on every panel: never wider than the screen, the current panel always named,
-  `tab list` only where two lists are selectable, `↑↓` only on 3 and 4, `←→` only on 2, 3 and 4, no `[t]`,
+  `tab list` only where two lists are selectable, `↑↓` only on 3 and 4, `←→` only on 2, 3 and 4 and only when a graph is drawn, no `[t]`,
   no `s`.
 - `--text` is unchanged.
 
@@ -618,6 +627,15 @@ gains a sum and a count per column; a sample adds its value to every column from
 joined sample up to its own, which is the span it stands for, and each column is its sum over its count.
 It also returns the column holding the window's maximum, for item 4. `bucket_cells` already takes the mean.
 
+**The edge of the window.** A sample stands for the second before it, so a sample at exactly `-span` lies
+outside the window: a sample at `t` is in when `end - t < span`. `plot_series`, `series_stats` and the large
+layout's plots all follow this rule, so `avg`, `max` and the cells cover the same samples. For the same
+reason **a joined empty cell takes the later sample** everywhere, as `plot_series` does: the later sample
+covers the second the cell stands for. Both follow machtop.
+
+**The caption's `*`** appears only when the label carrying `max …*` is drawn in the same frame. A label
+dropped for width takes the caption's `*` with it, so a `*` never points at nothing.
+
 ### Where the label sits
 
 | graph | label |
@@ -630,12 +648,13 @@ It also returns the column holding the window's maximum, for item 4. `bucket_cel
 ### Mockup
 
 Panel 2's axis rows, from `render_check busy 131 40 gpu` and `100 34 gpu`, with `avg` and `max` over
-`demo_minute`'s 56 samples; its VM split peaks at 112:
+`demo_minute`'s 55 samples in the window (61 seconds less the 5 s stall, less the sample at exactly
+`-60s`, which lies outside: part 5, "The edge of the window"); its VM split peaks at 112:
 
 131 by 40, rows 18 and 32:
 
 ```
-    -60s ────── avg 60% max 95% ────── now      -60s ───── avg 37% max 112%* ───── now      -60s ────── avg 16% max 38% ────── now
+    -60s ────── avg 59% max 95% ────── now      -60s ───── avg 37% max 112%* ───── now      -60s ────── avg 16% max 38% ────── now
     -60s ─────────────── avg 8.4 max 9.8 GiB ─────────────── now      -60s ──────────────── avg 129 max 182 W ──────────────── now
 ```
 
@@ -735,6 +754,17 @@ Decided by the owner, 2026-11-02:
 
 8. Alt+key decodes as `esc` then the key (part 2), so Alt+Q quits. Closed under the owner's standing decision
    that keys follow machtop and sshvllmtop's shared grammar (`panels.md`, Decisions): the source is machtop's key parser (`src/keys.cpp` at 246c2cb, `key_parser::next`: an ESC followed by any byte but `[` or `O` is `esc` on its own, so Alt+key, which a terminal sends as ESC then the key, reads as `esc` then the key); the grammar's text does not state it yet.
+
+Decided by the orchestrator, 2026-11-02, after the audit of commits 1 to 5, following machtop:
+
+10. A sample stands for the second before it: one at exactly `-span` is outside (`end - t < span`), in
+    `plot_series`, `series_stats` and the large layout alike, and a joined empty cell takes the later sample
+    (part 5).
+11. Alt+arrow is the arrow alone, the exception to item 8, because a terminal sends it as one CSI sequence
+    and machtop's parser reads it so. `VK_PACKET` and ASCII through the character path are out of scope for
+    slice 1 (part 2, Decoding).
+12. The footer offers `←→` only when a graph is drawn, and the caption's `*` appears only when its label is
+    drawn (parts 2 and 5).
 
 Still open:
 
