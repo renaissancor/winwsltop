@@ -1,0 +1,11 @@
+date	2026-11-02T11:55:47Z
+kernel	6.6.114.1-microsoft-standard-WSL2
+windows	10.0.26200.9711
+cpu	13th Gen Intel(R) Core(TM) i5-13600K
+guest_threads	20
+gpu	NVIDIA GeForce RTX 4070, 610.88, 12282 MiB
+pid_max	4194304
+ns_last_pid_start	48991
+sleep_pid	48992
+ns_last_pid_end	49944
+sleep_ended	2026-11-02T11:57:34Z

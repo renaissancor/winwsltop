@@ -1,0 +1,46 @@
+== Windows: 10 rounds of c1 Get-Counter, p1 Get-Process, mem_probe, p2 Get-Process, c2 Get-Counter
+mem_probe ok in all rounds: True
+seconds from c1_start to c2_end: 2.348-2.808
+
+-- Windows memory, collector against \Memory counters c1 and c2 (bytes)
+available     vs available bytes   equal  0 inside  3 outside  7, max outside 7766016 B; collector 49429917696-49463132160; max |collector - c| 15085568 B (14.387 MiB); c2-c1 moved 0.055-16.625 MiB
+commit_used   vs committed bytes   equal  0 inside  5 outside  5, max outside 5906432 B; collector 20379643904-20419923968; max |collector - c| 20193280 B (19.258 MiB); c2-c1 moved 0.027-25.379 MiB
+commit_limit  vs commit limit      equal 10 inside  0 outside  0, max outside 0 B; collector 72743206912-72743206912; max |collector - c| 0 B (0.000 MiB); c2-c1 moved 0.000-0.000 MiB
+
+-- Windows cache: GetPerformanceInfo SystemCache * PageSize against candidate counter sums
+Cache Bytes                        inside or equal  0 of 10; collector minus mean(c1,c2) 19273.5 to 19278.6 MiB
+standby (reserve+normal+core)      inside or equal  0 of 10; collector minus mean(c1,c2) 821.4 to 823.6 MiB
+standby + modified                 inside or equal  0 of 10; collector minus mean(c1,c2) -977.7 to -970.3 MiB
+standby + Cache Bytes              inside or equal  0 of 10; collector minus mean(c1,c2) 160.6 to 161.8 MiB
+standby + modified + Cache Bytes   inside or equal  0 of 10; collector minus mean(c1,c2) -1638.0 to -1632.0 MiB
+collector cache 20903534592-20907941888 B
+collector cache minus mean(c1,c2) of standby + Cache Bytes, per round, MiB: 160.6 161.3 161.8 161.5 161.3 161.4 160.8 161.6 161.8 161.6
+  for comparison, pool paged resident bytes 1788.3-1789.2 MiB
+  for comparison, pool paged bytes 2027.8-2028.5 MiB
+  for comparison, pool nonpaged bytes 1557.1-1559.0 MiB
+  for comparison, system code resident bytes 11.7-11.7 MiB
+  for comparison, system driver resident bytes 73.9-73.9 MiB
+round 1: collector cache 20904357888; c1 cache bytes=692764672 standby cache reserve bytes=8132026368 standby cache normal priority bytes=11846180864 standby cache core bytes=65441792 modified page list bytes=1881698304; c2 cache bytes=693297152 standby cache reserve bytes=8131911680 standby cache normal priority bytes=11844882432 standby cache core bytes=65441792 modified page list bytes=1881120768
+round 10: collector cache 20907941888; c1 cache bytes=693403648 standby cache reserve bytes=8131719168 standby cache normal priority bytes=11847958528 standby cache core bytes=65441792 modified page list bytes=1884852224; c2 cache bytes=692416512 standby cache reserve bytes=8131715072 standby cache normal priority bytes=11848908800 standby cache core bytes=65441792 modified page list bytes=1884901376
+
+-- Windows per-process working set and private bytes, collector against Get-Process p1 and p2
+working_set comparisons 3160 over 335 pids (151 named): equal 3047, inside 111, outside 2, max outside 630784 B; p1 != p2 in 111; not in both p1 and p2 11
+private     comparisons 3160 over 335 pids (151 named): equal 3058, inside 100, outside 2, max outside 630784 B; p1 != p2 in 100; not in both p1 and p2 11
+round 6, named samples (pid name collector_ws p1_ws p2_ws collector_private p1_private p2_private):
+  4 System 23531520 23531520 23531520 110592 110592 110592
+  328 Registry 48644096 48644096 48644096 5816320 5816320 5816320
+  1472 lsass.exe 39251968 39235584 39251968 15679488 15663104 15679488
+  2676 dwm.exe 121626624 121630720 121626624 441184256 441184256 441184256
+  18052 ping.exe 5869568 5869568 5869568 1093632 1093632 1093632
+  31000 vmwp.exe 35307520 35307520 35307520 23351296 23351296 23351296
+  41284 explorer.exe 380018688 380018688 380018688 292888576 292888576 292888576
+  42504 vmmemWSL 2744848384 2744848384 2744848384 2811883520 2811883520 2811883520
+
+-- Windows create time: collector key against Get-Process StartTime (100 ns UTC)
+equal 3040, different 0, StartTime unreadable (access denied, non-elevated) 3281
+pids seen 345; with one create time across every round they were seen in 345
+long ping pid 18052 StartTime 134380944419043894: in 10 of 10 rounds, collector create time values [134380944419043894]
+pids whose create time changed between rounds: 0
+short pings started 10, distinct pids 10
+
+(no guest file for this run: Windows only)

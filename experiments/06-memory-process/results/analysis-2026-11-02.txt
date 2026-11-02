@@ -1,0 +1,110 @@
+== Windows: 25 rounds of c1 Get-Counter, p1 Get-Process, mem_probe, p2 Get-Process, c2 Get-Counter
+mem_probe ok in all rounds: True
+seconds from c1_start to c2_end: 2.340-2.834
+
+-- Windows memory, collector against \Memory counters c1 and c2 (bytes)
+available     vs available bytes   equal  0 inside 15 outside 10, max outside 3100672 B; collector 49388466176-49486143488; max |collector - c| 18944000 B (18.066 MiB); c2-c1 moved 1.750-22.887 MiB
+commit_used   vs committed bytes   equal  0 inside 11 outside 14, max outside 2756608 B; collector 20364763136-20482953216; max |collector - c| 25337856 B (24.164 MiB); c2-c1 moved 0.602-24.371 MiB
+commit_limit  vs commit limit      equal 25 inside  0 outside  0, max outside 0 B; collector 72743206912-72743206912; max |collector - c| 0 B (0.000 MiB); c2-c1 moved 0.000-0.000 MiB
+
+-- Windows cache: GetPerformanceInfo SystemCache * PageSize against candidate counter sums
+Cache Bytes                        inside or equal  0 of 25; collector minus mean(c1,c2) 18710.1 to 18713.9 MiB
+standby (reserve+normal+core)      inside or equal  0 of 25; collector minus mean(c1,c2) 809.0 to 812.0 MiB
+standby + modified                 inside or equal  0 of 25; collector minus mean(c1,c2) -849.5 to -844.7 MiB
+standby + Cache Bytes              inside or equal  0 of 25; collector minus mean(c1,c2) 160.3 to 161.6 MiB
+standby + modified + Cache Bytes   inside or equal  0 of 25; collector minus mean(c1,c2) -1498.9 to -1494.4 MiB
+collector cache 20301488128-20303167488 B
+collector cache minus mean(c1,c2) of standby + Cache Bytes, per round, MiB: 160.6 160.3 161.1 161.0 161.0 161.6 161.3 161.6 161.3 161.4 161.4 161.5 161.0 161.2 161.2 161.2 161.2 161.2 160.9 161.0 161.2 161.2 161.4 161.0 161.4
+round 1: collector cache 20303167488; c1 cache bytes=680833024 standby cache reserve bytes=8137478144 standby cache normal priority bytes=11251814400 standby cache core bytes=65204224 modified page list bytes=1737592832; c2 cache bytes=680423424 standby cache reserve bytes=8137457664 standby cache normal priority bytes=11251093504 standby cache core bytes=65208320 modified page list bytes=1737453568
+round 25: collector cache 20302053376; c1 cache bytes=681132032 standby cache reserve bytes=8138444800 standby cache normal priority bytes=11247833088 standby cache core bytes=65273856 modified page list bytes=1736921088; c2 cache bytes=680353792 standby cache reserve bytes=8138432512 standby cache normal priority bytes=11248947200 standby cache core bytes=65273856 modified page list bytes=1736896512
+
+-- Windows per-process working set and private bytes, collector against Get-Process p1 and p2
+working_set comparisons 8011 over 364 pids (165 named): equal 7729, inside 278, outside 4, max outside 581632 B; p1 != p2 in 282; not in both p1 and p2 39
+private     comparisons 8011 over 364 pids (165 named): equal 7777, inside 230, outside 4, max outside 581632 B; p1 != p2 in 233; not in both p1 and p2 39
+round 13, named samples (pid name collector_ws p1_ws p2_ws collector_private p1_private p2_private):
+  4 System 23511040 23511040 23511040 110592 110592 110592
+  328 Registry 48742400 48742400 48742400 5902336 5902336 5902336
+  1472 lsass.exe 39567360 39567360 39567360 15970304 15970304 15970304
+  2676 dwm.exe 121614336 121618432 121614336 441171968 441171968 441171968
+  11112 ping.exe 5890048 5890048 5890048 1073152 1073152 1073152
+  31000 vmwp.exe 35340288 35340288 35340288 23416832 23416832 23416832
+  41284 explorer.exe 380014592 380014592 380014592 292999168 292999168 292999168
+  42504 vmmemWSL 2762608640 2762608640 2762608640 2833301504 2833301504 2833301504
+
+-- Windows create time: collector key against Get-Process StartTime (100 ns UTC)
+equal 7882, different 0, StartTime unreadable (access denied, non-elevated) 8154
+pids seen 403; with one create time across every round they were seen in 403
+long ping pid 11112 StartTime 134380941472625728: in 25 of 25 rounds, collector create time values [134380941472625728]
+pids whose create time changed between rounds: 0
+short pings started 25, distinct pids 25
+
+== Guest: 219 sampler rounds, HZ 100, PAGE 4096
+record lines 60, with guest data 60
+collector mono_s steps between record lines: min 1.002 max 1.027, repeats 0, over 1.5 s 0
+first and last collector mono_s 6173.217 6232.797; sampler rounds span 6164.992-6274.789
+
+-- Guest swap used, collector against free -b and /proc/meminfo
+collector swap_used 0-0; free -b Swap used 0-0; meminfo SwapTotal-SwapFree 0-0; SwapTotal 8589934592
+never moved: True
+
+-- Guest RSS, collector against /proc/pid/stat rss, /proc/pid/status VmRSS and ps rss, bracketing reads
+stat   equal 1775 inside 16 outside 0 (max outside 0 B), not bracketed 9
+VmRSS  equal 0 inside 1 outside 1790 (max outside 2564096 B), not bracketed 0
+ps     equal 0 inside 1 outside 1790 (max outside 2564096 B), not bracketed 0
+pids compared 71; comparisons where the bracketing stat rss moved 16
+same sampler read, VmRSS minus stat rss over 10159 reads: min 73728 max 2568192 B; negative 0, zero 0, positive 10159
+collector rss values range 819200-446472192 B
+
+-- Guest per-process cores, collector against /proc/pid/stat utime+stime and ps cputimes
+Per interval: consecutive record lines whose mono_s step is under 1.5 s are consecutive collector samples,
+so the collector's ticks over the step are cores * step * HZ. The sampler brackets both ends.
+intervals x processes: inside with ticks moving 302, at zero (never moved) 1359, outside 0 (max 0 ticks)
+|cores*step*HZ - nearest whole tick|: max 0.0507, so the unit is ticks of 1/HZ s
+Whole window: processes in every record line, collector seconds summed over the chain of lines,
+against stat ticks and ps cputimes between the rounds bracketing the first and last line
+chain of 60 consecutive lines, 59.580 s
+pid name collector_s stat_lo_s stat_hi_s ps_lo_s ps_hi_s verdict (ps cputimes is whole seconds, so its bounds are widened by 1 s)
+1 systemd 0.000 0.00 0.00 -1 1 inside (zero)
+108 other 0.000 0.00 0.00 -1 1 inside (zero)
+157 other 0.040 0.04 0.04 -1 1 inside
+263 other 0.000 0.00 0.00 -1 1 inside (zero)
+264 other 0.000 0.00 0.00 -1 1 inside (zero)
+271 other 0.000 0.00 0.00 -1 1 inside (zero)
+278 other 0.000 0.00 0.00 -1 1 inside (zero)
+298 other 0.000 0.00 0.00 -1 1 inside (zero)
+307 other 0.000 0.00 0.00 -1 1 inside (zero)
+398 other 0.000 0.00 0.00 -1 1 inside (zero)
+444 systemd 0.000 0.00 0.00 -1 1 inside (zero)
+445 other 0.000 0.00 0.00 -1 1 inside (zero)
+461 bash 0.000 0.00 0.00 -1 1 inside (zero)
+756 bash 0.000 0.00 0.00 -1 1 inside (zero)
+3021 bash 0.000 0.00 0.00 -1 1 inside (zero)
+5014 other 1.510 1.49 1.51 0 2 inside
+5415 other 0.340 0.34 0.35 -1 1 inside
+7796 bash 0.000 0.00 0.00 -1 1 inside (zero)
+10171 other 0.370 0.37 0.37 0 2 inside
+18918 bash 0.000 0.00 0.00 -1 1 inside (zero)
+21004 other 0.350 0.34 0.35 0 2 inside
+45395 other 0.000 0.00 0.00 -1 1 inside (zero)
+48993 python3 0.610 0.61 0.61 -1 1 inside
+49036 python3 0.240 0.24 0.24 -1 1 inside
+processes with ticks moving over the window: 7 of 24
+
+-- Guest memory beside vmmemWSL working set, one record line each (bytes)
+used = total - available, as the screen draws it; free_mem from the nearest sampler round's MemFree
+line unix_ms vmmem_ws guest_total guest_used guest_cached nearest_MemFree total-MemFree ws-used ws-(used+cached) ws-(total-MemFree)
+1 1793620555064 2756841472 33519878144 1829974016 378122240 31548112896 1971765248 926867456 548745216 785076224
+31 1793620585063 2763526144 33519878144 1827115008 380452864 31548514304 1971363840 936411136 555958272 792162304
+60 1793620614071 2755792896 33519878144 1812996096 382578688 31560323072 1959555072 942796800 560218112 796237824
+vmmem_ws       range 2628.1-2642.1 MiB, moved 14.0 MiB
+guest_used     range 1726.3-1748.6 MiB, moved 22.3 MiB
+guest_cached   range 360.6-364.9 MiB, moved 4.2 MiB
+total-MemFree  range 1865.8-1885.7 MiB, moved 19.9 MiB
+ws - used                883.7 to 905.7 MiB
+ws - (used + cached)     522.9 to 541.7 MiB
+ws - (total - MemFree)   748.1 to 767.1 MiB
+
+-- Guest starttime: constant while a process lives
+sleep pid 48992 (started by run.sh): starttime values over 219 rounds [616497], rounds present 219
+pids seen 139, with one starttime in every round they were seen 139
+pid reuse: ns_last_pid 48991 to 49944 with pid_max 4194304, so no pid wrapped in this run
