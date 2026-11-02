@@ -78,7 +78,7 @@ which core owns, reads schema 1 of the collector's line.
 
 - A step back of `kStepMs` (1 s) or less during a stall, with the new sample still after the newest one, is
   not corrected: those samples sit up to a second too close to now. Below that it cannot be told from jitter.
-- The large layout's axis says `collecting: N s of M s` from the oldest kept sample, not from when watching
+- Closes with slice 1's commit 2, which removes the caption (decision of 2026-11-02, slice 1). The large layout's axis says `collecting: N s of M s` from the oldest kept sample, not from when watching
   began. After a stall that clears the ring it says collecting while the cells are a gap, not dotted. Whether
   it should count from `watched_from_ms()` instead is open.
 - PROPOSED (`ROADMAP.md`): GPU holders first in the Windows list, an `unattributed` line between the
@@ -133,6 +133,40 @@ which core owns, reads schema 1 of the collector's line.
   decided 2026-11-02, the details in `docs/panels.md`. Nothing is built yet; rule 3 stands, since `tab` moves
   between the lists and never merges them. Graph labels of average and maximum would change rule 8 and are
   not yet adopted here.
+- 2026-11-02, the owner, recorded by core. Slice 1 of the shared grammar, `docs/design/panel-grammar.md`, is
+  approved to build after experiment 0. Its decisions, each built by the commit of that design's section 7 named:
+  - Keys (commits 3 to 5): `1`-`8`, `↑`/`↓`, `←`/`→` over 1, 5, 10 minutes, one range for the screen, `tab`,
+    `esc` to panel 1 keeping every panel's focus and selections, `q`; `t` goes. Keys are decided by a pure
+    `key_for` in a header-only `src/ui/keys.h` and applied by a pure `apply_key`, both checked by `render_check`.
+    The footer lists the eight panels, current lit, built `dim`, not built `faint`, and offers only keys that act.
+    This supersedes the 2026-11-01 entry on panels `1`, `2`, `3` and `q`, and the 2026-11-02 entry on
+    `render_options` and `[t]`.
+  - Selection and scrolling (commit 6), as machtop's "Selection": a process is remembered by pid and name and
+    falls to the first row when it leaves the list; `↑`/`↓` stop at the ends and do not wrap; a list longer
+    than its space follows the selection, which stays on the last row shown once it passes the bottom, with no
+    paging and no stored offset; each list ends with a `dim` `N of M` line, and the list heading drops
+    `top N of M`. Every list scrolls by its own selection.
+  - One history, full width, below the lists, following focus and titled with its list, never one per list,
+    so rule 3 stands. Panel 3 at 34 rows shows 5 list rows, the owner's choice over a 2-row busy plot; a list
+    keeps at least 3 rows and the history gives way first. Panel 1 gets no selection; panel 2 waits for slice 2.
+  - The per-process ring (commit 6): 601 samples of cores and memory per process, keyed by side, pid and
+    start time; a first reading stored as a gap; every slot written every push; at the cap of 1024 slots, or
+    twice the processes in the newest sample, the slot least recently seen is reused, never a selected one,
+    and nothing is refused. `kKeepMs` becomes 600000 and the ring 601 samples.
+  - Graphs (commit 2): a cell is the mean of its samples, replacing the highest sample of the 60 s panels
+    (2026-11-01 entry on samples sharing a column) and the large layout's peak; the cell holding the window's
+    maximum carries one extra dot; every graph is labelled `avg` and `max` over the window, never the minimum;
+    scale by measure, 0-100 for measures with a ceiling, else `scale` to a rounded maximum with a floor or a
+    zoomed `range`; an over-100 split value is printed with `*` beside the caption `VM level, not exact
+    shares*`. The captions `peak over mean` and `collecting: N s of M s` go, which closes the open question on
+    the latter. Rule 8 takes the design's proposed text (part 5) in that commit.
+  - Panel 4 Memory (commit 7) as in the design's part 4, and RAM leaves panel 3.
+  - Figures the screen already shows without a ledger row are shown marked `?`, with `? not yet checked` on the
+    panel's rule line, the owner's choice over hiding them; a figure new to the screen with no row is not
+    shown. Experiment 0 (`contracts/evidence.md`) is to clear them.
+  - The seam change of commit 1 is additive flags, `schema` stays 1 (`contracts/core.md`).
+  Still open: Alt+key decoded as `esc` then the key for OpenSSH, so Alt+Q quits; and the live key checks the
+  design lists in section 8.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.
