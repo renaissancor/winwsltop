@@ -9,29 +9,29 @@ One small `.exe` that only observes. Inside WSL, all it needs is `python3`.
 winwsltop  21:43:50  data 1.2 s old  every 1.0 s
 GPU ─────────────────────────── device and engine counters can differ, the difference is unexplained
  91%  device · NVML                                 52%  WSL VM · engine counters,
-                                                         VM level, not exact shares
-100│⢀⣤⣴⣶⣶⣤⣄                          ⣀⣤⣴⣶⣦⣤⣀       100│             ⣿
+                                                         VM level, not exact shares*
+100│⣀⣤⣴⣶⣶⣤⣄                          ⣀⣤⣴⣶⣦⣤⣀       100│             ⣿
    │⣿⣿⣿⣿⣿⣿⣿⣿⣦⣄                     ⣴⣾⣿⣿⣿⣿⣿⣿⣿⣷⣦        │             ⣿
-   │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⡄                  ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⡄     │⢀⣀⣠⣤⣤⣀⣀      ⣿                   ⣀⣀⣠⣤⣄⣀⣀
+   │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⡄                  ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⡄     │⣀⣀⣠⣤⣤⣀⣀      ⣿                   ⣀⣀⣠⣤⣄⣀⣀
    │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⣀                ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿     │⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⣀  ⣿                ⢠⣶⣾⣿⣿⣿⣿⣿⣿⣿⣷⣶⣤⡀
    │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⣄        ⣀⣴⡆   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿     │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣿⡀               ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷
   0│⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣤⣀⣀⣠⣤⣾⣿⣿⡇   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿    0│⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⣄⣀⣀⣀⣀⣀⣤⣶⣿⡇   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-    -60s ──────────────────────────────────── now      -60s ──────────────────────────────────── now
+    -60s ───────── avg 59% max 95% ────────── now      -60s ──────── avg 37% max 112%* ───────── now
  36%  Windows · engine counters
 100│
    │
    │
    │                 ⢀⣀⣀⣀⣀⣀
    │           ⢀⣀⣤⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⡆                 ⢀
-  0│⣄⣀⣀⣀⣀⣀⣀⣤⣤⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇   ⢰⣤⣤⣀⣀⣀⣀⣀⣀⣀⣤⣤⣶⣿⣿
-    -60s ──────────────────────────────────── now
+  0│⣀⣀⣀⣀⣀⣀⣀⣤⣤⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇   ⢰⣤⣤⣀⣀⣀⣀⣀⣀⣀⣤⣤⣶⣿⣿
+    -60s ───────── avg 16% max 38% ────────── now
 9.0/12.0 GiB  GPU memory · NVML, used of total     187/200 W  power · NVML, of limit
 100│                                               100│⣀⣤⣤⣤⣤⣤⣄⣀                        ⢀⣀⣤⣤⣤⣤⣤⣀⡀
    │⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣤⣄⣀                 ⢰⣶⣾⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣤⣄     │⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣀                   ⢠⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⡀
    │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣦⣤⣤⣤⣶⣶⣶⣿⡇   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿     │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⡀          ⢀⡀   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
    │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿     │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⣄⣀⣀⣀⣀⣀⣤⣶⣿⡇   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
   0│⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿    0│⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇   ⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-    -60s ──────────────────────────────────── now      -60s ──────────────────────────────────── now
+    -60s ─────── avg 8.4 max 9.8 GiB ──────── now      -60s ──────── avg 129 max 182 W ───────── now
 device  util ━━━━━━━━━─  91%   mem ━━━━━━━━── 9.0/12.0 GiB  free 3.0 GiB  187/200 W  71°C  2730 MHz
 PROCESSES ───────────────────────────────── two systems, two lists: never compare or add across them
 Windows  top 3 of 3 by GPU%, busiest engine      │ WSL /dev/dxg holders, no usage measured
@@ -39,7 +39,7 @@ Windows  top 3 of 3 by GPU%, busiest engine      │ WSL /dev/dxg holders, no us
    52   11736 vmwp.exe                4.2 WSL VM │    4121 python3
    36    9002 Game.Shipping-Win64-…   1.4        │    4388 한글추론기
     1    5120 -                         -        │ dxg_denied 36: may miss a root holder
-[1] overall  [2] gpu  [3] cpu  [q] quit
+1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                  ←→ 1 min  q quit
 ```
 
 *The GPU panel, drawn from the test suite's sample data rather than a live run. A wide terminal shows more.*
@@ -56,7 +56,8 @@ all, even under load. winwsltop reads both sides at once and keeps them apart:
 - **When the two sides fight over the CPU:** WSL can't see this for itself. In one test it read 99.997% busy,
   with `steal` at 0, while doing 71% less work. The CPU panel shows what Windows really gave the VM.
 - **CPU, memory, disk and network** for Windows, and CPU, memory and processes for WSL.
-- **History** for each graph: one minute, or up to 15 minutes on the CPU panel, and a JSON record you can save.
+- **History** for each graph over the last 1, 5 or 10 minutes, the selected process's own history on the CPU and
+  memory panels, and a JSON record you can save.
 
 Each graph names its source. Windows and WSL figures are never added together, because they
 describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero. On the CPU panel, one late WSL
@@ -72,13 +73,22 @@ The binary isn't code-signed, so Windows SmartScreen may warn you the first time
 
 ## Use
 
-| key | panel |
+| key | does |
 |---|---|
-| `1` | Overall |
+| `1` | Overview: the GPU and its split, Windows CPU, memory, disk and network, WSL CPU, memory and pressure, the VM, then both process lists |
 | `2` | GPU: graphs of device, WSL VM, Windows, memory and power, then Windows GPU users and WSL `/dev/dxg` holders |
-| `3` | CPU and RAM: what each side says and what the VM costs, in words, then a timeline of every thread on both sides, then both process lists. Needs a window 100 wide and up to 27 tall, depending on threads, or it shows a simpler panel |
-| `t` | CPU panel: show the last 60 seconds, 5 minutes or 15 minutes. History starts when you launch, so a new run shows `collecting` |
-| `q` | Quit (Ctrl+C works too) |
+| `3` | CPU: what each side says and what the VM costs, in words, then a timeline of every thread on both sides, then both process lists and the selected process's history. Needs a window 100 wide and 29 tall at 20 threads, or it shows a simpler panel |
+| `4` | Memory: each side's used and cache, the VM's working set on its own row, both sides over time, then both process lists by memory and the selected process's history |
+| `5`-`8` | Disk, network, processes and VM cost: not built yet; each page says where its figures are today |
+| `←` `→` | On a panel with a graph: show the last 1, 5 or 10 minutes. History is kept in memory from launch, so a new run starts empty |
+| `↑` `↓` | On panels 3 and 4: select a process. A long list scrolls with it, and the history below shows it |
+| `tab` | On panels 3 and 4: move the selection between the Windows list and the WSL list |
+| `esc` | Back to panel 1. Each panel keeps its selection |
+| `q` | Quit. `ㅂ` with Korean input on, Alt+Q and Ctrl+C work too |
+
+A figure marked `?` is one the tool shows but has not yet checked against a second source on this machine:
+Windows cache and WSL swap. The WSL process memory column reads `stat rss`, the kernel's `/proc/pid/stat`
+figure, which runs a little below what `ps` shows.
 
 The CPU panel is built for a dark terminal. A light theme stays readable only in part.
 
