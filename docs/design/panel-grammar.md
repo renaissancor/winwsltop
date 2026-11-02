@@ -60,6 +60,27 @@ beside `vmmemWSL` working set read in one sample; and that a process's create ti
 `starttime` (guest) are constant while it lives and differ after a pid is reused. Each row that lands
 removes its `?`; nothing moves.
 
+**Experiment 06 is experiment 0** (run 2026-11-02; ledger, "Memory and process collectors checked"; one idle
+state, and on both sides the second reading comes from the same OS's own counts, so most rows show bindings
+and units only). What it does to each `?`:
+
+| figure | after experiment 06 | ledger claim |
+|---|---|---|
+| Windows available, and used and free from it | `?` cleared | "Windows `available` is `\Memory\Available Bytes`": observed, bindings only |
+| Windows commit | `?` cleared | "Windows `commit_used` and `commit_limit` are `\Memory\Committed Bytes` and `Commit Limit`" |
+| Windows cache | `?` stays | "Windows `cache` ... is a known `\Memory` figure": Unresolved, about 161 MiB above standby plus `Cache Bytes` |
+| Windows per-process working set | `?` cleared | "Windows per-process working set and private bytes are `Get-Process` ...": observed, bindings only |
+| Guest per-process cores | `?` cleared | "Guest per-process cores are `/proc/pid/stat` utime + stime ...": observed, bindings only |
+| Guest swap used | `?` stays | "Guest swap used is `free -b` Swap used": `Not checked`, it read 0 throughout |
+| Guest per-process RSS | relabelled, no `?` | "Guest per-process RSS is `/proc/pid/status` `VmRSS` and `ps` RSS": No. The collector shows `/proc/pid/stat` field 24 times the page size and matches it, which reads up to 2568192 B below `VmRSS` |
+
+Guest RSS keeps its source and is labelled as what it reads: the column heading becomes `stat rss GiB` on
+panels 1, 3 and 4, and a history titled with it says `stat rss`, not `RSS`. The lead's call, 2026-11-02:
+it reads its own kernel figure exactly, so the label, not a `?`, is the honest fix. Whether to move to
+`VmRSS` or `statm` waits for the `statm` check to be rerun with its output saved (`contracts/evidence.md`).
+Windows private bytes now has a row too, but stays off the screen in this slice. The mockups in parts 3
+and 4 predate experiment 06 and show the old marks; this table rules where they differ.
+
 Rows the slice does build on: Windows total and `vmmemWSL` working set ("Windows collector checked against
 Windows"); guest total, used and cache ("WSL collector checked", "Guest memory vs host", read live);
 guest memory pressure ("CPU contention checked", "`/proc/pressure` memory and io", 0 in every case);
@@ -669,7 +690,7 @@ Labels on the heat block and the lanes.
 | History: one flat ring, no per-second allocation | 601 samples, 377 KB, plus process slots, about 1.9 MB here, allocated in chunks of 64 |
 | Own CPU: no more than 0.5% of a core above the old build | the push's lookups and writes. Measured live, two runs |
 | New PDH counters | none |
-| Collector line | two keys a process, `rated` and `start`: about 25 bytes for each of up to 32 rows |
+| Collector line: under 8 KiB, see `contracts/collect.md` | two keys a process, `rated` and `start`: 796 bytes more at 30 rows, 4205 to 4213 bytes in all, as built (e37993d) |
 
 ## 7. Build plan
 
