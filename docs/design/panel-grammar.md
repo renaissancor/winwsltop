@@ -42,7 +42,7 @@ Cut from the brief, and why:
 | key | does | where |
 |---|---|---|
 | `1`-`8`, numpad 1-8 | Switch panel. 5-8 show a "not built yet" page | everywhere |
-| `↑` `↓` | Move the selection one row in the focused list. Clamped at the first and last row shown, no wrap, no scrolling | panels 3, 4 |
+| `↑` `↓` | Move the selection one row in the focused list. Stop at the list's first and last row, no wrap; a long list scrolls to follow (part 2) | panels 3, 4 |
 | `←` | Range further back: 1 → 5 → 10 minutes, clamped | panels with a graph: 2, 3, 4 |
 | `→` | Range nearer: 10 → 5 → 1 minute, clamped | same |
 | `tab` | Focus the next selectable list on the panel, wrapping. With one selectable list, nothing | panel 3, and only while both sides' lists are selectable |
@@ -127,7 +127,7 @@ redraws the last snapshot at once, as `1`-`3` do today. Frame cost: none beyond 
 
 ### Out of scope
 
-Mouse, scrolling a list past the rows shown, a help overlay, saving the range between runs, Shift+Tab.
+Mouse, paging (`PgUp`, `PgDn`, `Home`, `End`), a help overlay, saving the range between runs, Shift+Tab.
 
 ## 2. Selection, focus and the selected row's history
 
@@ -141,9 +141,24 @@ takes the grammar first.
 - Each list keeps one selection, as a key: pid and name. machtop keys by name because its rows are apps
   grouped by name; winwsltop's rows are processes, and the `contended` fixture alone has 41 rows named
   `svchost.exe`. The name stops a reused pid from inheriting a selection.
-- With no key, or a key whose row is not among the rows shown, the selection is the first row shown, as
-  in machtop. Before any `↑`/`↓` the history therefore follows the busiest process. `↑`/`↓` set the key
-  from the row the selection is on.
+- With no key, or a key whose row has left the list, the selection is the list's first row, as in
+  machtop. The key is kept, so the row is selected again if it comes back. Before any `↑`/`↓` the history
+  therefore follows the busiest process. `↑`/`↓` set the key from the row the selection is on.
+- **Lists scroll** (shared grammar, "Selection"; `panels.md` Decisions, fab781f), copied from machtop's
+  `app_table` and `move_selection`:
+  - `↑`/`↓` move through every row of the list, not only those shown, and stop at its ends without
+    wrapping.
+  - With `n` rows of space, the first row drawn is 0 while the selection is in the first `n`, else
+    `selection - n + 1`: once the selection passes the bottom it stays on the last row shown. Nothing is
+    stored for the offset; it is worked out from the selection each frame, so moving back up keeps the
+    selection on the bottom row until the top of the list is shown again. No paging.
+  - Each list ends with a `dim` line, `N of M`: `N` the rows shown, `M` the rows in the list, as machtop's
+    `status_row`. The guest list adds the guest's own count, `6 of 6 · 64 in the guest`, because the
+    collector's line holds the top 30 by cores then RSS plus every holder (`PROTOCOL.md`, `processes`), so
+    `↓` reaches those and no further.
+  - The count moves out of the list's heading, which was `top 6 of 46 by cores` and now reads `by cores`:
+    `top` stops being true once the list scrolls.
+  - The unfocused list scrolls by its own selection too, so `tab` back finds it where it was.
 - Focus starts on Windows. The focused list's heading is lit and its selected row is marked `▶` on the
   selection background (machtop's `44;62;76`). The other list's heading is `dim`, and its selected row
   has no `▶` and no background.
@@ -227,7 +242,6 @@ busy  avg 60%  max 100%                                          │ busy  avg 6
     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-    │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
   0 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │   0 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 kern│███████████████████████████████████████████████████████████ │ iowt│███████████████████████████████████████████████████████████
 VM  │███████████████████████████████████████████████████████████ │ lost≈                        ███████████████████████████████████
@@ -243,7 +257,7 @@ E2  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀�
 E4  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v16 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 E6  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v18 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
      -60s ──────────────── each cell 1.0 s ───────────────── now │      -60s ──────────────── each cell 1.0 s ───────────────── now
-Windows  top 6 of 46 by cores                                    │ WSL  top 6 of 64 by cores, dxg: no usage measured
+Windows  by cores                                                │ WSL  by cores, dxg: no usage measured
    cores     pid name                          thr WS GiB        │    cores     pid name                     thr RSS GiB st dxg
 ▶  13.25   31000 cpu_burn.exe                   21    0.1        │    19.72    4121 cpu_burn                  21     0.1  R
     5.76    7120 vmmemWSL                       22   10.1 WSL VM │     0.10    4388 python3                   12     2.0  S holder
@@ -251,6 +265,7 @@ Windows  top 6 of 46 by cores                                    │ WSL  top 6 
     0.31   11736 vmwp.exe                       40    0.1 WSL VM │     0.03    2001 sshd                       1     0.0  S
     0.22    9001 카카오톡.exe                   60    0.4        │     0.02    2002 systemd                    1     0.0  S
     0.20   10000 svchost.exe                    12    0.0        │     0.01    2003 dbus-daemon                1     0.0  S
+6 of 46                                                          │ 6 of 6 · 64 in the guest
 cpu_burn.exe 31000 · cores avg 13.25  max 13.25 of 20 threads    │ cpu_burn 4121 · cores avg 19.72  max 19.72 of 20 vCPUs
 100 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │ 100 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
   0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │   0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
@@ -282,14 +297,14 @@ E2  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀�
 E4  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v16 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 E6  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v18 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
      -60s ──────── each cell 1.4 s ───────── now │      -60s ──────── each cell 1.4 s ───────── now
-Windows  top 6 of 46 by cores                    │ WSL  top 6 of 64 by cores, dxg: no usage measured
+Windows  by cores                                │ WSL  by cores, dxg: no usage measured
    cores     pid name          thr WS GiB        │    cores     pid name      thr RSS GiB st dxg
 ▶  13.25   31000 cpu_burn.exe   21    0.1        │    19.72    4121 cpu_burn   21     0.1  R
     5.76    7120 vmmemWSL       22   10.1 WSL VM │     0.10    4388 python3    12     2.0  S holder
     0.42       4 System        310    0.0        │     0.04    2000 node       11     0.4  S
     0.31   11736 vmwp.exe       40    0.1 WSL VM │     0.03    2001 sshd        1     0.0  S
     0.22    9001 카카오톡.exe   60    0.4        │     0.02    2002 systemd     1     0.0  S
-    0.20   10000 svchost.exe    12    0.0        │     0.01    2003 dbus-dae…   1     0.0  S
+5 of 46                                          │ 5 of 6 · 64 in the guest
 cpu_burn.exe 31000 · avg 13.25 max 13.25 of 20   │ cpu_burn 4121 · avg 19.72 max 19.72 of 20
 100 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │ 100 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
   0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │   0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
@@ -297,9 +312,12 @@ cpu_burn.exe 31000 · avg 13.25 max 13.25 of 20   │ cpu_burn 4121 · avg 19.72
 ```
 
 Against today's frames: head row 4 (`RAM 41.2/63.7 GiB  free 22.5 GiB`) and the 2-row RAM plots are gone,
-3 rows. The history takes 3 rows under the lists. At 40 rows head row 4 becomes the busy plots' label row
-(part 4), and the busy plots give one row, 9 to 8. At 34 the label row does not fit and is the first thing
-dropped, so the lists keep their 6 rows, which the design guarantees. At 100 the onset cell reads `⣤`, the
+3 rows. The history takes 3 rows under the lists and the `N of M` line one more. Rows go in this order:
+title, rule, 3 heads, lanes, heat block and axis, list headings, `N of M`, 3 list rows, the history, the
+footer; then the busy plots' 3 rows; then list rows up to 6; then the busy label row (part 4); then the
+busy plots grow. So at 34 the lists show 5 rows, one fewer than `design/cpu-panel.md`'s 6, and the label
+row does not fit; at 40 they show 6, the label row is there, and the busy plots have 7 rows, down from 9.
+The sixth row at 34 is the cost of the `N of M` line; the list scrolls, so no process is out of reach. At 100 the onset cell reads `⣤`, the
 mean of a quiet and a busy second, where today's peak drew `⣿` (part 4).
 
 Tones: `Windows` and the left history heading lit, `WSL` and the right one `dim`; the `▶` row on the
@@ -321,18 +339,22 @@ selection background.
   step keeps a slot's values in their samples; a pid reused under another name starts a new slot; a
   repeated guest line carries once and the second repeat is a gap; a stale line is a gap; pid 0 never
   gets a slot.
-- Selection: default is the first row; a key whose row leaves the shown rows falls back to the first and
+- Selection: default is the first row; a key whose row leaves the list falls back to the first and
   comes back when it returns; `▶` appears exactly once on the panel, in the focused list; the unfocused
   list has no `▶`; the history heading names the selected row's pid.
 - The history: at 100 by 34 and 131 by 40 for all four fixtures; never a 0 where the slot is NaN; the
   unwatched `·` on a fresh start; `vCPUs` in the right heading and `threads` in the left at 131.
-- Rows: at 34 the lists keep 6 rows; at heights 17 to 66 nothing overlaps; hostile names in the
+- Scrolling, on a list of 46 in 5 rows: `↓` 4 times keeps row 1 drawn first; the fifth `↓` draws rows
+  2 to 6 with the selection last; `↓` at row 46 stays; `↑` from 46 keeps the selection on the bottom row
+  until row 5, then the list is drawn from row 1; `N of M` reads `5 of 46` throughout; the guest line's
+  `· 64 in the guest`; no heading says `top`.
+- Rows: at 34 the lists show 5 rows and at 40 they show 6; at heights 17 to 66 nothing overlaps; hostile names in the
   heading are made safe; frame bytes under budget.
 - Nothing on panel 3 says `RAM`.
 
 ### Out of scope
 
-Selection on panels 1 and 2, scrolling, per-thread rows, a history of GPU percent per process (slice 2,
+Selection on panels 1 and 2, paging, per-thread rows, a history of GPU percent per process (slice 2,
 with panel 2), and opening a process into its threads.
 
 ## 3. Panel 4 Memory
@@ -376,7 +398,10 @@ history. The plot is 0 to 100 percent of the side's total; its heading gives `av
 ### Mockups
 
 From `render_check busy` with `demo_minute`, the fixture with Windows memory and a guest line. Its 5 s
-stall shows as the gap in the history. The 40 `svchost.exe` rows are the fixture's own.
+stall shows as the gap in the history. The 40 `svchost.exe` rows are the fixture's own. At 131 by 40 the
+selection is on the default first row; at 100 by 34 it is after 16 presses of `↓`, on the 17th row, so the
+list has scrolled and the selection sits on its last row shown; the history then shows that `svchost.exe`,
+0.04 percent of the machine, its bottom dot row only.
 
 131 by 40:
 
@@ -388,7 +413,7 @@ MEMORY ────────────────────────�
 VM  vmmemWSL working set 10.1 GiB, Windows' view                 │ pressure mem 0 · swap waits for a ledger row
 available, commit, cache wait for a ledger row                   │
                                                                  │
-Windows  top 18 of 46 by working set                             │ WSL  processes by RSS wait for a ledger row
+Windows  by working set                                          │ WSL  processes by RSS wait for a ledger row
    WS GiB     pid name                              cores        │
 ▶   10.15    7120 vmmemWSL                           3.10 WSL VM │
      7.00    9002 Game.Shipping-Win64-Test-with-a-…  2.84        │
@@ -407,7 +432,7 @@ Windows  top 18 of 46 by working set                             │ WSL  proces
      0.03   10040 svchost.exe                        0.16        │
      0.03   10044 svchost.exe                        0.16        │
      0.03   10048 svchost.exe                        0.15        │
-     0.03   10052 svchost.exe                        0.15        │
+17 of 46                                                         │
                                                                  │
 vmmemWSL 7120 · working set avg 10.15  max 10.15 GiB of 63.7     │
 100 │                                                            │
@@ -433,12 +458,8 @@ MEMORY ────────────────────────�
 VM  vmmemWSL working set 10.1 GiB                │ pressure mem 0 · swap waits for a ledger row
 available, commit, cache wait for a ledger row   │
                                                  │
-Windows  top 14 of 46 by working set             │ WSL  processes by RSS wait for a ledger row
+Windows  by working set                          │ WSL  processes by RSS wait for a ledger row
    WS GiB     pid name              cores        │
-▶   10.15    7120 vmmemWSL           3.10 WSL VM │
-     7.00    9002 Game.Shipping-Wi…  2.84        │
-     0.38    9001 카카오톡.exe       0.22        │
-     0.08   11736 vmwp.exe           0.31 WSL VM │
      0.04   10000 svchost.exe        0.20        │
      0.04   10004 svchost.exe        0.20        │
      0.04   10008 svchost.exe        0.19        │
@@ -449,16 +470,20 @@ Windows  top 14 of 46 by working set             │ WSL  processes by RSS wait 
      0.03   10028 svchost.exe        0.17        │
      0.03   10032 svchost.exe        0.17        │
      0.03   10036 svchost.exe        0.16        │
+     0.03   10040 svchost.exe        0.16        │
+     0.03   10044 svchost.exe        0.16        │
+▶    0.03   10048 svchost.exe        0.15        │
+13 of 46                                         │
                                                  │
-vmmemWSL 7120 · avg 10.15 max 10.15 GiB of 63.7  │
+svchost.exe 10048 · avg 0.03 max 0.03 GiB        │
 100 │                                            │
     │                                            │
     │                                            │
     │                                            │
     │                                            │
     │                                            │
-    │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀   ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │
-  0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿   ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │
+    │                                            │
+  0 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀   ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │
 1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost       ↑↓ select  ←→ 1 min  q quit
 ```
 
@@ -481,6 +506,8 @@ The per-process ring of part 2, no more. The panel draws one history; its frame 
   anywhere on panel 4; never one line holding both a Windows and a guest GiB figure.
 - The Windows list sorted by working set, then pid; pid 0 left out; `WSL VM` on `vmmemWSL` and `vmwp.exe`.
 - The default selection is the first row, and its history heading names it.
+- After 16 `↓` at 100 by 34 the list is drawn from row 5 with the 17th row last and marked; `13 of 46`
+  under it; the history heading names pid 10048.
 - WSL stopped: the right column says why; panel 4's footer never offers `tab`.
 - Sizes 1 to 300 by 1 to 66 for `busy`, `bare` and hostile names; frame bytes under budget.
 
@@ -618,7 +645,8 @@ For the owner:
 8. Panel 4 shows no Windows available, commit or cache and no WSL list until experiment 0's rows land,
    while panel 1 keeps showing them without a row. Close that gap with the same experiment, or hide them
    on panel 1 too?
-9. The busy plots' label row exists only from 35 rows, to keep 6 list rows at 34.
+9. Panel 3 at 34 rows shows 5 list rows, not the design's 6, to make room for `N of M`, and the busy
+   label row appears only from 35 rows. The alternative is a 2-row busy plot at 34.
 10. `collecting: N s of M s` is removed (part 4.3).
 11. Unchecked: the IME fallback with a real Korean IME, and `esc` and the arrows over ConPTY and OpenSSH.
     `render_check` covers the decoder, not the console; a person runs each key live at 100 by 34 and 131
