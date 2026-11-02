@@ -3,6 +3,7 @@
 // result on a Windows console.
 #pragma once
 #include "core/snapshot.h"
+#include "ui/history.h"
 #include "ui/keys.h"
 #include <cstdint>
 #include <string>
@@ -21,6 +22,9 @@ struct span {
   bool bold = false;
   int fg256 = -1, bg256 = -1;  // A 256-colour index, or -1: the tone's colour, the terminal's background
 };
+
+// bg256 for a selected row: machtop's selection background, 44;62;76, which no 256-colour index matches.
+constexpr int kSelectBg = -2;
 using line = std::vector<span>;
 
 class history;
@@ -52,6 +56,10 @@ struct view_state {
 // only for the lists a key moves through, in the order the panel draws them. Panels 1 and 2 and those not
 // built have no list; tab needs two lists to move between, which a missing WSL line leaves one of.
 bool apply_key(view_state& v, key_event e, const snapshot& s);
+
+// The rows panel 3 has selected, both lists, as the per-process ring knows them: history::push keeps their
+// slots, so a selected process that leaves for a while keeps its history.
+std::vector<proc_id> selected_processes(const snapshot& s, const view_state& v);
 
 // At most `height` lines of at most `width` columns, wide characters counted as 2. Names from either
 // system are made safe here: control characters and malformed UTF-8 never reach the terminal.

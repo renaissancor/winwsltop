@@ -117,6 +117,11 @@ view_state state_for(int panel, int span_s = 60) {
 }
 
 bool has(const std::string& text, const char* what) { return text.find(what) != std::string::npos; }
+int count_of(const std::string& text, const std::string& what) {
+  int n = 0;
+  for (size_t i = text.find(what); i != std::string::npos; i = text.find(what, i + what.size())) ++n;
+  return n;
+}
 bool has(const std::string& text, const std::string& what) { return text.find(what) != std::string::npos; }
 
 void check_size(const snapshot& s, const char* name) {
@@ -635,7 +640,7 @@ void check_history_ring() {
   check(one.windows_threads == 20 && one.wsl_threads == 20, "both sides' thread counts");
   check(one.windows_core[3] == 96.0f && one.wsl_core[6] == 97.0f, "both sides' per-thread values");
   check(std::isnan(one.windows_core[20]) && std::isnan(one.wsl_core[63]), "past the count is NaN, not 0");
-  check(one.wsl_busy == 11.0f && !std::isnan(one.wsl_ram) && !std::isnan(one.windows_ram), "the guest's busy and both sides' RAM");
+  check(one.wsl_busy == 11.0f, "the guest's busy");
 
   // A slot written over keeps nothing of what was there.
   snapshot wide = base;
@@ -683,16 +688,16 @@ void check_history_ring() {
   failed.memory = {};
   h = history();
   h.push(failed);
-  check(h.samples().back().windows_threads == 0 && std::isnan(h.samples().back().windows_core[0]) && std::isnan(h.samples().back().windows_ram), "a failed read keeps no 0");
+  check(h.samples().back().windows_threads == 0 && std::isnan(h.samples().back().windows_core[0]), "a failed read keeps no 0");
 
   // A repeated line carries for one sample in these fields, and is still a gap in the old one.
   h = history();
   h.push(at(base, kNow - 3000, 11));
   h.push(at(base, kNow - 2000, 11));
-  check(h.samples().back().wsl_busy == 11.0f && h.samples().back().wsl_core[6] == 97.0f && !std::isnan(h.samples().back().wsl_ram), "one repeat carries the last value");
+  check(h.samples().back().wsl_busy == 11.0f && h.samples().back().wsl_core[6] == 97.0f, "one repeat carries the last value");
   check(std::isnan(h.samples().back().wsl_cpu), "and is still a gap for the small layout and panel 2");
   h.push(at(base, kNow - 1000, 11));
-  check(std::isnan(h.samples().back().wsl_busy) && std::isnan(h.samples().back().wsl_core[6]) && h.samples().back().wsl_threads == 0 && std::isnan(h.samples().back().wsl_ram), "two repeats in a row are a gap");
+  check(std::isnan(h.samples().back().wsl_busy) && std::isnan(h.samples().back().wsl_core[6]) && h.samples().back().wsl_threads == 0, "two repeats in a row are a gap");
   h.push(at(base, kNow, 12));
   check(h.samples().back().wsl_busy == 12.0f, "a new line starts again");
   h.push(at(base, kNow + 1000, 12));
@@ -1252,12 +1257,9 @@ void check_panels() {
   const auto wrapped = render(full, 80, 60, kNow, &demo, state_for(3));
   const std::string second = line_with(wrapped, "%  Windows CPU", 1);
   check(has(second, "includes the WSL VM") && has(second, "guest view, inside the VM"), "wrapped titles keep their source");
-  const auto cpu = render(full, 131, 26, kNow, &demo, state_for(3));
-  for (const line& l : cpu) {
-    const std::string t = as_text({l});
-    if (has(t, "ollama")) check(t.find("ollama") > t.find(" │ "), "CPU panel: Linux names right of the divider");
-    if (has(t, "svchost.exe")) check(t.find("svchost.exe") < t.find(" │ "), "CPU panel: Windows names left of the divider");
-  }
+  // The small layout stacks the two lists, Windows first, never interleaved (rule 3).
+  const std::string cpu = as_text(render(full, 131, 26, kNow, &demo, state_for(3)));
+  check(has(cpu, "System") && has(cpu, "ollama") && cpu.rfind("System") < cpu.find("WSL  by cores") && cpu.find("WSL  by cores") < cpu.find("ollama"), "CPU panel: the stacked lists do not interleave");
 
   // Missing is n/a, in every panel, and history does not fill in for it.
   const std::string bg = as_text(render(bare(), 131, 50, kNow, &demo_bare, state_for(2)));
@@ -1533,7 +1535,7 @@ void check_holder_wording() {
         if (head.empty() || has(t, "vCPUs, not Windows cores")) continue;  // No room for the list; the large layout has its own check
         check(head.size() >= 18 && head.compare(head.size() - 18, 18, " no usage measured") == 0, "the WSL list says no usage is measured" + at);
         const std::string below = t.substr(t.find(" of 64,"));
-        const std::string cols = after_bar(row_of(below, "RSS GiB"));
+        const std::string cols = after_bar(row_of(below, "stat rss GiB"));
         check(cols.size() >= 5 && cols.compare(cols.size() - 5, 5, "  dxg") == 0, "the column names /dev/dxg, not the GPU" + at);
         const std::string held = after_bar(row_of(below, "python3"));
         check(held.size() >= 8 && held.compare(held.size() - 8, 8, "  holder") == 0, "a holder's cell is whole" + at);
@@ -1705,7 +1707,15 @@ void quiet_moment(snapshot& s, int seq) {
   g.iowait = 0.5;
   g.load = 2.1;
   g.seq = seq;
-  s.wsl_json = guest_line(std::vector<double>(vcpus, 2.0), g);
+  // The burners are quiet too, so a process's history steps where the busy plots do (design part 3, Mockups).
+  for (process_row& p : s.processes) {
+    if (p.name == "cpu_burn.exe") p.cores = 0;
+    if (p.pid == s.vm.vmmem_pid) p.cores = s.vm.vmmem_cores;
+  }
+  std::string quiet = kCpuProcesses;
+  const std::string busy_burner = "\"cores\":19.72";
+  if (const size_t at = quiet.find(busy_burner); at != std::string::npos) quiet.replace(at, busy_burner.size(), "\"cores\":0");
+  s.wsl_json = guest_line(std::vector<double>(vcpus, 2.0), g, quiet);
 }
 
 // Samples up to the newest, each changed by moment(snapshot, seconds ago, sample number).
@@ -1888,43 +1898,57 @@ void check_large_mockup() {
   row_is(2, "100%  WINDOWS  user 65 · kernel 6 · VM 29        │ 100%  WSL  user 99 · sys 1 · iowait 0, as idle");
   row_is(3, "      whole machine, includes the WSL VM         │       guest view, inside the VM · Ubuntu-24.04");
   row_is(4, "VM ran 5.76 of 20 threads · ≈41 ready, 13 VM     │ WSL short ≈14 of 20 vCPUs, inferred · load 19.8");
-  row_is(5, "RAM 41.2/63.7 GiB  free 22.5 GiB                 │ RAM 12.3/31.2 GiB · pressure cpu 4 mem 0 io 0");
-  check(columns(as_text({f[6]}), 0, 5) == "100 │" && columns(as_text({f[6]}), 51, 5) == "100 │", "the busy plots start where the heads end");
-  check(columns(as_text({f[8]}), 0, 5) == "  0 │" && columns(as_text({f[8]}), 51, 5) == "  0 │", "busy is 3 rows at 34");
-  check(columns(as_text({f[9]}), 0, 5) == "RAM │" && columns(as_text({f[10]}), 0, 5) == "    │", "RAM is 2 rows at 34");
-  check(columns(as_text({f[11]}), 0, 5) == "kern│" && columns(as_text({f[12]}), 0, 5) == "VM  │", "the Windows lanes");
-  check(columns(as_text({f[11]}), 51, 5) == "iowt│" && columns(as_text({f[12]}), 51, 5) == "lost≈", "the WSL lanes, and lost's gutter is ≈");
-  check(columns(as_text({f[13]}), 0, 24) == "threads · 20 of 20 ≥90% " && has(as_text({f[13]}), "idle █████ ≥90%"), "the caption's count and its five swatches");
-  check(columns(as_text({f[13]}), 51) == "vCPUs, not Windows cores · 20 of 20 ≥90%", "the block says a vCPU is not a core");
-  check(columns(as_text({f[9]}), 5, 1) == "⣀" && columns(as_text({f[10]}), 5, 1) == "⣿", "the Windows RAM plot is 65%, 5 dots of 8");
-  check(columns(as_text({f[9]}), 56, 1) == " " && columns(as_text({f[10]}), 56, 1) == "⣶", "the WSL RAM plot is its own 39%, 3 dots of 8");
-  int n = 14;
+  check(columns(as_text({f[5]}), 0, 5) == "100 │" && columns(as_text({f[5]}), 51, 5) == "100 │", "the busy plots start where the 3 heads end");
+  check(columns(as_text({f[7]}), 0, 5) == "  0 │" && columns(as_text({f[7]}), 51, 5) == "  0 │", "busy is 3 rows at 34");
+  check(!has(text, "RAM"), "RAM has left panel 3 for panel 4");
+  check(columns(as_text({f[8]}), 0, 5) == "kern│" && columns(as_text({f[9]}), 0, 5) == "VM  │", "the Windows lanes");
+  check(columns(as_text({f[8]}), 51, 5) == "iowt│" && columns(as_text({f[9]}), 51, 5) == "lost≈", "the WSL lanes, and lost's gutter is ≈");
+  check(columns(as_text({f[10]}), 0, 24) == "threads · 20 of 20 ≥90% " && has(as_text({f[10]}), "idle █████ ≥90%"), "the caption's count and its five swatches");
+  check(columns(as_text({f[10]}), 51) == "vCPUs, not Windows cores · 20 of 20 ≥90%", "the block says a vCPU is not a core");
+  int n = 11;
   for (const char* left : {"P0", "P1", "P2", "P3", "P4", "P5", "E0", "E2", "E4", "E6"}) {
     check(columns(as_text({f[static_cast<size_t>(n)]}), 0, 2) == left, std::string("row ") + left);
     ++n;
   }
-  for (int r = 0; r < 10; ++r) check(columns(as_text({f[static_cast<size_t>(14 + r)]}), 51, 5) == pad("v" + std::to_string(2 * r), 4) + "│", "row v" + std::to_string(2 * r));
-  check(columns(as_text({f[24]}), 5) == "-60s ───── busy avg 61% max 100% ────── now │      -60s ───── busy avg 61% max 100% ────── now", "the axis under both blocks, with each busy plot's average and maximum");
-  row_is(25, "Windows  top 6 of 46 by cores                    │ WSL  top 6 of 64 by cores, dxg: no usage measured");
-  row_is(26, " cores     pid name            thr WS GiB        │  cores     pid name        thr RSS GiB st dxg");
-  row_is(27, " 13.25   31000 cpu_burn.exe     21    0.1        │  19.72    4121 cpu_burn     21     0.1  R");
-  row_is(28, "  5.76    7120 vmmemWSL         22   10.1 WSL VM │   0.10    4388 python3      12     2.0  S holder");
-  row_is(29, "  0.42       4 System          310    0.0        │   0.04    2000 node         11     0.4  S");
-  row_is(30, "  0.31   11736 vmwp.exe         40    0.1 WSL VM │   0.03    2001 sshd          1     0.0  S");
-  row_is(31, "  0.22    9001 카카오톡.exe     60    0.4        │   0.02    2002 systemd       1     0.0  S");
-  row_is(32, "  0.20   10000 svchost.exe      12    0.0        │   0.01    2003 dbus-daemon   1     0.0  S");
-  row_is(33, "1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                  ←→ 1 min  q quit");
+  for (int r = 0; r < 10; ++r) check(columns(as_text({f[static_cast<size_t>(11 + r)]}), 51, 5) == pad("v" + std::to_string(2 * r), 4) + "│", "row v" + std::to_string(2 * r));
+  check(columns(as_text({f[21]}), 5) == "-60s ───── busy avg 61% max 100% ────── now │      -60s ───── busy avg 61% max 100% ────── now", "the axis under both blocks, with each busy plot's average and maximum");
+  // design/panel-grammar.md part 3, the 100 by 34 mockup, with experiment 06's labels (part 1's table).
+  row_is(22, "Windows  by cores                                │ WSL  by cores · dxg: no usage measured");
+  row_is(23, "   cores     pid name          thr WS GiB        │    cores     pid name  thr stat rss GiB st dxg");
+  row_is(24, "▶  13.25   31000 cpu_burn.exe   21    0.1        │    19.72    4121 cpu_…  21          0.1  R");
+  row_is(25, "    5.76    7120 vmmemWSL       22   10.1 WSL VM │     0.10    4388 pyth…  12          2.0  S holder");
+  row_is(26, "    0.42       4 System        310    0.0        │     0.04    2000 node   11          0.4  S");
+  row_is(27, "    0.31   11736 vmwp.exe       40    0.1 WSL VM │     0.03    2001 sshd    1          0.0  S");
+  row_is(28, "    0.22    9001 카카오톡.exe   60    0.4        │     0.02    2002 syst…   1          0.0  S");
+  row_is(29, "5 of 46                                          │ 5 of 6 · 64 in the guest");
+  row_is(30, "Windows · cpu_burn.exe 31000 · cores                                   avg 7.73  max 13.25  scale 20");
+  check(columns(as_text({f[31]}), 0, 5) == " 20 │" && columns(as_text({f[32]}), 0, 5) == "  0 │", "the history is 2 rows, 0 to its scale");
+  row_is(33, "1 2 3 cpu 4 5 6 7 8                                            ↑↓ select  tab list  ←→ 1 min  q quit");
+  // The focused list is lit, the other dim; ▶ and the selection background only on the focused list's row.
+  check(f[22][0].color == tone::title && f[22][0].bold, "the focused list's heading is lit");
+  bool wsl_dim = false, marked_bg = true, other_bg = false;
+  for (const span& p : f[22]) wsl_dim = wsl_dim || (p.text == "WSL" && p.color == tone::dim);
+  for (const span& p : f[24]) {
+    if (has(p.text, "│")) break;
+    if (p.text.find_first_not_of(' ') != std::string::npos) marked_bg = marked_bg && p.bg256 == kSelectBg;  // Not the padding to the divider
+  }
+  for (size_t i = 25; i <= 28; ++i) {
+    for (const span& p : f[i]) other_bg = other_bg || p.bg256 == kSelectBg;
+  }
+  check(wsl_dim, "the other heading is dim");
+  check(marked_bg && !other_bg && count_of(text, "▶") == 1, "one ▶, on the selection background, in the focused list");
+  check(has(vt_frame(f, 34), "48;2;44;62;76"), "machtop's selection background reaches the terminal");
 
   // Both plots are as wide as the smaller column, whichever side is wider, and share the axis.
   for (const int w : {100, 101, 131, 132, 200}) {
     const auto g = large(s, h, w, 34);
     const int cells = (w - 3) / 2 - 5, right = kRight(w);
-    check(static_cast<int>(cells_of(g[14]).size()) == right + 5 + cells, "the plots use the smaller width at " + std::to_string(w));
-    check(columns(as_text({g[14]}), cells + 5, 3) == " │ ", "the divider sits where the left column ends at " + std::to_string(w));
+    check(static_cast<int>(cells_of(g[11]).size()) == right + 5 + cells, "the plots use the smaller width at " + std::to_string(w));
+    check(columns(as_text({g[11]}), cells + 5, 3) == " │ ", "the divider sits where the left column ends at " + std::to_string(w));
   }
 
   // One onset: quiet to the left, amber to the right, on both sides and in the same cell of each.
-  const auto left = cells_of(f[14]), right = cells_of(f[14]);
+  const auto left = cells_of(f[11]), right = cells_of(f[11]);
   check(left[5].fg == 236 && left[5].bg == 236 && left[47].fg == 179 && left[47].bg == 179, "the heat shows the onset");
   int onset_left = -1, onset_right = -1;
   for (int c = 0; c < 43; ++c) {
@@ -1933,57 +1957,52 @@ void check_large_mockup() {
   }
   check(onset_left > 10 && onset_left == onset_right, "one onset lines up across the two blocks");
   check(left[5].glyph == "▀", "a heat cell is a half block");
-  check(cells_of(f[11])[47].fg == 60 || cells_of(f[11])[47].fg == 67, "the kernel lane is a ramp colour");
-  check(cells_of(f[12])[47].glyph == "█", "a lane is one full cell");
-  check(cells_of(f[12])[56 + 42].fg == 179 && cells_of(f[12])[56 + 42].glyph == "█", "the lost lane is amber from 1 vCPU");
-  check(columns(as_text({f[12]}), 56, 1) == " ", "a gated lost is a gap in its lane, not a cell");
-  check(cells_of(f[11])[56 + 42].fg == 236, "the iowait lane is the iowait, 0 under a full guest");
+  check(cells_of(f[8])[47].fg == 60 || cells_of(f[8])[47].fg == 67, "the kernel lane is a ramp colour");
+  check(cells_of(f[9])[47].glyph == "█", "a lane is one full cell");
+  check(cells_of(f[9])[56 + 42].fg == 179 && cells_of(f[9])[56 + 42].glyph == "█", "the lost lane is amber from 1 vCPU");
+  check(columns(as_text({f[9]}), 56, 1) == " ", "a gated lost is a gap in its lane, not a cell");
+  check(cells_of(f[8])[56 + 42].fg == 236, "the iowait lane is the iowait, 0 under a full guest");
 }
 
 void check_large_allocation() {
-  struct want { int height, heat, busy, lanes, ram, lists; };
-  for (const want& e : std::initializer_list<want>{{26, 0, 0, 0, 0, 0},  // Below the floor
-                                                   {27, 10, 3, 0, 0, 3}, {28, 10, 3, 0, 0, 4}, {29, 10, 3, 2, 0, 3}, {30, 10, 3, 2, 1, 3},
-                                                   {31, 10, 3, 2, 2, 3}, {32, 10, 3, 2, 2, 4}, {34, 10, 3, 2, 2, 6}, {35, 10, 4, 2, 2, 6},
-                                                   {40, 10, 9, 2, 2, 6}, {43, 10, 12, 2, 2, 6}, {44, 10, 12, 2, 2, 7}, {66, 10, 12, 2, 2, 29}}) {
+  // design/panel-grammar.md part 3, "Rows": the history goes before a list falls under 3 rows; then lists to 6,
+  // the heat block, the busy plots to 12, the history to 6, and the lists take the rest.
+  struct want { int height, heat, busy, lists, history; };
+  for (const want& e : std::initializer_list<want>{{28, 0, 0, 0, 0},  // Below the floor
+                                                   {29, 10, 3, 3, 0}, {30, 10, 3, 4, 0}, {31, 10, 3, 5, 0}, {32, 10, 3, 3, 2},
+                                                   {34, 10, 3, 5, 2}, {35, 10, 3, 6, 2}, {36, 10, 4, 6, 2}, {40, 10, 8, 6, 2},
+                                                   {44, 10, 12, 6, 2}, {45, 10, 12, 6, 3}, {48, 10, 12, 6, 6}, {49, 10, 12, 7, 6}, {66, 10, 12, 24, 6}}) {
     cpu_rows p;
     const bool fits = plan_cpu_rows(10, e.height, p);
     const std::string at = " at " + std::to_string(e.height);
     if (e.heat == 0) { check(!fits, "below the floor" + at); continue; }
-    check(fits && p.heat == e.heat && p.busy == e.busy && p.lanes == e.lanes && p.ram == e.ram && p.lists == e.lists, "the allocation" + at);
+    check(fits && p.heat == e.heat && p.busy == e.busy && p.lists == e.lists && p.history == e.history, "the allocation" + at);
   }
   // More threads than rows: the lists get their 6 before the heat block takes more than 10.
   cpu_rows p;
-  check(plan_cpu_rows(20, 27, p) && p.heat == 10 && p.lanes == 0, "20 natural rows have the same floor");
-  check(plan_cpu_rows(20, 34, p) && p.heat == 10 && p.lists == 6, "and the same 34");
-  check(plan_cpu_rows(20, 39, p) && p.heat == 15 && p.busy == 3 && p.lists == 6, "the heat block takes the next rows");
-  check(plan_cpu_rows(20, 44, p) && p.heat == 20 && p.busy == 3, "up to 20 rows");
-  check(plan_cpu_rows(32, 66, p) && p.heat == 20 && p.busy == 12, "never more");
-  check(plan_cpu_rows(2, 19, p) && p.heat == 2 && !plan_cpu_rows(2, 18, p), "4 threads have a floor of 19");
-  check(plan_cpu_rows(0, 17, p) && p.heat == 0, "no rows to draw leaves the fixed rows");
+  check(plan_cpu_rows(20, 29, p) && p.heat == 10 && p.history == 0, "20 natural rows have the same floor");
+  check(plan_cpu_rows(20, 34, p) && p.heat == 10 && p.lists == 5, "and the same 34: 5 list rows");
+  check(plan_cpu_rows(20, 40, p) && p.heat == 15 && p.busy == 3 && p.lists == 6, "the heat block takes the next rows");
+  check(plan_cpu_rows(20, 45, p) && p.heat == 20 && p.busy == 3, "up to 20 rows");
+  check(plan_cpu_rows(32, 66, p) && p.heat == 20 && p.busy == 12 && p.history == 6, "never more");
+  check(plan_cpu_rows(2, 21, p) && p.heat == 2 && !plan_cpu_rows(2, 20, p), "4 threads have a floor of 21");
+  check(plan_cpu_rows(0, 19, p) && p.heat == 0, "no rows to draw leaves the fixed rows");
 
   const snapshot s = contended();
   const history h = contended_history(s);
-  for (const int rows : {27, 28, 29, 30, 31, 34, 40, 43, 44, 50, 66}) {
+  for (const int rows : {29, 30, 31, 32, 34, 40, 43, 44, 50, 66}) {
     const auto f = large(s, h, 120, rows);
     const std::string at = " at 120x" + std::to_string(rows);
     check(static_cast<int>(f.size()) == rows && frame_fits(f, 120, rows), "the frame fills its rows" + at);
     check(has(as_text({f.back()}), "q quit"), "the footer is the last row" + at);
     check(is_large(f), "this layout" + at);
-    check(has(as_text({f.back()}), "some rows hidden") == (rows < 30), "the footer says when lanes or RAM went" + at);
+    check(marks_hidden(f) == (rows < 32), "the footer says when the history went" + at);
+    check(has(as_text(f), "kern│") && has(as_text(f), "lost≈"), "the lanes are always there" + at);
+    check(!has(as_text(f), "RAM"), "nothing on panel 3 says RAM" + at);
   }
-  // Windows Terminal's default, from memory: all of it, with the RAM lane and 3 list rows.
-  const auto wt = large(s, h, 120, 30);
-  const std::string t = as_text(wt);
-  check(has(t, "kern│") && has(t, "lost≈") && has(t, "top 3 of 46") && has(t, "top 3 of 64"), "120 by 30 keeps the lanes and 3 list rows");
-  const int ram = row_at(wt, 0, "RAM │");
-  check(ram > 0 && cells_of(wt[static_cast<size_t>(ram)])[8].glyph == "█" && cells_of(wt[static_cast<size_t>(ram)])[8].fg == 110, "at 30 rows RAM is a one-row lane on the ramp: 65% is the high step");
-  check(row_at(wt, 0, "    │") == row_at(wt, 0, "100 │") + 1, "the only blank gutter is inside the busy plot");
-  check(!has(as_text(large(s, h, 120, 29)), "RAM │"), "at 29 rows it has gone");
-  check(has(as_text(large(s, h, 120, 29)), "kern│"), "and the lanes are still there");
-  check(!has(as_text(large(s, h, 120, 28)), "kern│"), "at 28 the lanes have gone too");
   const auto at40 = large(s, h, 131, 40);
-  check(row_at(at40, 0, "RAM │") - row_at(at40, 0, "100 │") == 9, "at 40 the busy graph is 9 rows");
+  check(row_at(at40, 0, "kern") - row_at(at40, 0, "100 │") == 8, "at 40 the busy graph is 8 rows");
+  check(has(as_text(large(s, h, 100, 34)), "5 of 46") && has(as_text(large(s, h, 131, 40)), "6 of 46"), "5 list rows at 34, 6 at 40");
 }
 
 void check_large_floors() {
@@ -1993,10 +2012,10 @@ void check_large_floors() {
     snapshot s = contended(c.threads);
     s.cpu_layout = {};
     const history h = contended_history(s);
-    const int floor = 17 + c.rows;
+    const int floor = 19 + c.rows;  // Without the history: 13 fixed, 3 busy, 3 list rows
     const std::string at = " at " + std::to_string(c.threads) + " threads";
     const auto f = large(s, h, 100, floor);
-    check(is_large(f), "the floor is 17 plus heat rows" + at);
+    check(is_large(f), "the floor is 19 plus heat rows" + at);
     check(!is_large(large(s, h, 100, floor - 1)), "one row less is the small layout" + at);
     check(!is_large(large(s, h, 99, 66)), "99 columns are the small layout" + at);
     check(has(as_text({large(s, h, 100, floor - 1).back()}), "←→ 1 min  q quit"), "the small layout has its footer, and ←→ acts there too" + at);
@@ -2110,7 +2129,7 @@ void check_large_layouts() {
   for (uint32_t c2 = 14; c2 < 16; ++c2) twenty_two.rows.push_back({c2, 0, 0});
   small_room.cpu_layout = twenty_two;
   const history h2 = contended_history(small_room);
-  const auto f2 = large(small_room, h2, 100, 27);
+  const auto f2 = large(small_room, h2, 100, 29);
   check(has(as_text(f2), "highest of each row") && row_at(f2, 0, "P0") > 0 && row_at(f2, 0, "E") > 0, "22 threads in 10 rows keep P and E");
 }
 
@@ -2214,7 +2233,7 @@ void check_heat_cells() {
   check(has(as_text(of), "112%  WINDOWS") && has(as_text(of), "VM ran 21.50 of 20 threads"), "over 100 is printed as measured");
   check(columns(as_text({line_at(of, 0, "100 ")}), 47, 1) == "⣿", "and the plot stops at its top");
 
-  // Lanes: the kernel lane leaves the VM out, and a RAM plot is 2 rows of 0-100.
+  // Lanes: the kernel lane leaves the VM out.
   snapshot lanes = contended();
   lanes.cpu_derived.own_kernel_pct = 2;
   lanes.cpu_derived.vm_cpu_pct = 70;
@@ -2224,16 +2243,6 @@ void check_heat_cells() {
   const std::vector<line> lf = large(lanes, lh, 100, 34);
   check(cells_of(line_at(lf, 0, "kern"))[47].fg == 236, "the kern lane is kernel less the VM");
   check(cells_of(line_at(lf, 0, "VM  "))[47].fg == 110, "the VM lane is the VM");
-  const int ram = row_at(lf, 0, "RAM │");
-  check(columns(as_text({lf[static_cast<size_t>(ram)]}), 47, 1) == "⣤" && columns(as_text({lf[static_cast<size_t>(ram) + 1]}), 47, 1) == "⣿", "75% of 8 dots is 6");
-  bool steel = false;
-  for (const span& p : lf[static_cast<size_t>(ram)]) steel = steel || (has(p.text, "⣤") && p.color == tone::bar);
-  check(steel, "RAM is steel");
-  lanes.memory.available = lanes.memory.total / 50;
-  bool red = false;
-  const std::vector<line> low_ram = large(lanes, lh, 100, 34);
-  for (const span& p : low_ram[5]) red = red || (has(p.text, "/63.7 GiB") && p.color == tone::act);
-  check(red, "RAM uses left_tone");
 
   // The count is at 90%, the same line the top colour starts on.
   snapshot count = contended();
@@ -2392,7 +2401,10 @@ void check_large_states() {
   const history before_gone = build_history(gone, 60, [](snapshot&, int, int) {});
   f = large(gone, before_gone);
   std::string t = as_text(f);
-  check(has(t, "WSL unavailable: the collector sent nothing") && has(t, "collector restarted 2 times"), "the head says why");
+  check(has(t, "collector restarted 2 times"), "the head says the collector keeps restarting");
+  const std::string wide_gone = as_text(large(gone, before_gone, 131, 40));
+  check(has(as_text(large(gone, before_gone, 200, 40)), "WSL unavailable: the collector sent nothing · collector restarted 2 times"), "with room, why as well");
+  check(has(wide_gone, "collector restarted 2 times"), "and at 131");
   check(!has(t, "lost CPU") && !has(t, "WSL short") && !has(t, "inferred"), "lost is not shown");
   check(row_at(f, kRight(100), "100 │") > 0 && columns(as_text({f[8]}), 56) == std::string(43, ' '), "the guest plots are gaps");
   check(has(t, "WSL  ") && has(t, "guest view, inside the VM"), "the descriptor stays");
@@ -2551,7 +2563,7 @@ void check_large_lists() {
   const std::string t = as_text(large(s, h, 100, 40));
   const size_t a = t.find("p100"), b = t.find("p700"), c = t.find("p800"), d = t.find("p900"), e = t.find("p600"), f = t.find("p500");
   check(a < b && b < c && c < d && d < e && e < f, "strict on cores rounded to 0.1, then PID");
-  check(!has(t, "Idle") && has(t, "top 6 of 6 by cores"), "the idle process is not listed");
+  check(!has(t, "Idle") && has(t, "6 of 6 ") && has(t, "Windows  by cores"), "the idle process is not listed");
   check(cores_key(0.149) == 1 && cores_key(0.151) == 2 && cores_key(kNaN) == -1 && cores_key(kInf) == -1 && cores_key(1e300) == 10000000000, "the sort key is 0.1 cores");
 
   snapshot w = contended();
@@ -2560,26 +2572,27 @@ void check_large_lists() {
                           R"({"pid":20,"name":"beta","state":"D","rss":1,"cores":0.16,"threads":null,"rated":true,"on_gpu":true},)"
                           R"({"pid":10,"name":"한글추론기","state":"S","rss":1,"cores":0.01,"rated":true,"on_gpu":false},)"
                           R"({"pid":40,"name":"]0;pwned[31mevil","state":"S","rss":1,"cores":3,"threads":1,"rated":true,"on_gpu":false})");
-  const std::vector<line> frame = large(w, h, 100, 40);
+  const std::vector<line> frame = large(w, h, 131, 40);  // Room for the guest's names
   const std::string wt = as_text(frame);
   check(wt.find("pwned") < wt.find("beta") && wt.find("beta") < wt.find("zeta"), "the guest sorts the same way: rounded cores, then PID, and a holder has no place of its own");
-  check(has(wt, "20 beta        n/a"), "a null thread count is n/a");
+  check(has(line_with(frame, " beta "), " n/a "), "a null thread count is n/a");
   check(has(wt, " holder") && !has(wt, "on GPU"), "a holder is a holder");
   check(vt_clean(vt_frame(frame, 40)), "hostile names stay safe");
   bool sides = false;
   for (const line& l : frame) {
     const std::string row_text = as_text({l});
-    if (has(row_text, "svchost.exe")) { sides = true; check(columns(row_text, 0, 48).find("svchost") != std::string::npos, "Windows names stay left"); }
-    if (has(row_text, "한글추론기")) check(columns(row_text, 51).find("한글추론기") != std::string::npos, "Linux names stay right");
+    if (has(row_text, "svchost.exe")) { sides = true; check(columns(row_text, 0, 64).find("svchost") != std::string::npos, "Windows names stay left"); }
+    if (has(row_text, "한글추론기")) check(columns(row_text, kRight(131)).find("한글추론기") != std::string::npos, "Linux names stay right");
   }
-  check(!has(wt, "cpu_burn.exe") || wt.find("Windows  top") < wt.find("WSL  top"), "two lists");
+  check(wt.find("Windows  by cores") < wt.find("WSL  by cores") && wt.find("WSL  by cores") != std::string::npos, "two lists");
   check(sides || has(wt, "p100") || has(wt, "cpu_burn.exe"), "the Windows list was drawn");
 
-  // A long count keeps the label: `by cores` is the part that gives way.
+  // The guest's count is under its list; the head keeps its label, and `guest's count` gives way first.
   snapshot big = contended();
   big.wsl_json.replace(big.wsl_json.find("\"process_count\":64"), 18, "\"process_count\":1280");
-  check(has(as_text(large(big, h)), "WSL  top 6 of 1280, dxg: no usage measured"), "the WSL head keeps no usage measured");
-  check(has(as_text(large(big, h, 131, 34)), "WSL  top 6 of 1280 by cores, dxg: no usage measured"), "with room it keeps both");
+  check(has(as_text(large(big, h)), "WSL  by cores · dxg: no usage measured") && has(as_text(large(big, h)), "of 6 · 1280 in the guest"), "the WSL head keeps no usage measured, and the count is under the list");
+  check(has(as_text(large(big, h, 131, 34)), "WSL  by cores, guest's count · dxg: no usage measured"), "with room it says whose count");
+  check(!has(as_text(large(big, h, 131, 40)), "top 6"), "no heading says top");
 
   snapshot empty = contended();
   empty.processes.clear();
@@ -2654,9 +2667,8 @@ void check_span_key() {
     seen += as_text({large(s, h, 131, 40, v).back()});
   }
   check(has(seen, "←→ 5 min") && has(seen, "←→ 10 min") && v.range == 1, "← steps 1, 5, 10 minutes and stops; → comes back, and the footer says each");
-  check(has(as_text({large(s, h, 100, 34).back()}), "1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost") &&
-            has(as_text({large(s, h, 100, 34).back()}), "←→ 1 min  q quit"),
-        "panel 3's footer at 100 by 34");
+  check(as_text({large(s, h, 100, 34).back()}) == "1 2 3 cpu 4 5 6 7 8" + std::string(44, ' ') + "↑↓ select  tab list  ←→ 1 min  q quit\n",
+        "panel 3's footer at 100 by 34, as the design draws it");
   for (const int span_s : {300, 600}) {
     const view_state o = state_for(3, span_s);
     const std::string t = as_text(large(s, h, 131, 40, o));
@@ -2735,12 +2747,10 @@ void check_span_key() {
   };
   check(marked_once("100 │", 0), "the Windows busy plot takes the mean, and one dot marks its maximum");
   check(marked_once("100 │", kRight(100)), "the WSL busy plot too");
-  check(marked_once("RAM │", 0), "the Windows RAM plot too");
-  check(marked_once("RAM │", kRight(100)), "the WSL RAM plot too");
+
   check(!any_hot(line_at(sf, 0, "kern"), 5), "the kern lane takes the mean");
   check(!any_hot(line_at(sf, kRight(100), "iowt"), kRight(100) + 5), "the iowait lane takes the mean");
-  check(!any_hot(line_at(lean, 0, "RAM │"), 5, 53), "a RAM lane takes the mean");
-  check(!any_hot(line_at(lean, kRight(120), "RAM │"), kRight(120) + 5, 53), "on both sides");
+
 }
 
 void check_large_captions() {
@@ -2765,25 +2775,11 @@ void check_large_captions() {
   check(!has(as_text({heat_caption("threads", "20 of 20 ≥90%", false, true, 42)}), "idle"), "the legend needs its whole width");
   check(has(as_text({heat_caption("threads", "20 of 20 ≥90%", false, true, 43)}), "idle"), "and has it at 43");
 
-  // Pressure: short, then n/a where the kernel has none.
-  const auto fourth = [&](const snapshot& t, int w = 100) { return columns(as_text({large(t, h, w, 34)[5]}), kRight(w)); };
+  // Memory and its pressure are panel 4's: panel 3 shows neither, whatever the guest's line says.
   const std::string psi = "\"pressure\":{\"cpu\":4,\"memory\":0,\"io\":0}";
   snapshot p = contended();
   p.wsl_json.replace(p.wsl_json.find(psi), psi.size(), "\"pressure\":{\"cpu\":100,\"memory\":100,\"io\":100}");
-  check(has(fourth(p), "· psi 100/100/100") && !has(fourth(p), "pressure"), "a tight row has the short form: " + fourth(p));
-  check(has(fourth(p, 131), "· pressure cpu 100 mem 100 io 100"), "a wide one the long form: " + fourth(p, 131));
-  snapshot none = contended();
-  none.wsl_json.replace(none.wsl_json.find(psi), psi.size(), "\"pressure\":{\"cpu\":null,\"memory\":null,\"io\":null}");
-  check(has(fourth(none), "RAM 12.3/31.2 GiB · pressure n/a"), "no PSI at all is n/a");
-  snapshot part = contended();
-  part.wsl_json.replace(part.wsl_json.find(psi), psi.size(), "\"pressure\":{\"cpu\":4,\"memory\":null,\"io\":0}");
-  check(has(fourth(part), "pressure cpu 4 mem n/a io 0"), "one missing figure is n/a");
-  snapshot high = contended();
-  high.wsl_json.replace(high.wsl_json.find(psi), psi.size(), "\"pressure\":{\"cpu\":20,\"memory\":0,\"io\":0}");
-  bool watched = false;
-  const std::vector<line> high_frame = large(high, h);
-  for (const span& q : high_frame[5]) watched = watched || (has(q.text, "cpu 20") && q.color == tone::watch);
-  check(watched, "high pressure is watch");
+  check(!has(as_text(large(p, h, 131, 40)), "pressure") && !has(as_text(large(p, h, 131, 40)), "psi"), "no pressure on panel 3");
 
   // Missing guest figures: an older collector's line.
   snapshot old_line = contended();
@@ -2796,7 +2792,7 @@ void check_large_captions() {
   snapshot no_mem = contended();
   no_mem.memory = {};
   const std::string nm = as_text(large(no_mem, h));
-  check(has(nm, "RAM n/a") && !has(nm, "free"), "unread memory is n/a");
+  check(!has(nm, "RAM") && !has(nm, "GiB  free") && frame_fits(large(no_mem, h), 100, 34), "unread memory changes nothing on panel 3");
 }
 
 void check_large_sweep() {
@@ -2817,7 +2813,7 @@ void check_large_sweep() {
   const snapshot labelled = contended();
   const history lh = contended_history(labelled);
   for (int w = 100; w <= 300; ++w) {
-    for (const int rows : {27, 34, 66}) {
+    for (const int rows : {29, 34, 66}) {  // 29: the floor, without the history
       const std::string at = " at " + std::to_string(w) + "x" + std::to_string(rows);
       const std::vector<line> f = large(labelled, lh, w, rows);
       const std::string t = as_text(f);
@@ -3068,20 +3064,16 @@ void check_graph_rule_buckets() {
       check(cells > 9 && wsl.size() == win.size() && first == unwatched_cells(fresh, axis) && first == axis.cell.front() && first < cells,
             "the unwatched part ends at the first sample's bucket" + n);
       check(alternate(win, first) && alternate(wsl, lead(wsl)) && lead(wsl) == first, "a faint · in every other cell, both columns alike" + n);
-      int ram_row = -1, dots = 0, bottom_dots = 0;
+      int dots = 0, bottom_dots = 0, busy_dots = 0;
       for (size_t i = 0; i < f.size(); ++i) {
         const std::string t = as_text({f[i]});
-        if (t.rfind("RAM │", 0) == 0) ram_row = static_cast<int>(i);
         dots += faint_dots(f[i]);
-        if (t.rfind("  0 │", 0) == 0) bottom_dots += faint_dots(f[i]);
+        if (t.rfind("  0 │", 0) == 0) {
+          bottom_dots += faint_dots(f[i]);
+          if (busy_dots == 0) busy_dots = faint_dots(f[i]);  // The busy plots' row comes first; the history's is its own
+        }
       }
-      check(ram_row > 0 && faint_dots(f[static_cast<size_t>(ram_row)]) == 0, "the RAM plot's top row has no dots" + n);
-      if (ram_row > 0 && static_cast<size_t>(ram_row) + 1 < f.size()) {
-        const std::vector<std::vector<cell>> ram = plots_in(f[static_cast<size_t>(ram_row) + 1]);
-        check(ram.size() == 2 && lead(ram[0]) == first && alternate(ram[0], first) && alternate(ram[1], first), "the RAM plots' bottom row is dotted the same" + n);
-        bottom_dots += faint_dots(f[static_cast<size_t>(ram_row) + 1]);
-      }
-      check(dots == bottom_dots && dots == 4 * ((first + 1) / 2), "dots only on the plots' bottom rows, not the heat block or the lanes" + n);
+      check(dots == bottom_dots && busy_dots == 2 * ((first + 1) / 2), "dots only on the plots' bottom rows, not the heat block or the lanes" + n);
     }
   }
 
@@ -3286,8 +3278,9 @@ void check_view_keys() {
       const std::string name = fmt("%d %s", p, kPanelLabel[p]);
       if (w >= display_width(name) + 2) check(has(t, name), "the current panel is named" + at);
       check(!has(t, "[t]") && !has(t, " s ") && !has(t, "sort"), "no t and no s" + at);
-      check(!has(t, "↑↓") && !has(t, "tab list"), "no ↑↓ or tab before a panel draws a selection" + at);
-      check(has(t, "←→") == (panel_has_range(p) && w >= 38), "←→ only on panels 2 and 3, where it fits beside the panels' numbers" + at);
+      // Panel 3 offers ↑↓ and tab with its lists; the keys go together, so they need 19 + 3 + 37 columns there.
+      check(has(t, "↑↓") == (p == 3 && w >= 59) && has(t, "tab list") == (p == 3 && w >= 59), "↑↓ and tab only on panel 3, which draws its lists" + at);
+      check(has(t, "←→") == (panel_has_range(p) && w >= (p == 3 ? 59 : 38)), "←→ only on panels 2 and 3, where it fits beside the panels' numbers" + at);
       for (const span& q : foot) {
         if (q.text.empty() || q.text[0] < '1' || q.text[0] > '8' || (q.text.size() > 1 && q.text[1] != ' ')) continue;
         const int n = q.text[0] - '0';
@@ -3302,7 +3295,7 @@ void check_view_keys() {
     return as_text({render(s, w, 40, kNow, &demo, x).back()});
   };
   check(foot_text(1, 131) == "1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost" + std::string(59, ' ') + "q quit\n", "panel 1's footer at 131, as the design draws it");
-  check(foot_text(3, 80) == "1 2 3 cpu 4 5 6 7 8" + std::string(45, ' ') + "←→ 1 min  q quit\n", "panel 3's footer at 80: the other panels are numbers");
+  check(foot_text(3, 80) == "1 2 3 cpu 4 5 6 7 8" + std::string(24, ' ') + "↑↓ select  tab list  ←→ 1 min  q quit\n", "panel 3's footer at 80: the other panels are numbers");
   check(has(foot_text(2, 131, 1), "←→ 5 min  q quit") && has(foot_text(3, 131, 2), "←→ 10 min  q quit"), "the footer says the range");
   check(foot_text(3, 6) == "3 cpu\n", "too narrow for the numbers: the current panel alone");
   // Hidden rows are still said: after the panels, or by a leading … where that does not fit.
@@ -3386,6 +3379,235 @@ void check_audit_fixes() {
   check(line_with(render(first, 200, 66, kNow, &demo, state_for(3)), "4 System").find("0.42") == std::string::npos, "panel 3: a first reading's cores are not printed");
   check(!has(line_with(render(first, 200, 66, kNow), " 4121 python3"), "0.00"), "nor the guest's");
   check(cores_text(true, 0) == "0.00" && cores_text(false, 3) == "n/a" && cores_text(true, kNaN) == "n/a", "a measured 0 is 0.00; unmeasured or missing is n/a");
+}
+
+// design/panel-grammar.md part 3, "The per-process ring".
+void check_process_ring() {
+  const auto win = [](uint32_t pid, const char* name, double cores, uint64_t start = 7, bool known = true) {
+    process_row p;
+    p.pid = pid; p.name = name; p.cores = cores; p.working_set = 1ull << 30; p.create_time = start; p.cores_known = known;
+    return p;
+  };
+  const auto at = [](int64_t t, std::vector<process_row> rows) {
+    snapshot s = bare();
+    s.unix_ms = t;
+    s.processes = std::move(rows);
+    return s;
+  };
+  const auto value = [](const history& h, const proc_id& id, size_t i) {
+    const int slot = h.slot_of(id);
+    return slot < 0 ? kNaN : static_cast<double>(h.cores_at(slot, h.position(h.samples()[i])));
+  };
+  const proc_id a{0, 100, 7, "a.exe"};
+
+  history h;
+  h.push(at(kNow, {win(0, "Idle", 11), win(100, "a.exe", 2, 7, false)}));
+  check(h.slot_of(proc_id{0, 0, 7, "Idle"}) < 0, "pid 0 gets no slot");
+  check(h.slot_of(a) >= 0 && std::isnan(value(h, a, 0)), "a first reading is a gap, not 0");
+  check(h.memory_at(h.slot_of(a), h.position(h.samples()[0])) == 1.0f, "its memory is kept: working set, GiB");
+  h.push(at(kNow + 1000, {win(100, "a.exe", 2)}));
+  check(value(h, a, 1) == 2.0, "the next reading is the value");
+  h.push(at(kNow + 2000, {}));
+  check(std::isnan(value(h, a, 2)), "a sample the process missed is a gap");
+  h.push(at(kNow + 3000, {win(100, "a.exe", 3, 8)}));
+  check(std::isnan(value(h, proc_id{0, 100, 8, "a.exe"}, 2)) && value(h, proc_id{0, 100, 8, "a.exe"}, 3) == 3.0 && value(h, a, 1) == 2.0,
+        "a reused pid with the same name and another start is another slot, and the old one keeps its own");
+  h.push(at(kNow + 4000, {win(100, "b.exe", 4, 8)}));
+  check(h.slot_of(proc_id{0, 100, 8, "a.exe"}) < 0 && value(h, proc_id{0, 100, 8, "b.exe"}, 4) == 4.0, "the same pid and start under another name is another process");
+
+  // Every push writes every slot: after the ring wraps, a slot that missed a sample reads NaN, not what was there.
+  history wrap;
+  for (int i = 0; i < 601; ++i) wrap.push(at(kNow + i * 1000, {win(100, "a.exe", 5), win(200, "b.exe", 1)}));
+  for (int i = 601; i < 700; ++i) wrap.push(at(kNow + i * 1000, {win(100, "a.exe", 5)}));
+  const proc_id b{0, 200, 7, "b.exe"};
+  bool gaps = true;
+  for (size_t i = wrap.samples().size() - 99; i < wrap.samples().size(); ++i) gaps = gaps && std::isnan(value(wrap, b, i));
+  check(gaps && value(wrap, b, 0) == 1.0, "a slot that missed samples reads NaN there after the ring wraps");
+  // Gone for all that is kept: let go.
+  for (int i = 700; i < 1302; ++i) wrap.push(at(kNow + i * 1000, {win(100, "a.exe", 5)}));
+  check(wrap.slot_of(b) < 0 && wrap.slot_of(a) >= 0, "a process gone for kKeepMs frees its slot");
+
+  // A backward clock step: the values stay in their samples.
+  history step;
+  for (int i = 0; i < 5; ++i) step.push(at(kNow + i * 1000, {win(100, "a.exe", 1 + i)}));
+  step.push(at(kNow - 3600000, {win(100, "a.exe", 9)}));
+  bool kept = step.samples().size() == 6;
+  for (size_t i = 0; i < 5; ++i) kept = kept && value(step, a, i) == 1.0 + static_cast<double>(i);
+  check(kept && value(step, a, 5) == 9.0, "a backward clock step keeps a slot's values in their samples");
+  // A stall of all that is kept: the samples go, and with them every value a slot held.
+  snapshot stall = at(kNow + 5000000, {win(100, "a.exe", 7)});
+  stall.interval_s = 600;
+  step.push(stall);
+  check(step.samples().size() == 1 && value(step, a, 0) == 7.0, "a stall of kKeepMs clears the slots' past with the samples");
+
+  // The cap: 1024 slots, or twice the rows of the newest sample. The slot least recently seen is reused, a
+  // selected one never, and nothing is refused.
+  history cap;
+  std::vector<process_row> many;
+  for (uint32_t i = 1; i <= 1024; ++i) many.push_back(win(i, "p", 1));
+  cap.push(at(kNow, many));
+  check(cap.slots_allocated() == 1024 && cap.slots_used() == 1024, "1024 processes, 1024 slots");
+  const proc_id first{0, 1, 7, "p"}, second{0, 2, 7, "p"};
+  std::vector<process_row> later(many.begin() + 2, many.begin() + 12);  // pids 3 to 12 stay; 1 and 2 have not been seen since
+  cap.push(at(kNow + 1000, later), {first});
+  later.push_back(win(5000, "new", 1));
+  cap.push(at(kNow + 2000, later), {first});
+  check(cap.slots_allocated() == 1024 && cap.slot_of(proc_id{0, 5000, 7, "new"}) >= 0, "at the cap a new process takes a slot");
+  check(cap.slot_of(first) >= 0 && cap.slot_of(second) < 0, "the least recently seen is reused, the selected one never");
+  std::vector<process_row> crowd;
+  for (uint32_t i = 1; i <= 1500; ++i) crowd.push_back(win(10000 + i, "q", 1));
+  cap.push(at(kNow + 3000, crowd), {first});
+  bool all = true;
+  for (uint32_t i = 1; i <= 1500; ++i) all = all && cap.slot_of(proc_id{0, 10000 + i, 7, "q"}) >= 0;
+  check(all && cap.slot_of(first) >= 0, "more processes than the cap: none is refused, and the selected one stays");
+  check(cap.slots_allocated() <= 3000, "the cap is twice the newest sample's rows");
+
+  // The guest: rated decides a first reading; a repeated line carries once, a second repeat is a gap; stale is a gap.
+  snapshot g = contended();
+  g.wsl_json = guest_line(std::vector<double>(20, 50.0), {}, R"({"pid":7,"name":"burn","state":"R","rss":1073741824,"cores":3,"rated":false,"start":11,"on_gpu":false})");
+  history gh;
+  g.unix_ms = kNow;
+  gh.push(g);
+  const proc_id burn{1, 7, 11, "burn"};
+  check(gh.slot_of(burn) >= 0 && std::isnan(value(gh, burn, 0)), "rated false is a gap");
+  guest_figures fig;
+  fig.seq = 1;
+  g.wsl_json = guest_line(std::vector<double>(20, 50.0), fig, R"({"pid":7,"name":"burn","state":"R","rss":1073741824,"cores":3,"rated":true,"start":11,"on_gpu":false})");
+  g.unix_ms = kNow + 1000;
+  gh.push(g);
+  check(value(gh, burn, 1) == 3.0 && gh.memory_at(gh.slot_of(burn), gh.position(gh.samples()[1])) == 1.0f, "a rated guest row is its cores, and its stat rss");
+  g.unix_ms = kNow + 2000;
+  gh.push(g);
+  check(value(gh, burn, 2) == 3.0, "one repeat of the line carries the value");
+  g.unix_ms = kNow + 3000;
+  gh.push(g);
+  check(std::isnan(value(gh, burn, 3)), "a second repeat is a gap");
+  fig.seq = 2;
+  g.wsl_json = guest_line(std::vector<double>(20, 50.0), fig, R"({"pid":7,"name":"burn","state":"R","rss":1073741824,"cores":3,"rated":true,"start":11,"on_gpu":false})");
+  g.wsl_age_s = 5;
+  g.unix_ms = kNow + 4000;
+  gh.push(g);
+  check(std::isnan(value(gh, burn, 4)), "a stale line is a gap");
+  check(gh.slot_of(proc_id{1, 7, 12, "burn"}) < 0, "the guest's start is part of who it is");
+}
+
+// design/panel-grammar.md part 3: selection, scrolling, the one history.
+void check_selection() {
+  const snapshot s = contended();
+  const history h = contended_history(s);
+  const key_event down{key::down}, up{key::up}, tab{key::tab};
+  const auto rows_of = [](const std::vector<line>& f, const char* end) {  // The Windows rows drawn, by pid
+    std::vector<std::string> out;
+    bool in = false;
+    for (const line& l : f) {
+      const std::string t = columns(as_text({l}), 0, 48);
+      if (has(t, "   cores ")) { in = true; continue; }
+      if (in && has(t, end)) break;
+      if (in) out.push_back(t);
+    }
+    return out;
+  };
+  const auto nth = [](const std::vector<std::string>& rows, size_t i) { return i < rows.size() ? rows[i] : std::string(); };
+  view_state v = state_for(3);
+  std::vector<line> f = large(s, h, 100, 34, v);
+  check(count_of(as_text(f), "▶") == 1 && has(line_with(f, "▶"), "cpu_burn.exe"), "the first row is selected before any key");
+  check(has(as_text(f), "Windows · cpu_burn.exe 31000 · cores"), "and the history is its own, titled with its list and pid");
+  // 46 rows in 5: machtop's scroll.
+  for (int i = 0; i < 4; ++i) apply_key(v, down, s);
+  f = large(s, h, 100, 34, v);
+  std::vector<std::string> shown = rows_of(f, " of 46");
+  check(shown.size() == 5 && has(nth(shown, 0), "31000") && has(nth(shown, 4), "▶"), "↓ 4 times: row 1 still drawn first, the selection on row 5");
+  apply_key(v, down, s);
+  f = large(s, h, 100, 34, v);
+  shown = rows_of(f, " of 46");
+  check(shown.size() == 5 && !has(as_text(f), "31000 cpu_burn.exe   ") && has(nth(shown, 4), "▶") && has(as_text(f), "5 of 46"), "the fifth draws rows 2 to 6, the selection last: " + nth(shown, 0));
+  for (int i = 0; i < 60; ++i) apply_key(v, down, s);
+  f = large(s, h, 100, 34, v);
+  shown = rows_of(f, " of 46");
+  const std::string last_pid = std::to_string(windows_cpu_order(s).back()->pid);
+  check(has(nth(shown, 4), "▶") && has(nth(shown, 4), last_pid) && has(as_text(f), "5 of 46"), "↓ at 46 stays on the last row");
+  for (int i = 0; i < 41; ++i) {
+    apply_key(v, up, s);
+    shown = rows_of(large(s, h, 100, 34, v), " of 46");
+    if (i < 40) check(has(nth(shown, 4), "▶"), "↑ from 46 keeps the selection on the bottom row until row 5");
+  }
+  shown = rows_of(large(s, h, 100, 34, v), " of 46");
+  check(has(nth(shown, 0), "31000") && has(nth(shown, 4), "▶"), "row 5 again: the list is drawn from row 1");
+  check(!has(as_text(large(s, h, 100, 34, v)), "top 5") && !has(as_text(large(s, h, 100, 34, v)), "top 6"), "no heading says top");
+  check(has(as_text(large(s, h, 100, 34, v)), "6 · 64 in the guest"), "the guest's own count");
+
+  // Tab: the WSL list is focused, its heading lit, its row marked, the history its own, as the guest counted.
+  v = state_for(3);
+  apply_key(v, tab, s);
+  f = large(s, h, 131, 40, v);
+  check(count_of(as_text(f), "▶") == 1 && line_with(f, "▶").find("▶") > line_with(f, "▶").find("│"), "exactly one ▶, in the focused list");
+  check(has(as_text(f), "WSL · cpu_burn 4121 · cores, guest's count"), "a WSL history says it is the guest's count");
+  check(has(line_with(f, "WSL · cpu_burn"), "scale 20"), "scale 20 for the burner: 19.72 cores");
+  // An idle process: the floor of 0.05 cores.
+  for (int i = 0; i < 5; ++i) apply_key(v, down, s);
+  f = large(s, h, 131, 40, v);
+  check(has(line_with(f, "WSL · dbus-daemon"), "scale 0.05") && has(line_with(f, "WSL · dbus-daemon"), "max 0.01"), "scale 0.05 for an idle process: " + line_with(f, "WSL · "));
+  // A row that leaves falls to the first row, and comes back when it returns.
+  snapshot gone = s;
+  gone.wsl_json = guest_line(std::vector<double>(20, 100.0), {}, R"({"pid":4121,"name":"cpu_burn","state":"R","rss":1,"cores":19.72,"threads":21,"rated":true,"on_gpu":false})");
+  f = large(gone, h, 131, 40, v);
+  check(has(line_with(f, "▶"), "4121 cpu_burn"), "a selected row that left: the first row is shown selected");
+  f = large(s, h, 131, 40, v);
+  check(has(line_with(f, "▶"), "dbus-daemon"), "and when it returns it is selected again");
+
+  // A process with no slot draws a gap, never 0; the history follows focus back.
+  snapshot fresh = s;
+  process_row newcomer;
+  newcomer.pid = 99999; newcomer.name = "fresh.exe"; newcomer.cores = 50; newcomer.cores_known = true;
+  fresh.processes.push_back(newcomer);
+  view_state nv = state_for(3);
+  f = large(fresh, h, 131, 40, nv);
+  check(has(as_text(f), "Windows · fresh.exe 99999 · cores") && !has(line_with(f, "Windows · fresh.exe"), "avg"), "a process with no history yet: no label");
+  const int hist_row = row_at(f, 0, "Windows · fresh.exe");
+  check(hist_row > 0 && count_braille(as_text({f[static_cast<size_t>(hist_row) + 1], f[static_cast<size_t>(hist_row) + 2]})) == 0, "and no cell, not a 0");
+
+  // Hostile names in the title stay safe.
+  snapshot evil = s;
+  evil.processes.push_back(newcomer);
+  evil.processes.back().name = "\x1b]0;pwned\x07\x1b[2Jevil.exe";
+  evil.processes.back().cores = 90;
+  check(vt_clean(vt_frame(large(evil, h, 131, 40, state_for(3)), 40)) && has(as_text(large(evil, h, 131, 40, state_for(3))), "Windows · ?]0;pwned"), "a hostile name in the history's title is made safe");
+
+  // The four fixtures at both sizes: one history, labelled with its list.
+  for (const char* name : {"contended", "idle", "stale", "noisy"}) {
+    snapshot fs;
+    history fh;
+    cpu_fixture(name, 60, fs, fh);
+    for (const auto& [w, rows] : {std::pair{100, 34}, std::pair{131, 40}}) {
+      const std::vector<line> ff = large(fs, fh, w, rows);
+      const std::string t = as_text(ff);
+      const std::string n = std::string(" ") + name + " " + std::to_string(w) + "x" + std::to_string(rows);
+      check(count_of(t, "Windows · ") == 1 && count_of(t, "· cores") == 1, "one history" + n);
+      check(!has(t, "RAM") && !has(t, "?"), "nothing on panel 3 says RAM, and no figure on it is unchecked" + n);
+      check(has(t, "stat rss GiB") && !has(t, "RSS GiB"), "the guest's resident size is named for what it reads" + n);
+      check(vt_frame(ff, rows).size() < 48 * 1024, "under the frame budget" + n);
+    }
+  }
+  // The selected rows are what push keeps.
+  view_state sel = state_for(3);
+  apply_key(sel, down, s);
+  const std::vector<proc_id> keep = selected_processes(s, sel);
+  check(keep.size() == 2 && keep[0].side == 0 && keep[0].pid == windows_cpu_order(s)[1]->pid && keep[1].side == 1 && keep[1].pid == 4121, "selected_processes names both lists' rows");
+}
+
+// design/panel-grammar.md part 1, after experiment 06: what keeps its ? and what does not.
+void check_unchecked_marks() {
+  const std::string one = as_text(render(busy(), 200, 66, kNow));
+  check(has(one, "cache? 12.0 GiB") && has(one, "swap? 0.0 GiB"), "Windows cache and guest swap keep their ?");
+  check(has(one, "? not yet checked") && count_of(one, "? not yet checked") == 1, "panel 1 says once what ? means");
+  check(has(one, "available 39.0 GiB") && !has(one, "available?") && !has(one, "commit?") && !has(one, "WS GiB?"), "cleared by experiment 06: available, commit, working set");
+  check(has(one, "stat rss GiB") && !has(one, "RSS GiB?") && !has(one, " RSS GiB"), "guest RSS is relabelled stat rss, with no ?");
+  check(!has(one, "cores?"), "guest cores are cleared");
+  snapshot nothing = bare();
+  nothing.memory = {};
+  check(!has(as_text(render(nothing, 200, 66, kNow)), "?"), "no unchecked figure shown, no ?");
+  const history demo = demo_minute(busy());
+  check(!has(as_text(render(busy(), 131, 40, kNow, &demo, state_for(2))), "?"), "panel 2 has none");
 }
 
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
@@ -3625,6 +3847,29 @@ int measure_frames() {
     const std::chrono::duration<double, std::milli> took = std::chrono::steady_clock::now() - from;
     printf("panel 2    %3d s 131x40  %6zu bytes  %.3f ms a frame\n", span_s, bytes, took.count() / kFrames);
   }
+  {  // One push with this machine's load: 360 Windows processes and the guest's 30, every slot written
+    snapshot s = contended();
+    s.processes.clear();
+    for (uint32_t i = 1; i <= 360; ++i) {
+      process_row p;
+      p.pid = i * 4; p.name = "proc" + std::to_string(i) + ".exe"; p.cores = 0.01 * i; p.cores_known = true; p.create_time = i;
+      s.processes.push_back(p);
+    }
+    std::string guest;
+    for (int i = 0; i < 30; ++i) guest += (i ? "," : "") + std::string("{\"pid\":") + std::to_string(3000 + i) + ",\"name\":\"g\",\"state\":\"S\",\"rss\":1,\"cores\":0.1,\"rated\":true,\"start\":" + std::to_string(i) + "}";
+    history h;
+    constexpr int kPushes = 2000;
+    const auto from = std::chrono::steady_clock::now();
+    for (int i = 0; i < kPushes; ++i) {
+      guest_figures g;
+      g.seq = i;
+      s.wsl_json = guest_line(std::vector<double>(20, 50.0), g, guest);
+      s.unix_ms = kNow + i * 1000LL;
+      h.push(s);
+    }
+    const std::chrono::duration<double, std::milli> took = std::chrono::steady_clock::now() - from;
+    printf("push, 390 processes   %zu slots  %.3f ms a push, with building the guest line\n", h.slots_allocated(), took.count() / kPushes);
+  }
   for (const int threads : {40, 64}) {
     const snapshot s = noisy_now(threads);
     const history h = noisy_history(s);
@@ -3740,6 +3985,9 @@ int main(int argc, char** argv) {
   check_keys();
   check_view_keys();
   check_audit_fixes();
+  check_process_ring();
+  check_selection();
+  check_unchecked_marks();
   if (!quick) {
     check_denied_note();
     check_holder_wording();

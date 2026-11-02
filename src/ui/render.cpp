@@ -491,7 +491,8 @@ std::vector<line> windows_section(const snapshot& s, int width) {
   if (s.memory.total == 0) {
     out.push_back(message("MEM", "unavailable"));
   } else {
-    std::vector<std::string> details = {fmt("available %.1f GiB", gib(s.memory.available)), fmt("cache %.1f GiB", gib(s.memory.cache))};
+    // cache? : no ledger row ties it to a known \Memory figure yet (design/panel-grammar.md part 1, experiment 06).
+    std::vector<std::string> details = {fmt("available %.1f GiB", gib(s.memory.available)), fmt("cache? %.1f GiB", gib(s.memory.cache))};
     if (s.memory.commit_limit > 0) details.push_back(fmt("commit %.1f/%.1f GiB", gib(s.memory.commit_used), gib(s.memory.commit_limit)));
     memory_row(out, width, s.memory.total, s.memory.available, details);
   }
@@ -554,7 +555,7 @@ std::vector<line> wsl_section(const snapshot& s, const wsl_view& w, int width) {
     out.push_back(message("MEM", "unavailable"));
   } else {
     memory_row(out, width, w.mem_total, w.mem_available,
-               {fmt("available %.1f GiB", gib(w.mem_available)), fmt("cache %.1f GiB", gib(w.mem_cached)), fmt("swap %.1f GiB", gib(w.swap_used))});
+               {fmt("available %.1f GiB", gib(w.mem_available)), fmt("cache %.1f GiB", gib(w.mem_cached)), fmt("swap? %.1f GiB", gib(w.swap_used))});  // swap? : not checked
   }
 
   row p;
@@ -679,11 +680,11 @@ std::vector<line> wsl_list(const wsl_view& w, int col, int rows) {
   out.push_back(head);
 
   const bool pids = col >= 48;
-  const int name_w = std::clamp(col - (pids ? 34 : 26), 4, 40);
+  const int name_w = std::clamp(col - (pids ? 39 : 31), 4, 40);
   row cols;
   cols.add(pad_left("cores", 6), tone::dim).add(" ");
   if (pids) cols.add(pad_left("pid", 7), tone::dim).add(" ");
-  cols.add(pad("name", name_w), tone::dim).add(pad_left("RSS GiB", 8), tone::dim).add("  st", tone::dim);
+  cols.add(pad("name", name_w), tone::dim).add(pad_left("stat rss GiB", 13), tone::dim).add("  st", tone::dim);
   cols.add("  dxg", tone::dim);
   out.push_back(cols);
 
@@ -692,7 +693,7 @@ std::vector<line> wsl_list(const wsl_view& w, int col, int rows) {
     row r;
     r.add(pad_left(cores_text(p.rated, p.cores), 6)).add(" ");
     if (pids) r.add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
-    r.add(pad(p.name, name_w), p.on_gpu ? tone::title : tone::text).add(pad_left(fmt("%.1f", gib(p.rss)), 8));
+    r.add(pad(p.name, name_w), p.on_gpu ? tone::title : tone::text).add(pad_left(fmt("%.1f", gib(p.rss)), 13));
     r.add("  ").add(pad(p.state, 1), p.state == "D" ? tone::watch : tone::dim);
     if (p.on_gpu) r.add("  holder");
     out.push_back(r);
@@ -781,7 +782,10 @@ std::vector<line> overall_frame(const snapshot& s, const wsl_view& w, int width,
   const bool spaced = height >= fixed + kBlanks + kMinList;
 
   std::vector<line> frame;
-  frame.push_back(title_row(s, now_ms));
+  row title;
+  for (const span& p : title_row(s, now_ms)) title.add(p.text, p.color, p.bold);
+  if (s.memory.total > 0 || (w.ok && w.mem_total > 0)) title.add_if_fits("  ? not yet checked", width);  // Once on the panel, for cache? and swap?
+  frame.push_back(title);
   if (spaced) frame.emplace_back();
   for (const auto& p : parts) {
     frame.insert(frame.end(), p.begin(), p.end());
@@ -988,7 +992,7 @@ time_axis make_axis(const history& h, int64_t end_ms, int64_t span_ms, int cells
 // each clamped to 0-100, and NaN never counts. A bucket no sample fell in, between two samples close enough
 // to join, takes the later one, which stands for the time since the earlier: a cell narrower than a second
 // would stripe.
-template <class Value> std::vector<double> bucket_cells(const time_axis& a, Value value) {
+template <class Value> std::vector<double> bucket_cells(const time_axis& a, Value value, double top = 100) {
   std::vector<double> out(static_cast<size_t>(a.cells), std::numeric_limits<double>::quiet_NaN());
   std::vector<int> count(static_cast<size_t>(a.cells), 0);
   bool joined = false;
@@ -999,7 +1003,7 @@ template <class Value> std::vector<double> bucket_cells(const time_axis& a, Valu
     const double raw = value(p);
     const bool known = std::isfinite(raw);
     if (known) {
-      const double v = std::clamp(raw, 0.0, 100.0);
+      const double v = std::clamp(raw, 0.0, top);
       const int c = a.cell[i];
       if (joined && p.unix_ms - before <= kGapMs) {
         for (int k = std::max(0, from + 1); k < std::min(c, a.cells); ++k) out[static_cast<size_t>(k)] = v;
@@ -1320,6 +1324,7 @@ struct panel_frame {
   std::vector<line> lines;
   bool hidden = false;  // A block was dropped for want of rows
   bool graph = false;   // A graph over the range is drawn, so ←→ changes something on screen
+  int selectable = 0;   // Lists drawn that ↑↓ can move in, so the footer offers them, and tab with two
 };
 
 bool any_plot(const std::vector<grid_row>& rows) {
@@ -1520,62 +1525,6 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   return f;
 }
 
-panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms) {
-  // Stacked lists have two heads and share their rows; below 8 rows the Windows list gets none.
-  const bool wide = width >= 100;
-  const int least = wide ? 5 : 8;
-  const bool stale = s.wsl_age_s >= kStaleS;
-  panel guest = pct_panel({"WSL CPU ·", "guest view, inside the VM"}, w.ok, w.busy_pct, &history_sample::wsl_cpu);
-  if (w.ok && stale) {
-    guest.title.push_back(collector_status(s));
-    guest.color = tone::watch;
-  }
-  const std::vector<panel> graphs = {
-      pct_panel({"Windows CPU ·", "whole machine, includes the WSL VM"}, !s.cpu.core_pct.empty(), s.cpu.busy_pct, &history_sample::windows_cpu),
-      std::move(guest)};
-
-  panel_frame f;
-  f.lines.push_back(title_row(s, now_ms));
-  int room = height - 1;
-  std::vector<grid_row> rows;
-  add_panels(rows, graphs, width);
-  f.hidden = fit_rows(rows, room);
-  f.graph = any_plot(rows);
-  room -= rows_height(rows);
-
-  std::vector<line> cores;
-  cores.push_back(windows_rule(s, width));
-  core_rows(cores, width, s.cpu.core_pct);
-  if (w.ok) {
-    cores.push_back(wsl_rule(w, width));
-    core_rows(cores, width, w.core_pct);
-  } else {
-    cores.push_back(rule("WSL", "", width));
-    cores.push_back(message("", wsl_unavailable(s, w), tone::watch, 0));
-  }
-  const bool show_cores = room >= static_cast<int>(cores.size());
-  if (show_cores) room -= static_cast<int>(cores.size());
-  else f.hidden = true;
-
-  const bool head = room >= 1;
-  if (head) --room;
-  int list_rows = 0;
-  if (show_cores && room >= least) {  // A share goes to the graphs, and whatever short lists leave over
-    std::vector<line> want;
-    process_section(want, s, w, width, room);
-    list_rows = std::min(static_cast<int>(want.size()), std::max(least, room - room * (wide ? 2 : 1) / 5));
-    room -= list_rows;
-  } else {
-    f.hidden = true;
-  }
-  if (head) f.lines.push_back(rule("CPU", "two systems' own views of overlapping work, never added", width));
-  else f.hidden = true;
-  if (room > 0) grow_rows(rows, room);
-  draw_rows(f.lines, rows, h, graph_end(h, now_ms), span_ms);
-  if (show_cores) f.lines.insert(f.lines.end(), cores.begin(), cores.end());
-  if (list_rows > 0) process_section(f.lines, s, w, width, list_rows);
-  return f;
-}
 
 // ---- Panel 3, the large layout -------------------------------------------------------------------
 //
@@ -1587,29 +1536,29 @@ constexpr int kCpuGutter = 5;        // "100 │", "kern│", "lost≈"
 constexpr int kListHeads = 2;        // A list's head and column rows
 constexpr int kLeastListRows = 3, kGoodListRows = 6;
 constexpr int kLeastBusyRows = 3, kMostBusyRows = 12;
-constexpr int kLaneRows = 2, kRamRows = 2;
+constexpr int kLaneRows = 2;
 constexpr int kFloorHeatRows = 10, kMostHeatRows = 20;  // Below the first the heat block has what it asks for
-constexpr int kCpuFixedRows = 7 + kListHeads + kLeastListRows + 2 + kLeastBusyRows;  // 17: title, rule, 4 heads, footer; lists; caption, axis; busy
+constexpr int kHistoryRows = 2, kMostHistoryRows = 6;  // The selected process's history, under its title
+// Title, rule, 3 heads, the lanes, caption, axis, a list's head and columns, its N of M line, the footer.
+constexpr int kCpuFixedRows = 5 + kLaneRows + 2 + kListHeads + 1 + 1;
 constexpr int kHeadValue = 4;        // Columns of the value that starts a head
 constexpr int kLeastDistro = 6;      // A name cut shorter than this says nothing
 
-// Rows of each block. height includes the footer. docs/design/cpu-panel.md, "Allocation", in its order;
+// Rows of each block. height includes the footer. design/panel-grammar.md part 3, "Rows", in its order;
 // false when the window is below this layout's floor.
 struct cpu_rows {
-  int heat = 0, busy = kLeastBusyRows, lanes = 0, ram = 0, lists = kLeastListRows;
+  int heat = 0, busy = kLeastBusyRows, lists = kLeastListRows, history = kHistoryRows;
 };
 
 bool plan_cpu_rows(int natural, int height, cpu_rows& p) {
   p = {};
   p.heat = std::min(natural, kFloorHeatRows);
-  int left = height - kCpuFixedRows - p.heat;
-  if (left < 0) return false;
-  if (left >= kLaneRows) {
-    p.lanes = kLaneRows;
-    left -= kLaneRows;
-    p.ram = std::min(left, kRamRows);  // One row left is the RAM lane
-    left -= p.ram;
+  int left = height - kCpuFixedRows - p.heat - p.busy - p.lists - (p.history + 1);
+  if (left < 0) {  // A list keeps 3 rows: the history goes first, title and all
+    p.history = 0;
+    left += kHistoryRows + 1;
   }
+  if (left < 0) return false;
   const auto take = [&](int& rows, int most) {
     const int extra = std::clamp(most - rows, 0, left);
     rows += extra;
@@ -1618,6 +1567,7 @@ bool plan_cpu_rows(int natural, int height, cpu_rows& p) {
   take(p.lists, kGoodListRows);  // The lists are guaranteed before anything graphs more
   take(p.heat, std::min(natural, kMostHeatRows));
   take(p.busy, kMostBusyRows);
+  if (p.history > 0) take(p.history, kMostHistoryRows);
   p.lists += left;
   return true;
 }
@@ -1750,12 +1700,12 @@ void gutter(row& r, std::string_view label, std::string_view bar = "│", tone c
 
 // A plot's cells are a whole bucket wide: both dots of a braille cell show the same value. The maximum's
 // dot, when its cell takes one, is in the right half, the later.
-std::vector<line> plot_block(const std::vector<double>& cells, int rows, std::string_view top, std::string_view bottom, int unwatched, const window_stats& st) {
+std::vector<line> plot_block(const std::vector<double>& cells, int rows, std::string_view top, std::string_view bottom, int unwatched, const window_stats& st, double ceiling = 100) {
   std::vector<double> dots;
   dots.reserve(cells.size() * 2);
   for (const double v : cells) dots.insert(dots.end(), 2, v);
   const int mark = max_mark(st);
-  const std::vector<std::string> plot = plot_rows(dots, rows, mark < 0 ? -1 : 2 * mark + 1, st.max);
+  const std::vector<std::string> plot = plot_rows(dots, rows, mark < 0 ? -1 : 2 * mark + 1, st.max, ceiling);
   std::vector<line> out;
   for (int y = 0; y < rows; ++y) {
     row r;
@@ -1841,20 +1791,6 @@ void head_value(row& r, bool known, double busy, bool stale, std::string_view na
   r.add(p.value, stale ? tone::watch : p.color, p.color != tone::dim).to(kHeadValue).add("  ").add(name, tone::title, true).add("  ");
 }
 
-std::string used_of(uint64_t total, uint64_t available) {
-  return fmt("%.1f/%.1f GiB", gib(total - std::min(total, available)), gib(total));
-}
-
-void ram_head(row& r, uint64_t total, uint64_t available, bool show_free) {
-  r.add("RAM ", tone::dim);
-  if (total == 0) {
-    r.add("n/a", tone::dim);
-    return;
-  }
-  const tone t = left_tone(100.0 * static_cast<double>(available) / static_cast<double>(total));
-  r.add(used_of(total, available), t, t != tone::text);
-  if (show_free) r.add(fmt("  free %.1f GiB", gib(std::min(total, available))), tone::dim);
-}
 
 std::vector<line> windows_heads(const snapshot& s, int threads, int col) {
   const bool read = !s.cpu.core_pct.empty();  // A failed read leaves a default view: its 0 was not measured
@@ -1881,9 +1817,7 @@ std::vector<line> windows_heads(const snapshot& s, int threads, int col) {
     ran.add_if_fits(s.ready_threads ? " · ready collecting" : " · ready n/a", col);
   }
 
-  row ram;
-  ram_head(ram, s.memory.total, s.memory.available, true);
-  return {busy, source, ran, ram};
+  return {busy, source, ran};
 }
 
 // What stands in the head's lost figure, named for each reason it is not a number.
@@ -1910,24 +1844,6 @@ void short_head(row& r, const snapshot& s, const wsl_view& w, int col) {
   r.add_if_fits(" · " + load, col);
 }
 
-void pressure_head(row& r, const wsl_view& w, int col) {
-  if (!w.psi_cpu && !w.psi_memory && !w.psi_io) {
-    r.add_if_fits(" · pressure n/a", col);
-    return;
-  }
-  const auto high = [](const std::optional<double>& v) { return v && *v >= kPressureWatch; };
-  const std::string cpu = number(or_nan(w.psi_cpu), "%.0f"), mem = number(or_nan(w.psi_memory), "%.0f"), io = number(or_nan(w.psi_io), "%.0f");
-  const std::string long_text = " · pressure cpu " + cpu + " mem " + mem + " io " + io;
-  if (r.cols() + display_width(long_text) <= col) {
-    r.add(" · pressure", tone::dim);
-    r.add(" cpu " + cpu, high(w.psi_cpu) ? tone::watch : tone::text, high(w.psi_cpu));
-    r.add(" mem " + mem, high(w.psi_memory) ? tone::watch : tone::text, high(w.psi_memory));
-    r.add(" io " + io, high(w.psi_io) ? tone::watch : tone::text, high(w.psi_io));
-    return;
-  }
-  const bool any = high(w.psi_cpu) || high(w.psi_memory) || high(w.psi_io);
-  r.add_if_fits(" · psi " + cpu + "/" + mem + "/" + io, col, any ? tone::watch : tone::text);
-}
 
 std::vector<line> wsl_heads(const snapshot& s, const wsl_view& parsed, int col, int64_t waited_ms) {
   static const wsl_view kNothing;
@@ -1950,20 +1866,21 @@ std::vector<line> wsl_heads(const snapshot& s, const wsl_view& parsed, int col, 
   if (room >= kLeastDistro && !w.distro.empty()) source.add(" · " + fit(w.distro, room), tone::dim);
   source.add(age, tone::watch, true).add_if_fits(steal, col);
 
-  row third, ram;
+  // Memory and its pressure are panel 4's (design/panel-grammar.md part 3, "Rows").
+  row third;
   if (w.ok) {
     short_head(third, s, w, col);
-    ram_head(ram, w.mem_total, w.mem_available, false);
-    pressure_head(ram, w, col);
   } else if (s.wsl_json.empty() && s.wsl_restarts == 0) {
     third.add(fmt("WSL starting, no data yet: %d s", static_cast<int>(waited_ms / 1000)), tone::watch);
-    ram_head(ram, 0, 0, false);
   } else {
     third.add(s.wsl_json.empty() ? "WSL unavailable: the collector sent nothing" : parsed.schema > 1 ? "WSL unavailable: newer schema than this screen" : "WSL unavailable: unreadable collector line", tone::watch);
-    ram_head(ram, 0, 0, false);
   }
-  if (!w.ok && s.wsl_restarts > 0) ram.add(fmt(" · collector restarted %d times", s.wsl_restarts), tone::watch);
-  return {busy, source, third, ram};
+  if (!w.ok && s.wsl_restarts > 0) {  // That it keeps dying outranks why, which panel 1 also gives
+    const std::string restarted = fmt(" · collector restarted %d times", s.wsl_restarts);
+    if (third.cols() + display_width(restarted) > col) third = row().add(fmt("WSL unavailable, collector restarted %d times", s.wsl_restarts), tone::watch);
+    else third.add(restarted, tone::watch);
+  }
+  return {busy, source, third};
 }
 
 // ---- The lists: each sorted on its own, in its own units
@@ -1995,62 +1912,200 @@ std::vector<const wsl_process*> wsl_cpu_order(const wsl_view& w) {
   return list;
 }
 
-std::vector<line> cpu_windows_list(const snapshot& s, int col, int rows) {
+// The selectable lists of a panel, each as its rows' keys in the order drawn: panel 3's Windows and WSL
+// lists. A list with no row is not selectable, and nor is the guest's when its line is unreadable or stale:
+// design/panel-grammar.md part 3, "WSL unavailable or stale ... nothing to select".
+std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel) {
+  std::vector<std::vector<row_key>> lists(2);
+  if (panel != 3) return {};
+  for (const process_row* p : windows_cpu_order(s)) lists[0].push_back({true, p->pid, p->name});
+  if (s.wsl_age_s < kStaleS) {
+    const wsl_view w = read_wsl(s.wsl_json);
+    for (const wsl_process* p : wsl_cpu_order(w)) lists[1].push_back({true, p->pid, p->name});
+  }
+  return lists;
+}
+
+// The list that has focus: the one chosen, unless it has no rows and another has, which then has it.
+int focused_list(int chosen, const std::vector<std::vector<row_key>>& lists) {
+  const int n = static_cast<int>(lists.size());
+  if (n == 0) return 0;
+  const int c = std::clamp(chosen, 0, n - 1);
+  if (!lists[static_cast<size_t>(c)].empty()) return c;
+  for (int i = 0; i < n; ++i) {
+    if (!lists[static_cast<size_t>(i)].empty()) return i;
+  }
+  return c;
+}
+
+int selectable_count(const std::vector<std::vector<row_key>>& lists) {
+  return static_cast<int>(std::count_if(lists.begin(), lists.end(), [](const std::vector<row_key>& l) { return !l.empty(); }));
+}
+
+// Where a list's selection is: its key's row, or the first row when the key is unset or has left the list.
+size_t selected_row(const std::vector<row_key>& rows, const row_key& k) {
+  const auto it = std::find_if(rows.begin(), rows.end(), [&](const row_key& r) { return k.set && r.pid == k.pid && r.name == k.name; });
+  return it == rows.end() ? 0 : static_cast<size_t>(it - rows.begin());
+}
+
+// One list's place on panel 3: its selected row in the order drawn, whether it has focus, and its rows.
+struct list_view {
+  size_t selected = 0;
+  bool focused = false;
+  int rows = 0;
+};
+
+// machtop's scroll: the first row drawn is 0 while the selection is among the first n, else selection - n + 1,
+// so past the bottom the selection stays on the last row shown. Worked out each frame; no offset is stored.
+size_t first_drawn(size_t selected, int n) { return n <= 0 || selected < static_cast<size_t>(n) ? 0 : selected - static_cast<size_t>(n) + 1; }
+
+// The ▶ lead every row has, and the selection's background on the focused list's selected row.
+line list_row(row r, bool marked) {
+  line l = r;
+  if (!marked) return l;
+  for (span& p : l) p.bg256 = kSelectBg;
+  return l;
+}
+
+void list_lead(row& r, bool marked) {
+  if (marked) r.add("▶ ", tone::title, true);
+  else r.add("  ");
+}
+
+tone list_head_tone(bool focused) { return focused ? tone::title : tone::dim; }
+
+std::vector<line> cpu_windows_list(const snapshot& s, int col, const list_view& v) {
   const std::vector<const process_row*> list = windows_cpu_order(s);
   row head;
-  head.add("Windows", tone::title, true);
+  head.add("Windows", list_head_tone(v.focused), v.focused);
   if (list.empty()) return {head, message("", "unavailable", tone::watch, 0)};
-  const size_t shown = std::min(list.size(), static_cast<size_t>(std::max(0, rows)));
-  head.add(fmt("  top %d of %d by cores", static_cast<int>(shown), static_cast<int>(list.size())), tone::dim);
+  head.add("  by cores", tone::dim);
 
-  const int name_w = std::clamp(col - 33, 4, 40);
+  const int name_w = std::clamp(col - 35, 4, 40);
   row cols;
-  cols.add(pad_left("cores", 6), tone::dim).add(" ").add(pad_left("pid", 7), tone::dim).add(" ");
+  cols.add("  ").add(pad_left("cores", 6), tone::dim).add(" ").add(pad_left("pid", 7), tone::dim).add(" ");
   cols.add(pad("name", name_w), tone::dim).add(pad_left("thr", 4), tone::dim).add(pad_left("WS GiB", 7), tone::dim);
   std::vector<line> out = {head, cols};
 
-  for (size_t i = 0; i < shown; ++i) {
+  const size_t first = first_drawn(v.selected, v.rows), end = std::min(list.size(), first + static_cast<size_t>(std::max(0, v.rows)));
+  for (size_t i = first; i < end; ++i) {
     const process_row& p = *list[i];
-    const bool is_vm = p.pid == s.vm.vmmem_pid || p.pid == s.vm.vmwp_pid;
+    const bool is_vm = p.pid == s.vm.vmmem_pid || p.pid == s.vm.vmwp_pid, marked = v.focused && i == v.selected;
     row r;
+    list_lead(r, marked);
     r.add(pad_left(cores_text(windows_cores_known(s, p), p.cores), 6)).add(" ").add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
     r.add(pad(p.name, name_w), is_vm ? tone::title : tone::text).add(pad_left(fmt("%u", p.threads), 4), tone::dim);
     r.add(pad_left(fmt("%.1f", gib(p.working_set)), 7));
     if (is_vm) r.add(" WSL VM", tone::dim);
-    out.push_back(r);
+    out.push_back(list_row(r, marked));
   }
+  out.push_back({{fmt("%d of %d", static_cast<int>(end - first), static_cast<int>(list.size())), tone::dim}});
   return out;
 }
 
-std::vector<line> cpu_wsl_list(const wsl_view& w, int col, int rows) {
+// stat rss: /proc/pid/stat field 24 times the page size, which reads below VmRSS (design/panel-grammar.md
+// part 1, experiment 06), so it is named for what it is.
+std::vector<line> cpu_wsl_list(const wsl_view& w, int col, const list_view& v) {
   row head;
-  head.add("WSL", tone::title, true);
+  head.add("WSL", list_head_tone(v.focused), v.focused);
   if (!w.ok) return {head, message("", "unavailable", tone::watch, 0)};
   const std::vector<const wsl_process*> list = wsl_cpu_order(w);
-  const size_t shown = std::min(list.size(), static_cast<size_t>(std::max(0, rows)));
   // The "holder" column is /dev/dxg open, not GPU use, and this head is where the list says so.
-  const std::string count = fmt("  top %d of %lld", static_cast<int>(shown), static_cast<long long>(w.process_count));
-  static constexpr std::string_view kBy = " by cores", kNoUsage = ", dxg: no usage measured";
-  head.add(count, tone::dim);
+  static constexpr std::string_view kBy = "  by cores", kCount = ", guest's count", kNoUsage = " · dxg: no usage measured";
   if (head.cols() + static_cast<int>(kBy.size() + kNoUsage.size()) <= col) head.add(kBy, tone::dim);
+  if (head.cols() + display_width(kCount) + display_width(kNoUsage) <= col) head.add(kCount, tone::dim);
   head.add(kNoUsage, tone::dim);
 
-  const int name_w = std::clamp(col - 38, 4, 40);
+  const int name_w = std::clamp(col - 44, 4, 40);
   row cols;
-  cols.add(pad_left("cores", 6), tone::dim).add(" ").add(pad_left("pid", 7), tone::dim).add(" ");
-  cols.add(pad("name", name_w), tone::dim).add(pad_left("thr", 4), tone::dim).add(pad_left("RSS GiB", 8), tone::dim).add(" st dxg", tone::dim);
+  cols.add("  ").add(pad_left("cores", 6), tone::dim).add(" ").add(pad_left("pid", 7), tone::dim).add(" ");
+  cols.add(pad("name", name_w), tone::dim).add(pad_left("thr", 4), tone::dim).add(pad_left("stat rss GiB", 13), tone::dim).add(" st dxg", tone::dim);
   std::vector<line> out = {head, cols};
 
-  for (size_t i = 0; i < shown; ++i) {
+  const size_t first = first_drawn(v.selected, v.rows), end = std::min(list.size(), first + static_cast<size_t>(std::max(0, v.rows)));
+  for (size_t i = first; i < end; ++i) {
     const wsl_process& p = *list[i];
+    const bool marked = v.focused && i == v.selected;
     row r;
+    list_lead(r, marked);
     r.add(pad_left(cores_text(p.rated, p.cores), 6)).add(" ").add(pad_left(fmt("%u", p.pid), 7), tone::dim).add(" ");
     r.add(pad(p.name, name_w), p.on_gpu ? tone::title : tone::text);
-    r.add(pad_left(p.threads ? fmt("%u", *p.threads) : "n/a", 4), tone::dim).add(pad_left(fmt("%.1f", gib(p.rss)), 8));
+    r.add(pad_left(p.threads ? fmt("%u", *p.threads) : "n/a", 4), tone::dim).add(pad_left(fmt("%.1f", gib(p.rss)), 13));
     r.add("  ").add(pad(p.state, 1), p.state == "D" ? tone::watch : tone::dim);
     if (p.on_gpu) r.add(" holder");
-    out.push_back(r);
+    out.push_back(list_row(r, marked));
   }
+  out.push_back({{fmt("%d of %d · %lld in the guest", static_cast<int>(end - first), static_cast<int>(list.size()), static_cast<long long>(w.process_count)), tone::dim}});
+  return out;
+}
+
+// Where panel 3's selection is this frame: the lists that can be selected, the focused one, each list's row.
+struct selection_view {
+  std::vector<std::vector<row_key>> lists;
+  int focus = 0;
+  size_t row[2] = {0, 0};
+};
+
+selection_view selection_of(const snapshot& s, const view_state& v) {
+  selection_view sv;
+  sv.lists = selectable_lists(s, 3);
+  const view_state::panel_view& pv = v.panels[3];
+  sv.focus = focused_list(pv.focus, sv.lists);
+  for (size_t i = 0; i < 2; ++i) sv.row[i] = selected_row(sv.lists[i], pv.rows[i]);
+  return sv;
+}
+
+list_view list_for(const selection_view& sv, int list, int rows) {
+  const bool selectable = !sv.lists[static_cast<size_t>(list)].empty();
+  return {selectable ? sv.row[list] : 0, selectable && sv.focus == list, rows};
+}
+
+// The process the one history shows: the focused list's selected row, or none when no list has a row.
+bool selected_process(const snapshot& s, const wsl_view& w, const selection_view& sv, proc_id& id) {
+  const std::vector<row_key>& rows = sv.lists[static_cast<size_t>(sv.focus)];
+  if (rows.empty()) return false;
+  const row_key& k = rows[sv.row[sv.focus]];
+  id = {static_cast<uint8_t>(sv.focus), k.pid, 0, k.name};
+  if (sv.focus == 0) {
+    for (const process_row& p : s.processes) {
+      if (p.pid == k.pid && p.name == k.name) id.start = p.create_time;
+    }
+  } else {
+    for (const wsl_process& p : w.processes) {
+      if (p.pid == k.pid && p.name == k.name) id.start = p.start.value_or(0);
+    }
+  }
+  return true;
+}
+
+constexpr double kCoresFloor = 0.05;  // machtop's per-app CPU: the least a process's cores graph spans
+
+// One history, full width, under both lists: the focused list's selected process, its cores over the range, 0
+// to the window's maximum rounded up (scale_top). Never one per list: two would invite comparing rows that
+// rule 3 keeps apart. A guest's figure is what the guest counted, not what the VM got.
+std::vector<line> process_history(const history& h, const proc_id* id, int width, int rows, int64_t end_ms, int64_t span_ms) {
+  std::vector<line> out;
+  row title;
+  if (!id) {
+    title.add("history", tone::dim).add("  nothing to select", tone::dim);
+    out.push_back(title);
+    out.resize(static_cast<size_t>(rows) + 1);
+    return out;
+  }
+  title.add(id->side == 0 ? "Windows" : "WSL", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim);
+  title.add(id->side == 0 ? " · cores" : " · cores, guest's count", tone::dim);
+  const int slot = h.slot_of(*id);
+  const time_axis axis = make_axis(h, end_ms, span_ms, width - kCpuGutter);
+  const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.cores_at(slot, h.position(p))); };
+  const window_stats st = bucket_stats(axis, value);
+  const double top = scale_top(st.max, kCoresFloor);
+  if (!std::isnan(st.avg)) {
+    const std::string right = "avg " + number(st.avg, "%.2f") + "  max " + number(st.max, "%.2f") + "  scale " + number(top, "%g");
+    if (title.cols() + 3 + display_width(right) <= width) title.to(width - display_width(right)).add(right, tone::dim);
+  }
+  out.push_back(title);
+  const std::vector<line> plot = plot_block(bucket_cells(axis, value, top), rows, pad_left(number(top, "%g"), 3), "  0", unwatched_cells(h, axis), st, top);
+  out.insert(out.end(), plot.begin(), plot.end());
   return out;
 }
 
@@ -2092,16 +2147,97 @@ bool plan_large_cpu(const snapshot& s, const wsl_view& w, const history& h, int 
 }
 
 // height here leaves out the footer, as in the other panels.
-panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms) {
+// The newest sample is the right edge unless it is late: a redraw between samples must not open an empty
+// bucket at now, because blank means not measured.
+int64_t axis_end(const history& h, int64_t now_ms) {
+  const int64_t last_sample = h.samples().empty() ? 0 : h.samples().back().unix_ms;
+  return !h.samples().empty() && static_cast<double>(now_ms - last_sample) <= kGapMs ? last_sample : graph_end(h, now_ms);
+}
+
+int selectable_drawn(const selection_view& sv) { return selectable_count(sv.lists); }
+
+// The small layout, under 100 columns or too short for the large one: the two graphs, the core rows, then the
+// two lists stacked and the one history under both. A list keeps 3 rows; the history goes before that.
+panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms, const view_state& v) {
+  const bool stale = s.wsl_age_s >= kStaleS;
+  panel guest = pct_panel({"WSL CPU ·", "guest view, inside the VM"}, w.ok, w.busy_pct, &history_sample::wsl_cpu);
+  if (w.ok && stale) {
+    guest.title.push_back(collector_status(s));
+    guest.color = tone::watch;
+  }
+  const std::vector<panel> graphs = {
+      pct_panel({"Windows CPU ·", "whole machine, includes the WSL VM"}, !s.cpu.core_pct.empty(), s.cpu.busy_pct, &history_sample::windows_cpu),
+      std::move(guest)};
+
+  panel_frame f;
+  f.lines.push_back(title_row(s, now_ms));
+  int room = height - 1;
+  std::vector<grid_row> rows;
+  add_panels(rows, graphs, width);
+  f.hidden = fit_rows(rows, room);
+  f.graph = any_plot(rows);
+  room -= rows_height(rows);
+
+  std::vector<line> cores;
+  cores.push_back(windows_rule(s, width));
+  core_rows(cores, width, s.cpu.core_pct);
+  if (w.ok) {
+    cores.push_back(wsl_rule(w, width));
+    core_rows(cores, width, w.core_pct);
+  } else {
+    cores.push_back(rule("WSL", "", width));
+    cores.push_back(message("", wsl_unavailable(s, w), tone::watch, 0));
+  }
+  const bool show_cores = room >= static_cast<int>(cores.size());
+  if (show_cores) room -= static_cast<int>(cores.size());
+  else f.hidden = true;
+
+  const bool head = room >= 1;
+  if (head) --room;
+  const selection_view sv = selection_of(s, v);
+  const auto lists = [&](int n) {
+    std::vector<line> out = cpu_windows_list(s, width, list_for(sv, 0, n));
+    const std::vector<line> guest_list = cpu_wsl_list(w, width, list_for(sv, 1, n));
+    out.insert(out.end(), guest_list.begin(), guest_list.end());
+    return out;
+  };
+  int n = 0, history_rows = 0;
+  if (show_cores && room >= static_cast<int>(lists(kLeastListRows).size())) {
+    n = kLeastListRows;
+    if (room >= static_cast<int>(lists(n).size()) + kHistoryRows + 1) history_rows = kHistoryRows;
+    const auto used = [&](int k, int hr) { return static_cast<int>(lists(k).size()) + (hr > 0 ? hr + 1 : 0); };
+    while (n < kGoodListRows && used(n + 1, history_rows) <= room && used(n + 1, history_rows) > used(n, history_rows)) ++n;
+    while (history_rows > 0 && history_rows < kMostHistoryRows && used(n, history_rows + 1) <= room) ++history_rows;
+    room -= used(n, history_rows);
+  }
+  if (n == 0 || history_rows == 0) f.hidden = true;
+  if (head) f.lines.push_back(rule("CPU", "two systems' own views of overlapping work, never added", width));
+  else f.hidden = true;
+  if (room > 0) grow_rows(rows, room);
+  draw_rows(f.lines, rows, h, graph_end(h, now_ms), span_ms);
+  if (show_cores) f.lines.insert(f.lines.end(), cores.begin(), cores.end());
+  if (n > 0) {
+    const std::vector<line> l = lists(n);
+    f.lines.insert(f.lines.end(), l.begin(), l.end());
+    f.selectable = selectable_drawn(sv);
+  }
+  if (history_rows > 0) {
+    proc_id id;
+    const bool any = selected_process(s, w, sv, id);
+    const std::vector<line> hist = process_history(h, any ? &id : nullptr, width, history_rows, axis_end(h, now_ms), span_ms);
+    f.lines.insert(f.lines.end(), hist.begin(), hist.end());
+  }
+  return f;
+}
+
+// height here leaves out the footer, as in the other panels.
+panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms, const view_state& v) {
   cpu_rows plan;
   thread_order left_order, right_order;
-  if (!plan_large_cpu(s, w, h, width, height + 1, plan, left_order, right_order)) return cpu_small_frame(s, w, h, width, height, now_ms, span_ms);
+  if (!plan_large_cpu(s, w, h, width, height + 1, plan, left_order, right_order)) return cpu_small_frame(s, w, h, width, height, now_ms, span_ms, v);
 
   const int col = (width - kListGap) / 2, right_col = width - col - kListGap;
-  // The newest sample is the right edge unless it is late: a redraw between samples must not open an empty
-  // bucket at now, because blank means not measured.
-  const int64_t last_sample = h.samples().empty() ? 0 : h.samples().back().unix_ms;
-  const int64_t end = !h.samples().empty() && static_cast<double>(now_ms - last_sample) <= kGapMs ? last_sample : graph_end(h, now_ms);
+  const int64_t end = axis_end(h, now_ms);
   const time_axis axis = make_axis(h, end, span_ms, col - kCpuGutter);  // The smaller column: both plots are this wide
   const int64_t collected = h.samples().empty() ? 0 : end - h.samples().front().unix_ms;
   const auto of = [](float history_sample::*series) { return [series](const history_sample& p) { return static_cast<double>(p.*series); }; };
@@ -2116,19 +2252,10 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   const int unwatched = unwatched_cells(h, axis);  // One axis, so the same for every plot of both columns
   append(left, plot_block(bucket_cells(axis, windows_cpu), plan.busy, "100", "  0", unwatched, left_busy));
   append(right, plot_block(mean(&history_sample::wsl_busy), plan.busy, "100", "  0", unwatched, right_busy));
-  if (plan.ram == kRamRows) {
-    append(left, plot_block(mean(&history_sample::windows_ram), kRamRows, "RAM", "", unwatched, bucket_stats(axis, of(&history_sample::windows_ram))));
-    append(right, plot_block(mean(&history_sample::wsl_ram), kRamRows, "RAM", "", unwatched, bucket_stats(axis, of(&history_sample::wsl_ram))));
-  } else if (plan.ram == 1) {
-    left.push_back(lane("RAM", mean(&history_sample::windows_ram)));
-    right.push_back(lane("RAM", mean(&history_sample::wsl_ram)));
-  }
-  if (plan.lanes > 0) {
-    left.push_back(lane("kern", mean(&history_sample::own_kernel)));
-    left.push_back(lane("VM", mean(&history_sample::vm_cpu)));
-    right.push_back(lane("iowt", mean(&history_sample::wsl_iowait)));
-    right.push_back(lost_lane(mean(&history_sample::lost_vcpus)));
-  }
+  left.push_back(lane("kern", mean(&history_sample::own_kernel)));
+  left.push_back(lane("VM", mean(&history_sample::vm_cpu)));
+  right.push_back(lane("iowt", mean(&history_sample::wsl_iowait)));
+  right.push_back(lost_lane(mean(&history_sample::lost_vcpus)));
 
   bool left_highest = false, right_highest = false;
   const std::vector<heat_row> left_rows = heat_rows(left_order, plan.heat, left_highest), right_rows = heat_rows(right_order, plan.heat, right_highest);
@@ -2142,15 +2269,22 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   left.push_back(axis_row(axis, span_ms, left_busy));
   right.push_back(axis_row(axis, span_ms, right_busy));
 
-  append(left, cpu_windows_list(s, col, plan.lists));
-  append(right, cpu_wsl_list(w, right_col, plan.lists));
+  const selection_view sv = selection_of(s, v);
+  append(left, cpu_windows_list(s, col, list_for(sv, 0, plan.lists)));
+  append(right, cpu_wsl_list(w, right_col, list_for(sv, 1, plan.lists)));
 
   panel_frame f;
   f.graph = true;  // The busy plots have their rows at the layout's floor
-  f.hidden = plan.lanes == 0 || plan.ram == 0;
+  f.hidden = plan.history == 0;
+  f.selectable = selectable_drawn(sv);
   f.lines.push_back(title_row(s, now_ms));
   f.lines.push_back(rule("CPU", "two systems' own views of overlapping work, never added", width));
   side_by_side(f.lines, left, right, col);
+  if (plan.history > 0) {
+    proc_id id;
+    const bool any = selected_process(s, w, sv, id);
+    append(f.lines, process_history(h, any ? &id : nullptr, width, plan.history, end, span_ms));
+  }
   f.lines.resize(static_cast<size_t>(height));  // The footer stays at the bottom however short the lists are
   return f;
 }
@@ -2162,7 +2296,6 @@ constexpr const char* kPanelLabel[kPanels + 1] = {"", "overview", "gpu", "cpu", 
 
 bool panel_built(int p) { return p >= 1 && p <= 3; }  // 4 is slice 1's commit 7
 bool panel_has_range(int p) { return p == 2 || p == 3; }  // Panels whose graphs ←→ change
-bool panel_draws_selection(int) { return false; }  // Panel 3 from slice 1's commit 6: until then ↑↓ and tab show nothing
 
 // docs/panels.md's question for each panel not built, and where its figures are meanwhile.
 std::vector<line> unbuilt_frame(const snapshot& s, int p, int width, int64_t now_ms) {
@@ -2186,8 +2319,8 @@ std::string range_text(int range) { return fmt("%d min", static_cast<int>(kSpans
 // then the other panels. Rows a panel had to leave out are said after the panels, or by a leading … .
 line panel_footer(const view_state& v, int lists, int width, bool hidden, bool graph) {
   std::string hints;
-  if (panel_draws_selection(v.panel) && lists > 0) hints += "↑↓ select  ";
-  if (panel_draws_selection(v.panel) && lists > 1) hints += "tab list  ";
+  if (lists > 0) hints += "↑↓ select  ";  // Lists drawn that a key moves in: none on a panel too short for them
+  if (lists > 1) hints += "tab list  ";
   if (panel_has_range(v.panel) && graph) hints += "←→ " + range_text(v.range) + "  ";
   hints += "q quit";
   static constexpr std::string_view kNote = "… some rows hidden";
@@ -2231,7 +2364,91 @@ uint16_t put_cores(const std::vector<double>& from, float (&to)[kHistoryThreads]
 
 }  // namespace
 
-void history::push(const snapshot& s) {
+int history::slot_of(const proc_id& id) const {
+  const auto it = index_.find(slot_key{id.side, id.pid, id.start});
+  return it == index_.end() || slots_[static_cast<size_t>(it->second)].id.name != id.name ? -1 : it->second;
+}
+
+// The process's slot, made if it has none: a slot let go, then a new one under the cap, then the one least
+// recently seen that is neither kept nor in this sample. Past all of those a new one: nothing is refused.
+int history::take_slot(const proc_id& id, int64_t t, size_t cap, const std::vector<proc_id>& keep) {
+  const slot_key k{id.side, id.pid, id.start};
+  if (const auto it = index_.find(k); it != index_.end()) {
+    slot& sl = slots_[static_cast<size_t>(it->second)];
+    if (sl.id.name == id.name) {
+      sl.seen_ms = t;
+      return it->second;
+    }
+    sl.used = false;  // The same pid and start under another name is another process: this one has gone
+    index_.erase(it);
+  }
+  const auto kept = [&](const proc_id& p) {
+    return std::any_of(keep.begin(), keep.end(), [&](const proc_id& q) { return q.side == p.side && q.pid == p.pid && q.start == p.start && q.name == p.name; });
+  };
+  int pick = -1;
+  for (size_t i = 0; i < slots_.size() && pick < 0; ++i) pick = slots_[i].used ? -1 : static_cast<int>(i);
+  if (pick < 0 && slots_.size() >= cap) {
+    for (size_t i = 0; i < slots_.size(); ++i) {
+      const slot& sl = slots_[i];
+      if (sl.seen_ms < t && !kept(sl.id) && (pick < 0 || sl.seen_ms < slots_[static_cast<size_t>(pick)].seen_ms)) pick = static_cast<int>(i);
+    }
+    if (pick >= 0) {
+      const proc_id& old = slots_[static_cast<size_t>(pick)].id;
+      index_.erase(slot_key{old.side, old.pid, old.start});
+    }
+  }
+  if (pick < 0) {
+    if (slots_.size() == slots_.capacity()) slots_.reserve(slots_.size() + 64);  // In chunks, not one a process
+    slots_.emplace_back();
+    slots_.back().cores.resize(kCapacity);
+    slots_.back().memory.resize(kCapacity);
+    pick = static_cast<int>(slots_.size() - 1);
+  }
+  slot& sl = slots_[static_cast<size_t>(pick)];
+  sl.id = id;
+  sl.used = true;
+  sl.seen_ms = t;
+  std::fill(sl.cores.begin(), sl.cores.end(), std::numeric_limits<float>::quiet_NaN());  // Nothing of the last occupant
+  std::fill(sl.memory.begin(), sl.memory.end(), std::numeric_limits<float>::quiet_NaN());
+  index_[k] = pick;
+  return pick;
+}
+
+// Every slot gets a value at this position, NaN unless its process reported one, so a slot never shows what
+// it held a ring ago. A first reading's cores are NaN, as the lists print n/a. Windows: every row but pid 0,
+// cores and working set. The guest: every row of a usable line, cores and stat rss, carried once on a repeat.
+void history::write_processes(const snapshot& s, const wsl_view& w, size_t position, bool guest, const std::vector<proc_id>& keep) {
+  const float gap = std::numeric_limits<float>::quiet_NaN();
+  for (slot& sl : slots_) {
+    if (sl.used) sl.cores[position] = sl.memory[position] = gap;
+  }
+  const int64_t t = s.unix_ms;
+  const size_t rows = s.processes.size() + (guest ? w.processes.size() : 0);
+  const size_t cap = std::max(kLeastSlots, 2 * rows);
+  for (const process_row& p : s.processes) {
+    if (p.pid == 0) continue;  // The idle process: its cores are idle time
+    slot& sl = slots_[static_cast<size_t>(take_slot({0, p.pid, p.create_time, p.name}, t, cap, keep))];
+    sl.cores[position] = windows_cores_known(s, p) ? to_float(p.cores) : gap;
+    sl.memory[position] = to_float(gib(p.working_set));
+  }
+  if (guest) {
+    for (const wsl_process& p : w.processes) {
+      slot& sl = slots_[static_cast<size_t>(take_slot({1, p.pid, p.start.value_or(0), p.name}, t, cap, keep))];
+      sl.cores[position] = p.rated ? to_float(p.cores) : gap;
+      sl.memory[position] = to_float(gib(p.rss));
+    }
+  }
+  for (size_t i = 0; i < slots_.size(); ++i) {  // Gone for all that is kept: let go
+    slot& sl = slots_[i];
+    if (!sl.used || t - sl.seen_ms < kKeepMs) continue;
+    const bool kept = std::any_of(keep.begin(), keep.end(), [&](const proc_id& q) { return q.side == sl.id.side && q.pid == sl.id.pid && q.start == sl.id.start && q.name == sl.id.name; });
+    if (kept) continue;
+    sl.used = false;
+    index_.erase(slot_key{sl.id.side, sl.id.pid, sl.id.start});
+  }
+}
+
+void history::push(const snapshot& s, const std::vector<proc_id>& keep) {
   const int64_t t = s.unix_ms;
   const bool was_watching = watching_;
   watching_ = true;  // Even a sample that cannot be placed: the program is watching
@@ -2291,14 +2508,13 @@ void history::push(const snapshot& s) {
   const bool guest = w.ok && s.wsl_age_s < kStaleS && repeats_ <= 1;
   n.own_kernel = s.vm.vmmem_cores_known ? to_float(s.cpu_derived.own_kernel_pct) : gap;
   n.vm_cpu = s.vm.vmmem_cores_known ? to_float(s.cpu_derived.vm_cpu_pct) : gap;
-  n.windows_ram = s.memory.total > 0 ? to_float(100.0 * static_cast<double>(s.memory.total - std::min(s.memory.total, s.memory.available)) / static_cast<double>(s.memory.total)) : gap;
   n.wsl_busy = guest ? to_float(w.busy_pct) : gap;
   n.wsl_iowait = guest && w.cpu_iowait ? to_float(*w.cpu_iowait) : gap;
-  n.wsl_ram = guest && w.mem_total > 0 ? to_float(100.0 * static_cast<double>(w.mem_total - std::min(w.mem_total, w.mem_available)) / static_cast<double>(w.mem_total)) : gap;
   n.lost_vcpus = s.lost.state == lost_state::known ? to_float(s.lost.vcpus) : gap;
   n.windows_threads = put_cores(s.cpu.core_pct, n.windows_core);
   static const std::vector<double> kNone;
   n.wsl_threads = put_cores(guest ? w.core_pct : kNone, n.wsl_core);
+  write_processes(s, w, position(n), guest, keep);
 
   // One sample older than what is kept stays, so the left edge is drawn from where that sample ended.
   while (count_ > 1 && at(1).unix_ms < t - kKeepMs) {
@@ -2316,11 +2532,11 @@ int display_width(std::string_view s) {
 namespace {
 
 // One panel above the footer, body rows high.
-panel_frame panel_body(const snapshot& s, const wsl_view& w, const history& h, int panel, int width, int body, int64_t now_ms, int64_t span_ms) {
+panel_frame panel_body(const snapshot& s, const wsl_view& w, const history& h, int panel, int width, int body, int64_t now_ms, int64_t span_ms, const view_state& v) {
   panel_frame f;
   if (panel == 1) f.lines = overall_frame(s, w, width, body, now_ms);
   else if (panel == 2) f = gpu_frame(s, w, h, width, body, now_ms, span_ms);
-  else if (panel == 3) f = cpu_frame(s, w, h, width, body, now_ms, span_ms);
+  else if (panel == 3) f = cpu_frame(s, w, h, width, body, now_ms, span_ms, v);
   else f.lines = unbuilt_frame(s, panel, width, now_ms);
   if (panel > 3) f.lines.resize(static_cast<size_t>(std::max(0, body)));  // The footer stays on the bottom row
   return f;
@@ -2333,43 +2549,20 @@ std::vector<line> with_footer(const panel_frame& f, int width, int body, const l
   return out;
 }
 
-// The selectable lists of a panel, each as its rows' keys in the order drawn: panel 3's Windows and WSL
-// lists. A list with no row is not selectable, and nor is the guest's when its line is unreadable or stale:
-// design/panel-grammar.md part 3, "WSL unavailable or stale ... nothing to select".
-std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel) {
-  std::vector<std::vector<row_key>> lists(2);
-  if (panel != 3) return {};
-  for (const process_row* p : windows_cpu_order(s)) lists[0].push_back({true, p->pid, p->name});
-  if (s.wsl_age_s < kStaleS) {
-    const wsl_view w = read_wsl(s.wsl_json);
-    for (const wsl_process* p : wsl_cpu_order(w)) lists[1].push_back({true, p->pid, p->name});
-  }
-  return lists;
-}
-
-// The list that has focus: the one chosen, unless it has no rows and another has, which then has it.
-int focused_list(int chosen, const std::vector<std::vector<row_key>>& lists) {
-  const int n = static_cast<int>(lists.size());
-  if (n == 0) return 0;
-  const int c = std::clamp(chosen, 0, n - 1);
-  if (!lists[static_cast<size_t>(c)].empty()) return c;
-  for (int i = 0; i < n; ++i) {
-    if (!lists[static_cast<size_t>(i)].empty()) return i;
-  }
-  return c;
-}
-
-int selectable_count(const std::vector<std::vector<row_key>>& lists) {
-  return static_cast<int>(std::count_if(lists.begin(), lists.end(), [](const std::vector<row_key>& l) { return !l.empty(); }));
-}
-
-// Where a list's selection is: its key's row, or the first row when the key is unset or has left the list.
-size_t selected_row(const std::vector<row_key>& rows, const row_key& k) {
-  const auto it = std::find_if(rows.begin(), rows.end(), [&](const row_key& r) { return k.set && r.pid == k.pid && r.name == k.name; });
-  return it == rows.end() ? 0 : static_cast<size_t>(it - rows.begin());
-}
-
 }  // namespace
+
+std::vector<proc_id> selected_processes(const snapshot& s, const view_state& v) {
+  const selection_view sv = selection_of(s, v);
+  const wsl_view w = read_wsl(s.wsl_json);
+  std::vector<proc_id> out;
+  for (int list = 0; list < 2; ++list) {
+    selection_view one = sv;
+    one.focus = list;
+    proc_id id;
+    if (!sv.lists[static_cast<size_t>(list)].empty() && selected_process(s, w, one, id)) out.push_back(id);
+  }
+  return out;
+}
 
 bool apply_key(view_state& v, key_event e, const snapshot& s) {
   if (e.esc_first) {
@@ -2420,11 +2613,10 @@ std::vector<line> render(const snapshot& s, int width, int height, int64_t now_m
   const wsl_view w = read_wsl(s.wsl_json);
   if (!hist) return overall_frame(s, w, width, height, now_ms);
   const int panel = std::clamp(v.panel, 1, kPanels), body = height - 1;  // The footer is the last row, whatever else has to give
-  const panel_frame f = panel_body(s, w, *hist, panel, width, body, now_ms, kSpansMs[std::clamp(v.range, 0, 2)]);
+  const panel_frame f = panel_body(s, w, *hist, panel, width, body, now_ms, kSpansMs[std::clamp(v.range, 0, 2)], v);
   view_state shown = v;
   shown.panel = panel;
-  const int lists = panel_draws_selection(panel) ? selectable_count(selectable_lists(s, panel)) : 0;
-  return with_footer(f, width, body, panel_footer(shown, lists, width, f.hidden, f.graph));
+  return with_footer(f, width, body, panel_footer(shown, f.selectable, width, f.hidden, f.graph));
 }
 
 std::string as_text(const std::vector<line>& lines) {
@@ -2452,7 +2644,7 @@ void put_foreground(std::string& out, const span& p) {
 }
 
 void put_background(std::string& out, int bg256) {
-  out += bg256 >= 0 ? "48;5;" + std::to_string(bg256) : "49";
+  out += bg256 >= 0 ? "48;5;" + std::to_string(bg256) : bg256 == kSelectBg ? std::string("48;2;44;62;76") : std::string("49");
 }
 
 bool same_foreground(const span& a, const span& b) { return a.fg256 == b.fg256 && (a.fg256 >= 0 || a.color == b.color); }
@@ -2463,7 +2655,7 @@ void put_pen(std::string& out, span& pen, bool started, const span& p) {
   if (!started || pen.bold != p.bold) {
     out += p.bold ? "\x1b[0;1;" : "\x1b[0;";
     put_foreground(out, p);
-    if (p.bg256 >= 0) {
+    if (p.bg256 != -1) {
       out += ';';
       put_background(out, p.bg256);
     }

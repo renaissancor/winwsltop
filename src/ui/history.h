@@ -5,10 +5,14 @@
 #include "core/snapshot.h"
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace wwt {
+
+struct wsl_view;
 
 constexpr int kHistoryThreads = 64;  // A side's threads kept per sample; Windows reads one group, so at most 64
 
@@ -25,8 +29,8 @@ struct history_sample {
   // The large layout of panel 3. Windows' own figures, then the guest's, which differ from wsl_cpu in one
   // way: a repeated line carries its value for one sample, and only a second repeat is a gap. That is
   // docs/design/cpu-panel.md section 5, for this layout only. Floats, because 601 of these are kept.
-  float own_kernel = 0, vm_cpu = 0, windows_ram = 0;    // cpu_derived's two, then RAM used, each percent of the machine
-  float wsl_busy = 0, wsl_iowait = 0, wsl_ram = 0;
+  float own_kernel = 0, vm_cpu = 0;                    // cpu_derived's two, each percent of the machine
+  float wsl_busy = 0, wsl_iowait = 0;
   float lost_vcpus = 0;                                 // Inferred, in vCPUs; a separate unit from the rest
   uint16_t windows_threads = 0, wsl_threads = 0;        // How many of the values below this sample read
   float windows_core[kHistoryThreads] = {}, wsl_core[kHistoryThreads] = {};
@@ -61,13 +65,35 @@ class sample_range {
   size_t capacity_, first_, count_;
 };
 
+// A process on one side, as the per-process ring tells it apart: side, pid, its start (Windows' create
+// time, the guest's starttime; 0 where unknown) and its name, so a reused pid is another process.
+// design/panel-grammar.md part 3, "The per-process ring".
+struct proc_id {
+  uint8_t side = 0;  // 0 Windows, 1 the guest
+  uint32_t pid = 0;
+  uint64_t start = 0;
+  std::string name;
+};
+
 class history {
  public:
   static constexpr int64_t kSpanMs = 60000;   // What a graph's width stands for, unless it is told otherwise
   static constexpr int64_t kKeepMs = 600000;  // What is kept, the longest range a graph can be told to draw
 
-  void push(const snapshot& s);
+  // keep: processes whose slots are never reused, the rows a screen has selected.
+  void push(const snapshot& s, const std::vector<proc_id>& keep = {});
   sample_range samples() const { return {ring_.data(), ring_.size(), first_, count_}; }
+
+  // The per-process ring: one slot a process, a cores and a memory value (GiB) at every ring position, NaN
+  // where that sample did not measure it, the first reading included. slot_of is -1 for a process with no
+  // slot. A value is read by the position of a sample, position(), so it moves with the samples.
+  static constexpr size_t kLeastSlots = 1024;  // Slots kept, or twice the rows of the newest sample if more
+  int slot_of(const proc_id& id) const;
+  float cores_at(int slot, size_t position) const { return slots_[static_cast<size_t>(slot)].cores[position]; }
+  float memory_at(int slot, size_t position) const { return slots_[static_cast<size_t>(slot)].memory[position]; }
+  size_t position(const history_sample& p) const { return static_cast<size_t>(&p - ring_.data()); }
+  size_t slots_used() const { return index_.size(); }
+  size_t slots_allocated() const { return slots_.size(); }
 
   // When watching began, on the samples' clock, and meaningful only once there is a sample. A graph
   // draws the time before it as not watched yet, which is not a gap: a gap is watched time with no
@@ -83,12 +109,24 @@ class history {
 
   history_sample& at(size_t i) { return ring_[(first_ + i) % ring_.size()]; }
 
+  struct slot {
+    proc_id id;
+    bool used = false;
+    int64_t seen_ms = 0;              // The newest sample it was in
+    std::vector<float> cores, memory;  // kCapacity each, by ring position
+  };
+  using slot_key = std::tuple<uint8_t, uint32_t, uint64_t>;
+  int take_slot(const proc_id& id, int64_t t, size_t cap, const std::vector<proc_id>& keep);
+  void write_processes(const snapshot& s, const wsl_view& w, size_t position, bool guest, const std::vector<proc_id>& keep);
+
   std::vector<history_sample> ring_;  // Sized once, by the first push: a sample then allocates nothing
   size_t first_ = 0, count_ = 0;
   int64_t watched_from_ms_ = 0;
   bool watching_ = false;
   std::string last_wsl_;  // The collector's line in the last sample, to tell a new line from a repeat
   int repeats_ = 0;       // Repeated lines in a row
+  std::vector<slot> slots_;            // Never shrinks: a slot let go is reused, so a push allocates only past the most yet
+  std::map<slot_key, int> index_;      // Slots in use, by side, pid and start; the name is checked in the slot
 };
 
 }  // namespace wwt
