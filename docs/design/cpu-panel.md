@@ -100,7 +100,7 @@ How the jobs land:
 | 2. who | The lists, strictly by cores, 6 rows guaranteed before the graph grows |
 | 3. VM cost | Head rows 1 and 3: `VM 29` percent of the machine, `VM ran 5.76 of 20 threads` |
 | 4. one or all | Caption count `20 of 20 ≥90%`, then the heat block, then `thr` in the lists |
-| 5. when | Any row. `[t]` for 5 and 15 minutes |
+| 5. when | Any row. `[t]` for 5 and 15 minutes. Superseded 2026-11-02: `←`/`→` over 1, 5 and 10 minutes, `t` gone ([`panel-grammar.md`](panel-grammar.md) part 2) |
 
 Not contended, right head row 3 reads `load 2.1 · lost CPU n/a under 99% busy`, or inside the gate
 `WSL short <1 vCPU, inferred · load 19.8`. Until 5 samples exist it reads `load 2.1 · lost CPU collecting`.
@@ -291,7 +291,7 @@ swap each second. `holders first` stays on the panels that have it. `dxg` and it
 
 | state | left | right |
 |---|---|---|
-| Fresh launch | Axis text `collecting: 8 s of 60 s` until the span is full. Instant figures are valid from the first sample | Same; `lost CPU collecting` until 5 samples |
+| Fresh launch | Axis text `collecting: 8 s of 60 s` until the span is full. Instant figures are valid from the first sample. Superseded 2026-11-02: the caption is gone, and the faint `·` in the unwatched cells says it ([`panel-grammar.md`](panel-grammar.md) part 5) | Same; `lost CPU collecting` until 5 samples |
 | WSL starting | Normal | `WSL starting, no data yet: 4 s` |
 | WSL stopped or collector failed | Normal, `lost` not shown | Head says why, plots gap |
 | Collector stale, 5 s or more | Normal | Head row 2 appends how old, in `watch`; cells blank; `lost` resets |
@@ -317,7 +317,7 @@ The tool watches a machine that may be short of CPU.
 | Bytes per frame, 131 by 40, worst-case fixture | Under 48 KiB, with 256-colour for the ramp and equal neighbouring cells merged within a frame. No frame diff | `render_check` asserts on a noisy fixture, not a calm one |
 | Frame build | Under 5 ms, normal build | Measured |
 | Own CPU | No more than 0.5% of a core above the old live build | Measured 2026-11-02, release builds in a pseudo-terminal at 131 by 40, CPU panel, 60 s, two runs each: v0.1.0 0.91% and 0.85%, this build 1.06% and 0.93%. Read live, no raw file. Covers `winwsltop.exe` only: collector and terminal not measured |
-| History | One flat ring of 901 samples, kept for `kKeepMs` 900000; the drawing span is an argument. Floats, 2 sides, up to 64 threads a side. No per-second allocation | By construction |
+| History | One flat ring of 901 samples, kept for `kKeepMs` 900000; the drawing span is an argument. Floats, 2 sides, up to 64 threads a side. No per-second allocation. Superseded 2026-11-02: 601 samples, `kKeepMs` 600000, with a per-process ring beside it ([`panel-grammar.md`](panel-grammar.md) part 3) | By construction |
 | Collector line | Grows under 1 KB. Met, 443 to 447 bytes. Superseded 2026-11-02 by an absolute budget, under 8 KiB a line (`contracts/collect.md`), since a growth budget per change bounds nothing over several changes | Measured |
 
 ## 9. Changes by owner, in order
