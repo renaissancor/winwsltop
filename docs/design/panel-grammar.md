@@ -1,7 +1,8 @@
 # Panel grammar, slice 1
 
-Status: PROPOSED, 2026-11-02, revised after a UX review and a systems review ("fix first", both at 326a2e1)
-and machtop's answers. Nothing here is decided until `contracts/ui.md` records it.
+Status: approved to build after experiment 0, 2026-11-02. Revised after a UX review and a systems review
+("fix first", both at 326a2e1) and machtop's answers; the owner's decisions are in section 8 and recorded in
+`contracts/ui.md`.
 
 The shared grammar is machtop's `docs/panels.md`, branch `grammar-tab`, commit f7e24f2, section "Shared
 grammar" (outside this repository). The owner made it authoritative on 2026-11-02: where it is clear,
@@ -694,16 +695,16 @@ For machtop:
 1. The dot at the window's maximum (part 5, item 4). Adopt it, or keep the label alone?
 2. The over-100 `*` (part 5, item 5) has no machtop case; it is winwsltop's own.
 
-For the owner:
+Decided by the owner, 2026-11-02:
 
-3. Figures already on screen without a ledger row stay, marked `?` (part 1). The alternative is to hide them
-   until experiment 0, which leaves panel 4 with heads and the VM's history only, and panel 3 with no WSL
-   list.
-4. Whether experiment 0 runs. It is read only and starts no load.
-5. The seam change as additive flags (this design) or as `null` cores with a `schema` bump (part 3).
-6. Panel 1 gets no selection and panel 2 waits for slice 2 (section 0).
-7. Panel 3 at 34 rows shows 5 list rows, not `design/cpu-panel.md`'s 6, for the `N of M` line and the
-   history. The other way is a 2-row busy plot at 34.
+3. Figures already on screen without a ledger row are shown, marked `?` (part 1), not hidden.
+4. Experiment 0 runs first, before any commit of section 7 that builds on its rows.
+5. The seam change is additive flags; `schema` stays 1 (part 3).
+6. Panel 1 gets no selection and panel 2 waits for slice 2 (section 0). Accepted as proposed.
+7. Panel 3 at 34 rows shows 5 list rows (part 3).
+
+Still open, for the owner:
+
 8. Alt+key decodes as `esc` then the key, for OpenSSH (part 2). Alt+Q then quits.
 9. Unchecked live: the IME holding a lone `ㅂ`, `esc` and the arrows over ConPTY and OpenSSH, and the
    numpad with NumLock off. A person runs each key at 100 by 34 and 131 by 40.
