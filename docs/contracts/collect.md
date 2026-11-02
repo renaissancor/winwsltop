@@ -56,7 +56,7 @@ WSL guest through a Python collector that reads `/proc` and sends one JSON line 
 
 | item | value |
 |---|---|
-| source | `src/host` 356 lines, `src/gpu` 253, `src/wsl` 621 (279 of them generated), `collector.py` 165 |
+| source | `src/host` 362 lines, `src/gpu` 253, `src/wsl` 633 (291 of them generated), `collector.py` 168, counted after e37993d |
 | collector cost | 3.46 ms per sample; line 0.08 to 0.17 s old on arrival (ledger, "WSL collector checked") |
 | collector line | 4205 to 4213 bytes with 30 rows, about 796 more since `rated` and `start` (e37993d), and 3522 to 3536 before that, after `cpu_split`, `load` and `threads` added 443 to 447. Budget: under 8 KiB a line, see the decision of 2026-11-02. Cost 6.99 ms against 7.05 for the old collector, run side by side for 10 samples, before `rated` and `start` | Read live, no raw file.
 | Ready count | 29.3 µs mean, 57.3 max, over 345 processes and 6152 threads, on 6.32 ms for a sample; `cost.processes` averaged 5.04 ms over 11 samples. No load | Read live, no raw file.
