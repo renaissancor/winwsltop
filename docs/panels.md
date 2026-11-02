@@ -50,16 +50,15 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
   - `esc` returns to panel 1 and does not reset focus. Each panel keeps its focus when you switch away
     and back, as it keeps its selection.
 - **Changed for winwsltop:** `←`/`→` replace `t`, and the range is 1, 5, 10 minutes, the same as
-  machtop's (decided 2026-11-02, below). From slice 1 the history keeps 10 minutes.
+  machtop's (decided 2026-11-02, below). The history keeps 10 minutes, as built in slice 1.
 - The footer lists the panels with the current one lit and a panel not built yet in the faint tone, which
   machtop 246c2cb made shared grammar.
 - Graphs: a measured 0 is the lowest braille dot row (⣀) in steel; no sample inside the watched span is
   blank; the part of the window from before winwsltop started watching is a faint `·` every other cell.
-  This is already winwsltop's rule, `contracts/ui.md` rule 8, from 6ef13ef. The large layout's
-  `collecting: N s of M s` caption goes in slice 1.
+  `contracts/ui.md` rule 8. The large layout's `collecting: N s of M s` caption is gone (slice 1).
 - Graphs are labelled with the window's average and maximum, never the minimum; a cell is the mean of
   its samples; a measure with a real ceiling is drawn 0-100, any other to a rounded `scale` or a zoomed
-  `range` (machtop 246c2cb). Built in slice 1, which changes rule 8 (`design/panel-grammar.md`, part 5).
+  `range` (machtop 246c2cb). Built in slice 1, in `contracts/ui.md` rule 8.
   The cell holding the window's maximum carries one extra dot, the latest on a tie and none at or under the
   mean's dot row, and a value over a 0-100 ceiling is drawn at the ceiling and labelled as measured in the
   watch tone (machtop 246c2cb). **Added for winwsltop:** the over-100 label carries `*`, beside
@@ -99,11 +98,12 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
 ## 3 CPU: how hard are the threads working, and how much CPU is the VM not getting?
 
 - **Core detail:** the large layout of `design/cpu-panel.md` as built: what each side says, the heat
-  lanes, `lost` (inferred, its formula on the panel), then the Windows and WSL process lists by cores.
-- **History:** the selected process's cores, one history following focus, from the per-process ring of
-  slice 1 (`design/panel-grammar.md`, part 3). A guest process's cores are the guest's own count, marked
-  `?` until experiment 0 checks them.
-- **Moves out:** RAM, to panel 4.
+  lanes, `lost` (inferred, its formula on the panel), then the Windows and WSL process lists by cores,
+  each selectable, scrolling and ending in `N of M` (slice 1, ac703b5).
+- **History:** the selected process's cores, one history full width following focus, from the per-process
+  ring. A guest process's cores are the guest's own count (ledger, "Memory and process collectors checked",
+  bindings only); no `?`. A first reading reads `n/a`.
+- **Moved out:** RAM, to panel 4 (slice 1).
 - **Not here:** which Windows LP ran a vCPU, and so which LP ran a guest thread. No counter read says
   which LP ran a VP, and no VP stayed put (ledger, CPU counters checked, "A guest vCPU maps to a Windows
   core"). The steps either side of that are measured: a guest thread's vCPU from
@@ -113,18 +113,20 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
 
 ## 4 Memory: where is physical memory going, and is the guest holding host memory it does not use?
 
-- **Core detail:** as built in slice 1 (`design/panel-grammar.md`, part 4): each side's used and cache,
-  with Windows commit and the guest's swap and PSI memory; the VM on its own row (`vmmemWSL` working set);
-  each side's used and cache over the range; both process lists by memory, Windows working set and WSL
-  RSS. Private bytes are not shown: no row and not on screen today.
+- **Core detail:** built in slice 1 (01384a4, `design/panel-grammar.md`, part 4): each side's used and
+  cache, with Windows commit and the guest's swap and PSI memory; the VM on its own row (`vmmemWSL` working
+  set); each side's used and cache over the range, zoomed; both process lists by memory, Windows working set
+  and the guest's `stat rss`, selectable with `tab` between them. Private bytes are not shown in this slice.
 - **Hypothesis behind the question, not a finding:** that the guest's page cache is held as `vmmemWSL`
   working set on Windows. The one reading near it (ledger, WSL collector checked, "Guest memory vs
   host") has guest used plus cache close to `vmmemWSL`, but read minutes apart, so the fit may be
   coincidence. It needs a row with the two read in one sample before the panel states it.
-- **History:** the selected process's memory.
-- **Marked `?` until experiment 0:** Windows available, used, commit and cache, Windows per-process
-  working set, guest swap and guest RSS (only Windows total and `vmmemWSL` working set are checked: ledger,
-  Windows collector checked). The guest-versus-`vmmemWSL` reading in one sample is in the same experiment.
+- **History:** the selected process's memory, zoomed, one history following focus.
+- **Marked `?`:** Windows cache (ledger, "Memory and process collectors checked": Unresolved) and guest swap
+  (`Not checked`, it read 0). Experiment 06 cleared Windows available, used, commit and per-process working
+  set. Guest per-process memory is labelled `stat rss`, what it reads, since it reads below `VmRSS` (same
+  section). The hypothesis above stays Unresolved: one record line held both sides, and `vmmemWSL` exceeded
+  guest used plus cached by 522.9 to 541.7 MiB in one idle state.
 - **Not here:** a sum of Windows used and guest used. The guest's memory is inside `vmmemWSL`.
 
 ## 5 Disk: which disk is busy, and is it the WSL disk?
@@ -181,9 +183,9 @@ is the shared one (Shared grammar).
 |---|---|
 | `1` Overall | 1 Overview, cards and the verdict line |
 | `2` GPU | 2 GPU, with selection; Windows holders first is PROPOSED (`ROADMAP.md` 1), WSL's already are |
-| `3` CPU and RAM | 3 CPU, and RAM moves to 4 Memory |
-| `t` span 60 s, 5 min, 15 min | `←`/`→` 1, 5, 10 minutes, every panel |
-| none | 4 to 8, each built only once its ledger rows exist |
+| `3` CPU and RAM | 3 CPU, and RAM moves to 4 Memory: built, slice 1 |
+| `t` span 60 s, 5 min, 15 min | `←`/`→` 1, 5, 10 minutes, every panel with a graph: built, slice 1 |
+| none | 4 Memory: built, slice 1. 5 to 8, each built only once its ledger rows exist; until then a page says so |
 
 ## Open questions
 
