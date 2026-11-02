@@ -125,8 +125,8 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
 - **Marked `?`:** Windows cache (ledger, "Memory and process collectors checked": Unresolved) and guest swap
   (`Not checked`, it read 0). Experiment 06 cleared Windows available, used, commit and per-process working
   set. Guest per-process memory is labelled `stat rss`, what it reads, since it reads below `VmRSS` (same
-  section). The hypothesis above stays Unresolved: one record line held both sides, and `vmmemWSL` exceeded
-  guest used plus cached by 522.9 to 541.7 MiB in one idle state.
+  section). The hypothesis above stays Unresolved (same section, "The guest's page cache is held as `vmmemWSL`
+  working set"): the two were read in one sample, once, at idle, and the cache did not move.
 - **Not here:** a sum of Windows used and guest used. The guest's memory is inside `vmmemWSL`.
 
 ## 5 Disk: which disk is busy, and is it the WSL disk?
