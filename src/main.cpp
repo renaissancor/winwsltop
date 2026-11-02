@@ -63,7 +63,7 @@ void print_help(FILE* to) {
     "usage: winwsltop [--text | --once | --record N] [--distro NAME]\n"
     "\n"
     "  (no option)    live screen. Keys: 1-8 panel, left/right range 1, 5 or 10 minutes,\n"
-    "                 up/down select a process on panel 3, tab its other list,\n"
+    "                 up/down select a process on panels 3 and 4, tab its other list,\n"
     "                 esc panel 1, q or Alt+Q quit\n"
     "  --text         print one text frame and exit\n"
     "  --once         print one JSON line and exit; about 3 s, about 8 s if WSL does not answer\n"

@@ -203,4 +203,4 @@ documents true.
   still read, so a reader falls back to pid and name. Leaving it empty was chosen over refusing the line, which
   would blank the whole guest side for one bad field.
 - 2026-11-02. Slice 1 commit 6, `main.cpp`: `hist.push` is given `selected_processes(s, view)`, so a selected process
-  keeps its slot at the cap, and `--help` names `up/down` and `tab` again, for panel 3, now that they act.
+  keeps its slot at the cap, and `--help` names `up/down` and `tab` again, for panels 3 and 4, now that they act.
