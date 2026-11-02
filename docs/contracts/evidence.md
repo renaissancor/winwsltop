@@ -47,7 +47,7 @@ about this machine lives.
 
 | item | value |
 |---|---|
-| experiments | 5: 05 run 2026-11-01, one CPU-only load, no GPU load, same machine line; 04 run 2026-11-01, no load started, i5-13600K; 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
+| experiments | 6: 06 run 2026-11-02, no load, read only, one idle state, two runs (row updated 2026-11-02; the rows below it were not recounted); 05 run 2026-11-01, one CPU-only load, no GPU load, same machine line; 04 run 2026-11-01, no load started, i5-13600K; 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
 | raw result files | 20, 10512 lines in total |
 | run with no file | experiment 01 run 1, idle baseline (3 s probe, noted in the ledger only) |
 | trials per case | 1; experiment 03 is one session of 3 windows and 10 network brackets |
@@ -56,8 +56,22 @@ about this machine lives.
 
 ## Open questions
 
-- Requested 2026-11-02 by core for slice 1 (`design/panel-grammar.md`, part 1), the owner's go-ahead given,
-  running as experiment 0: read only, no load, no GPU. Windows available, commit and cache against
+- From experiment 06: what `GetPerformanceInfo` `SystemCache` holds beyond standby plus `\Memory\Cache Bytes`,
+  about 161 MiB (160.3 to 161.8) in every round of both runs, matching no counter run 2 added. Task Manager's
+  "Cached" was not read. Until known, Windows cache keeps its `?` on screen.
+- From experiment 06: why `/proc/pid/stat` rss reads below `/proc/pid/status` `VmRSS`, by 73728 to 2568192 B in
+  every read, and whether `/proc/pid/statm` equals `VmRSS`. The `statm` comparison was looked at but its output
+  was not saved, so it is not evidence; rerun it with the output saved. `contracts/collect.md` holds any change
+  of the guest RSS source until then.
+- From experiment 06: what the 522.9 to 541.7 MiB of `vmmemWSL` working set beyond guest used plus cached is,
+  VM overhead or cache. One idle state, cache moved 4.2 MiB.
+- PROPOSED, needs the owner's approval because it is a load: a page-cache test. Change the guest's page cache on
+  purpose, by reading a large file in the guest and then dropping or letting it age, and read `vmmemWSL` working
+  set and the guest's used and cached in one record line throughout, so whether the working set follows the cache
+  can be seen. Disk and memory load, no GPU.
+
+- Done as experiment 06, 2026-11-02 (decision log). Was requested by core for slice 1 (`design/panel-grammar.md`,
+  part 1) as experiment 0: read only, no load, no GPU. Windows available, commit and cache against
   `Get-Counter` and Task Manager; several processes' working set and private bytes against `Get-Process`;
   guest swap against `free -b`; guest RSS against `/proc/pid/status` `VmRSS` and `ps`; guest per-process
   cores against `ps` `TIME` over the same window; guest used and cache beside `vmmemWSL` working set in one
@@ -158,3 +172,10 @@ about this machine lives.
   time, so that tracking could be tested, not only movement. No repeat was run.
 - 2026-11-01. Experiment 05 record files mask other programs as `other-N`, numbered in order first seen,
   so a program can be followed without being named.
+- 2026-11-02. Experiment 06, "Experiment 0" of `design/panel-grammar.md`, run read only with no load. Verdict
+  (ledger, "Memory and process collectors checked"): Windows available, commit and commit limit, per-process
+  working set and private bytes, and guest per-process cores read what they claim, bindings and units only, since
+  on both sides the second reading comes from the same OS's own counts; Windows create time and guest `starttime`
+  are constant while a process lives, reuse not seen; Windows cache Unresolved; guest swap Not checked, it read 0;
+  guest RSS is No, it is `/proc/pid/stat` rss, below `VmRSS`; the guest cache in `vmmemWSL` Unresolved. Only the
+  `vmmemWSL` row compares two kernels. One idle state, not a range of states.
