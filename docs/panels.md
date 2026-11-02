@@ -16,18 +16,20 @@ agreed 2026-11-02), so keys learnt in one tool work in the others: 1 overview, 2
 winwsltop watches two systems that share one machine. So on every panel:
 
 - **Windows and WSL sit side by side, never added together.** They describe overlapping resources: the
-  guest's memory is inside `vmmemWSL`, its network traffic crosses both `vEthernet` and the NIC, its GPU
-  work is inside `vmwp.exe`. Where machtop's cards name the app using most of a resource, winwsltop's name
-  the side, then the process on that side where one is measured.
+  guest's memory is inside `vmmemWSL` and its GPU work is inside `vmwp.exe`. Its network traffic may be
+  counted twice, on `vEthernet` and again on the NIC: whether it is, is `Unresolved` (ledger, Disk and
+  network collectors checked, "Traffic on `vEthernet` is also counted on the NIC"), so the two are not
+  added up either. Where machtop's cards name the app using most of a resource, winwsltop's name the
+  side, then the process on that side where one is measured.
 - **A Windows figure about the VM and the guest's own figure are two readings, both shown.** Where they
   disagree, the gap is the finding (the CPU panel's `lost`), named as inferred with its formula.
-- **WSL has no per-process GPU use.** `/dev/dxg` holders are identity only (ledger, Experiment 01 result
-  and WSL collector checked). A holder can be selected, and its history then says `no usage measured`
+- **WSL has no per-process GPU use.** `/dev/dxg` holders are identity only (ledger, the table at the top,
+  "`/dev/dxg` holders identify the Linux process", and WSL collector checked). A holder can be selected, and its history then says `no usage measured`
   instead of drawing a graph.
 
 ## Shared grammar
 
-As in machtop, with two changes marked:
+As in machtop. Where winwsltop's screen differs today, the line says so.
 
 - A panel is a list on top and the selected row's history below.
 - `1`-`8` switch panels; `↑`/`↓` select a row; `←`/`→` change the time range (1, 5, 10 minutes); `esc`
@@ -41,7 +43,14 @@ As in machtop, with two changes marked:
 - The footer lists the panels with the current one lit. A panel that is not built yet is listed dim.
 - Graphs: a measured 0 is the lowest braille dot row (⣀) in steel; no sample inside the watched span is
   blank; the part of the window from before winwsltop started watching is a faint `·` every other cell.
-  Graphs are labelled with the window's average and maximum, never the minimum.
+  This is already winwsltop's rule, `contracts/ui.md` rule 8, from 6ef13ef. **Changed for winwsltop:**
+  the large layout of panel 3 still prints `collecting: N s of M s` on its axis, which `README.md`
+  ("Use", `t`) describes; under the shared grammar the `·` says it alone. Whether that caption goes is
+  not decided (`contracts/ui.md`, open question on that caption).
+- **Changed for winwsltop:** graphs are labelled with the window's average and maximum, never the
+  minimum. Today no graph has such a label: rule 8 has the large layout's plots draw a peak and its heat a
+  mean, with the axis reading `peak over mean`, and the 60 s panels draw the highest sample in a column
+  (`contracts/ui.md`, decision of 2026-11-01). Adopting the labels changes rule 8.
 
 ## 1 Overview: is either side being held back by the other right now?
 
@@ -49,9 +58,11 @@ As in machtop, with two changes marked:
   the Windows / WSL split where one is measured, the busiest process on each side where one is measured,
   and its history. GPU first: it is why winwsltop exists.
 - **Above the cards, PROPOSED (`ROADMAP.md`, contention verdict):** one line when both sides are busy
-  and the GPU is near its limit, with the moment it began. Experiment 01 showed utilization alone hides
-  the slowdown (ledger, Experiment 01 result, "Contention slows WSL" and "Contention slows Windows"). Waits
-  for a rule with a ledger row behind its threshold.
+  and the GPU is near its limit, with the moment it began. Experiment 01 measured the slowdown in work
+  done on both sides (ledger, Experiment 01 result, "Contention slows WSL" and "Contention slows
+  Windows"); what that row says hid the Windows loss is dispatch time, not utilization. "Utilization
+  alone hid" it is `ROADMAP.md`'s wording (section 2, contention verdict), with no ledger row of its own.
+  Waits for a rule with a ledger row behind its threshold.
 - **Supporting:** collector state (`collector_status`, restarts, data age), which the large CPU layout
   does not show (open question in `contracts/ui.md`).
 - **Not here:** per-thread cells, per-process rows beyond the busiest one per side.
@@ -62,7 +73,9 @@ As in machtop, with two changes marked:
   collectors checked), then the VM-level split, `VM level, not exact shares` (ledger, Experiment 01
   result, "Shares add to 100%": no), with `unattributed` between device and split (PROPOSED,
   `ROADMAP.md` 1). Then two lists side by side: Windows GPU users by engine percent with `Local Usage`
-  memory, holders first; WSL `/dev/dxg` holders, `no usage measured`.
+  memory, holders first (PROPOSED, `ROADMAP.md` 1 and `contracts/ui.md` open questions: today the list is
+  by engine percent only); WSL `/dev/dxg` holders, `no usage measured`, which already lists holders first
+  (`src/ui/render.cpp`, the WSL process list's head).
 - **History:** the selected Windows process's GPU percent, or for a WSL holder, `no usage measured`.
 - **Caveats on the panel:** `dxg_denied` processes could not be checked (ledger, WSL collector checked);
   `Dedicated Usage` is not VRAM in use and is never shown as if it were (ledger, GPU device and memory
@@ -75,16 +88,23 @@ As in machtop, with two changes marked:
 - **History:** the selected process's cores. Needs a per-process ring (PROPOSED, `ROADMAP.md` 2); until
   then the panel keeps its own graphs and selection only highlights.
 - **Moves out:** RAM, to panel 4.
-- **Not here:** which LP a thread ran on, which VP ran which guest thread (ledger, CPU contention
-  checked: no VP stayed put).
+- **Not here:** which Windows LP ran a vCPU, and so which LP ran a guest thread. No counter read says
+  which LP ran a VP, and no VP stayed put (ledger, CPU counters checked, "A guest vCPU maps to a Windows
+  core"). The steps either side of that are measured: a guest thread's vCPU from
+  `/proc/pid/task/*/stat` (ledger, CPU contention checked, "A process's `/proc/pid/stat` `processor` is
+  where it works") and a vCPU's `vmmemWSL` thread (same section, "A `vmmemWSL` thread carries one
+  vCPU"). Neither is collected today, in the snapshot or the collector's line.
 
 ## 4 Memory: where is physical memory going, and is the guest holding host memory it does not use?
 
 - **Core detail:** Windows memory (total, available, commit, cache) beside the VM as Windows sees it
   (`vmmemWSL` working set) and the guest's own view (`/proc/meminfo`: total, available, cached, swap
-  used, and PSI memory). The guest's page cache is held as `vmmemWSL` working set on Windows (ledger, WSL
-  collector checked, "Guest memory vs host", read minutes apart), which is the question this panel
-  answers. Then both process lists by memory: Windows working set and private bytes, WSL RSS.
+  used, and PSI memory). Then both process lists by memory: Windows working set and private bytes, WSL
+  RSS.
+- **Hypothesis behind the question, not a finding:** that the guest's page cache is held as `vmmemWSL`
+  working set on Windows. The one reading near it (ledger, WSL collector checked, "Guest memory vs
+  host") has guest used plus cache close to `vmmemWSL`, but read minutes apart, so the fit may be
+  coincidence. It needs a row with the two read in one sample before the panel states it.
 - **History:** the selected process's memory.
 - **Waits for:** a ledger row checking Windows available, commit and cache against Windows' own tools
   (only total is checked: ledger, Windows collector checked), and the guest-versus-`vmmemWSL` row read
@@ -105,10 +125,13 @@ As in machtop, with two changes marked:
 - **Core detail:** interfaces that are up and moved in the window, hardware NICs first, idle virtual NICs
   hidden (PROPOSED, `ROADMAP.md` 1), filter rows dropped (ledger, Disk and network collectors checked:
   they would double-count). In and out bytes per second, a trend of in + out and its peak, and link
-  speed where known. Not added up: the guest's traffic crosses `vEthernet (WSL)` and the NIC.
+  speed where known. Not added up: the guest's traffic may cross both `vEthernet (WSL)` and the NIC,
+  which is `Unresolved` (ledger, Disk and network collectors checked, "Traffic on `vEthernet` is also
+  counted on the NIC"), so a total could count it twice.
 - **History:** the selected interface's in + out.
 - **Not yet:** per-process network on either side; the guest's own `eth0` (used once as an independent
-  check, ledger "vEthernet octets match a count outside Windows", but not in the collector's line).
+  check, ledger, Disk and network collectors checked, "`vEthernet` octets match a count outside
+  Windows", but not in the collector's line).
 
 ## 7 Processes: every process, every measure
 
@@ -122,10 +145,14 @@ As in machtop, with two changes marked:
 
 ## 8 VM cost: what has each side cost the other, and when?
 
-winwsltop's own panel, and what `ROADMAP.md` calls the centrepiece: the record btop does not keep.
+winwsltop's own panel, the record btop does not keep. It is where `ROADMAP.md`'s centrepiece would
+live: "Braille chart of WSL vs Windows over 1, 10 and 60 minutes" (section 2, History). The range here
+is the shared one (Shared grammar).
 
 - **Core detail:** over the selected range, side by side: the GPU split (Windows, WSL, unattributed),
-  `lost` CPU (inferred), and memory held by `vmmemWSL` against the guest's used. Below it, the moments
+  `lost` CPU (inferred), and memory held by `vmmemWSL` against the guest's used. The guest's used is not
+  collected: it is `memory.total` less `memory.available` from the collector's line, derived, on the
+  guest's side only. Below it, the moments
   contention began and ended, once the verdict in panel 1 exists.
 - **History:** the whole panel is history; the selection picks which of the three rows is drawn large.
 - **Later, PROPOSED (`ROADMAP.md` 2):** workload truth, such as vLLM `/metrics` from inside WSL, so a
@@ -137,16 +164,21 @@ winwsltop's own panel, and what `ROADMAP.md` calls the centrepiece: the record b
 | today | proposed |
 |---|---|
 | `1` Overall | 1 Overview, cards and the verdict line |
-| `2` GPU | 2 GPU, with selection and holders first |
+| `2` GPU | 2 GPU, with selection; Windows holders first is PROPOSED (`ROADMAP.md` 1), WSL's already are |
 | `3` CPU and RAM | 3 CPU, and RAM moves to 4 Memory |
 | `t` span 60 s, 5 min, 15 min | `←`/`→` 1, 5, 10 minutes, every panel |
 | none | 4 to 8, each built only once its ledger rows exist |
 
 ## Open questions
 
-- `design/cpu-panel.md` section 6 refuses a sort key, scrolling and list focus on panel 3 ("Each costs
-  a mode"). The shared grammar needs selection on every panel. Adopting this file supersedes that line,
-  and the decision must be recorded there and in `contracts/ui.md`.
+- `design/cpu-panel.md` refuses three things the shared grammar needs. Adopting this file supersedes
+  all three, and the decision must be recorded there and in `contracts/ui.md`:
+  - list focus, with a sort key and scrolling: section 6, "No sort key, text entry, scrolling or list
+    focus. Each costs a mode", against selection on every panel and `tab` between lists;
+  - the `[s]` sort: section 4, "Refused, and why", "`[s]` sort by memory ... Cut", against `s` on
+    panel 7;
+  - per-process history: section 11, "Out of this design", against the selected process's history on
+    panels 3 and 4.
 - `tab` between the two lists changes the shared grammar. Agree it with sshvllmtop and machtop first, or
   find a way that needs no new key.
 - The range: 1, 5, 10 like the others, or 1, 5, 15 to use the 15 minutes `history` already keeps.
