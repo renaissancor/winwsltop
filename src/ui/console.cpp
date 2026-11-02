@@ -7,6 +7,13 @@
 namespace wwt {
 namespace {
 
+// keys.h keeps its own copies of these, so that it needs no windows.h.
+static_assert(vk::tab == VK_TAB && vk::shift == VK_SHIFT && vk::control == VK_CONTROL && vk::menu == VK_MENU && vk::capital == VK_CAPITAL);
+static_assert(vk::escape == VK_ESCAPE && vk::left == VK_LEFT && vk::up == VK_UP && vk::right == VK_RIGHT && vk::down == VK_DOWN);
+static_assert(vk::lwin == VK_LWIN && vk::rwin == VK_RWIN && vk::numpad0 == VK_NUMPAD0 && vk::numlock == VK_NUMLOCK && vk::scroll == VK_SCROLL);
+static_assert(vk::lshift == VK_LSHIFT && vk::rmenu == VK_RMENU && vk::processkey == VK_PROCESSKEY);
+static_assert(kRightAlt == RIGHT_ALT_PRESSED && kLeftAlt == LEFT_ALT_PRESSED && kRightCtrl == RIGHT_CTRL_PRESSED && kLeftCtrl == LEFT_CTRL_PRESSED && kShift == SHIFT_PRESSED);
+
 std::atomic<bool> g_stop{false};
 
 BOOL WINAPI on_ctrl(DWORD) {
@@ -123,6 +130,21 @@ char console::poll_key() {
     if (const char key = key_of(e.Event.KeyEvent)) return key;
   }
   return 0;
+}
+
+key_event console::poll() {
+  if (!in_) return {};
+  DWORD waiting = 0;
+  while (GetNumberOfConsoleInputEvents(in_, &waiting) && waiting > 0) {  // Only then can a read not block
+    INPUT_RECORD e;
+    DWORD got = 0;
+    if (!ReadConsoleInputW(in_, &e, 1, &got) || got == 0) return {};
+    if (e.EventType != KEY_EVENT || !e.Event.KeyEvent.bKeyDown) continue;  // Releases, resizes, the mouse
+    const KEY_EVENT_RECORD& k = e.Event.KeyEvent;
+    const key_event got_key = key_for(k.wVirtualKeyCode, static_cast<char32_t>(k.uChar.UnicodeChar), k.dwControlKeyState);
+    if (got_key.k != key::none) return got_key;
+  }
+  return {};
 }
 
 }  // namespace wwt

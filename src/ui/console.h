@@ -1,5 +1,6 @@
 // Puts rendered frames on the Windows console. With stdout redirected it writes plain text instead.
 #pragma once
+#include "ui/keys.h"
 #include "ui/render.h"
 #include <vector>
 
@@ -25,6 +26,9 @@ class console {
   // in Hangul input mode; not tried with a real IME. Never blocks. Reads CONIN$, so it works when stdin
   // is not the console.
   char poll_key();
+  // The next key the screen has a meaning for, decided by key_for (keys.h); none when no such key is
+  // waiting or there is no console. Never blocks, and reads CONIN$ as poll_key does, which it replaces.
+  key_event poll();
 
  private:
   void* out_ = nullptr;

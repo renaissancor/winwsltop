@@ -9,6 +9,7 @@
 // Build: scripts/build.sh src/ui/render_check.cpp   (it includes the sources it tests)
 #include "ui/render.cpp"
 #include "ui/history.h"
+#include "ui/keys.h"
 #include "core/wsl_view.cpp"
 #ifdef _WIN32
 #include "ui/console.cpp"
@@ -3095,6 +3096,54 @@ void check_graph_rule_buckets() {
         "1.5 s short of interval_s is a step back: the samples and when watching began move");
 }
 
+// design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
+void check_keys() {
+  const auto is = [](const key_event& e, key k, int panel = 0, bool esc_first = false) { return e.k == k && e.panel == panel && e.esc_first == esc_first; };
+  const auto none = [&](const key_event& e) { return is(e, key::none); };
+  for (int n = 1; n <= 8; ++n) {
+    check(is(key_for(static_cast<uint16_t>('0' + n), static_cast<char32_t>('0' + n), 0), key::panel, n), "digit " + std::to_string(n) + " is its panel");
+    check(is(key_for(static_cast<uint16_t>(vk::numpad0 + n), static_cast<char32_t>('0' + n), 0), key::panel, n), "numpad " + std::to_string(n) + " with NumLock on is its panel");
+    check(is(key_for(static_cast<uint16_t>('0' + n), U'!', kShift), key::panel, n), "Shift with a digit is still the digit " + std::to_string(n));
+  }
+  check(none(key_for('9', U'9', 0)) && none(key_for('0', U'0', 0)), "9 and 0 give nothing");
+  check(none(key_for(vk::numpad0 + 9, U'9', 0)) && none(key_for(vk::numpad0, U'0', 0)), "numpad 9 and 0 give nothing");
+  check(none(key_for('T', U't', 0)) && none(key_for('T', U'T', kShift)), "t gives nothing: the range replaces it");
+  check(is(key_for(vk::up, 0, 0), key::up) && is(key_for(vk::down, 0, 0), key::down), "up and down");
+  check(is(key_for(vk::left, 0, 0), key::left) && is(key_for(vk::right, 0, 0), key::right), "left and right");
+  check(is(key_for(vk::up, 0, kShift), key::up), "NumLock off: the numpad's arrows arrive as the arrows, Shift or not");
+  check(is(key_for(vk::tab, U'\t', 0), key::tab), "tab");
+  check(none(key_for(vk::tab, U'\t', kShift)) && none(key_for(vk::tab, U'\t', kShift | kLeftAlt)), "Shift+Tab is dropped whole");
+  check(is(key_for(vk::escape, 0x1B, 0), key::esc), "esc");
+  check(is(key_for('Q', U'q', 0), key::quit) && is(key_for('Q', U'Q', kShift), key::quit), "q quits, Shift or not");
+  check(is(key_for('S', U's', 0), key::sort), "s is decoded, though it sorts nothing yet");
+  check(none(key_for('Q', 0x11, kLeftCtrl)) && none(key_for('Q', 0x11, kRightCtrl)) && none(key_for('3', U'3', kLeftCtrl)), "Ctrl+Q gives nothing, nor Ctrl with a digit");
+  check(is(key_for('Q', U'q', kLeftAlt), key::quit, 0, true) && is(key_for('Q', U'q', kRightAlt), key::quit, 0, true), "Alt+Q is esc, then q");
+  check(is(key_for('3', U'3', kLeftAlt), key::panel, 3, true), "Alt+3 is esc, then 3");
+  check(is(key_for(vk::escape, 0x1B, kLeftAlt), key::esc, 0, true), "Alt+esc is esc twice");
+  check(is(key_for('T', U't', kLeftAlt), key::esc), "Alt with a key that does nothing is esc alone");
+  check(none(key_for('Q', U'q', kLeftCtrl | kRightAlt)) && none(key_for('Q', U'q', kLeftCtrl | kLeftAlt)), "Ctrl+Alt+Q, and AltGr, give nothing");
+  check(is(key_for(vk::up, 0, kLeftAlt), key::up), "Alt with an arrow is the arrow: a terminal sends one sequence");
+  check(none(key_for(vk::numpad0 + 1, 0, kLeftAlt)), "Alt with a numpad digit is Windows' Alt code entry, not a key");
+  for (const uint16_t m : {vk::shift, vk::control, vk::menu, vk::capital, vk::lwin, vk::rwin, vk::numlock, vk::scroll, vk::lshift, vk::rmenu}) {
+    check(none(key_for(m, 0, 0)) && none(key_for(m, 0, kLeftAlt | kShift)), "a modifier or a lock alone is no key: " + std::to_string(m));
+  }
+  check(none(key_for(0x2E, 0, 0)) && none(key_for(0x70, 0, kLeftAlt)), "Delete and F1, with Alt or not, give nothing");
+  // Korean input on: the virtual key decides first; under VK_PROCESSKEY the jamo does.
+  check(is(key_for('Q', 0x3142, 0), key::quit), "ㅂ on the Q key is q by its key code");
+  check(is(key_for(vk::processkey, 0x3142, 0), key::quit), "VK_PROCESSKEY with ㅂ is q");
+  check(is(key_for(vk::processkey, 0x3134, 0), key::sort), "VK_PROCESSKEY with ㄴ is s");
+  check(is(key_for(vk::processkey, 0x3142, kLeftAlt), key::quit, 0, true), "and Alt with it is esc, then q");
+  check(none(key_for(vk::processkey, 0x3142, kLeftCtrl)), "and Ctrl with it is nothing");
+  for (int i = 0; i < 26; ++i) {
+    const char letter = static_cast<char>('a' + i);
+    const key_event by_jamo = key_for(vk::processkey, kJamo[i], 0), by_key = key_for(static_cast<uint16_t>('A' + i), static_cast<char32_t>(letter), 0);
+    check(latin_for(kJamo[i]) == letter && by_jamo.k == by_key.k, std::string("the jamo for ") + letter + " does what " + letter + " does");
+  }
+  // machtop's table, letter by letter: the 2-set layout.
+  check(kJamo['q' - 'a'] == U'ㅂ' && kJamo['s' - 'a'] == U'ㄴ' && kJamo['a' - 'a'] == U'ㅁ' && kJamo['z' - 'a'] == U'ㅋ' && kJamo['p' - 'a'] == U'ㅔ', "the 2-set table");
+  check(latin_for(U'가') == 0 && latin_for(0) == 0 && none(key_for(vk::processkey, U'가', 0)) && none(key_for(vk::processkey, 0, 0)), "a composed syllable or no character is nothing");
+}
+
 // design/panel-grammar.md part 5: mean cells, the maximum's dot, window-wide avg and max, scale by measure,
 // over 100 drawn at the ceiling and printed as measured.
 void check_graph_labels() {
@@ -3399,6 +3448,7 @@ int main(int argc, char** argv) {
   check_large_captions();
   check_graph_rule_buckets();
   check_graph_labels();
+  check_keys();
   if (!quick) {
     check_denied_note();
     check_holder_wording();
