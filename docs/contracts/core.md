@@ -202,3 +202,5 @@ documents true.
   `identity_or_null`: a whole number from 0 to 2^63 is kept, anything else leaves `start` empty and the line is
   still read, so a reader falls back to pid and name. Leaving it empty was chosen over refusing the line, which
   would blank the whole guest side for one bad field.
+- 2026-11-02. Slice 1 commit 6, `main.cpp`: `hist.push` is given `selected_processes(s, view)`, so a selected process
+  keeps its slot at the cap, and `--help` names `up/down` and `tab` again, for panel 3, now that they act.

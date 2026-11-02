@@ -63,6 +63,7 @@ void print_help(FILE* to) {
     "usage: winwsltop [--text | --once | --record N] [--distro NAME]\n"
     "\n"
     "  (no option)    live screen. Keys: 1-8 panel, left/right range 1, 5 or 10 minutes,\n"
+    "                 up/down select a process on panel 3, tab its other list,\n"
     "                 esc panel 1, q or Alt+Q quit\n"
     "  --text         print one text frame and exit\n"
     "  --once         print one JSON line and exit; about 3 s, about 8 s if WSL does not answer\n"
@@ -181,7 +182,7 @@ int main(int argc, char** argv) {
     s.wsl_clock_known = wsl.clock_offset(s.wsl_clock_offset_s);
     lost.update(s);  // On the priming pass too, so it has seen the line the first real sample may repeat
     if (!i) continue;
-    if (screen && screen->is_terminal()) hist.push(s);  // only the live screen draws it
+    if (screen && screen->is_terminal()) hist.push(s, wwt::selected_processes(s, view));  // only the live screen draws it
     have_frame = true;
     if (run == mode::json) {
       const std::string line = wwt::to_json_line(s) + "\n";
