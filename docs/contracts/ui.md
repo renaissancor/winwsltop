@@ -5,14 +5,18 @@ Owner: the `ui` role. Paths: `src/ui/` (the `ui` row of [`../ARCHITECTURE.md`](.
 ## Purpose
 
 Turn snapshots into a terminal screen that never claims more than was measured. `render()` is a pure
-function of one snapshot and an optional in-memory `history`; with no history it is one snapshot to lines; `console.cpp` puts lines on a Windows console; `wsl_view.h`,
-which core owns, reads schema 1 of the collector's line.
+function of one snapshot, an optional in-memory `history` and a `view_state`; with no history it is one snapshot
+to lines. `keys.h` turns a key record into a key and `apply_key` applies it to the `view_state`, both pure;
+`console.cpp` puts lines on a Windows console and reads key records; `wsl_view.h`, which core owns, reads schema 1
+of the collector's line.
 
 ## What belongs here
 
 - `render.h`, `render.cpp`: layout, colour tones, number formatting, UTF-8 width, sanitising names,
   and `history::push`.
-- `history.h`: the last 15 minutes of screen values, in memory, in one flat ring of 901 samples.
+- `history.h`: the last 10 minutes of screen values, in memory, in one flat ring of 601 samples, and beside it
+  the per-process ring, cores and memory per process, keyed by side, pid, start and name.
+- `keys.h`: `key_for`, header-only and pure, and the 2-set Korean table.
 - `console.h`, `console.cpp`: VT mode, alternate screen, Ctrl+C, key polling from `CONIN$` with echo
   off, plain text when redirected.
 - `render_check.cpp`: the renderer's checks, built on hand-made snapshots.
@@ -41,20 +45,27 @@ which core owns, reads schema 1 of the collector's line.
    unreadable, not guessed at.
 7. Thresholds for amber and red are judgement calls and live in one block at the top of `render.cpp`,
    except `kStaleS`, in `snapshot.h` because `lost` stops on it too.
-8. Graphs use a fixed 0-100 scale with time on the x axis. A measured 0 is the bottom dot row (⣀), a
-   missing sample or a stall is a blank gap, never a zero, and time from before watching began is a
-   faint `·` in every other cell of the bottom row. Panels are never stacked or summed, and each graph
-   title names its source.
+8. Graphs have time on the x axis, over 1, 5 or 10 minutes. A measure with a real ceiling (a percentage of
+   one core, a device or the whole machine) is drawn 0 to 100; a process's cores from 0 to the window's
+   maximum rounded up to 1, 2 or 5 times a power of ten, never below 0.05, printing `scale`; memory zooms
+   and prints `range` (decision of 2026-11-02, slice 1 commit 7). A cell is the mean of the samples in its
+   slice of the window, each clamped to the scale first. The cell holding the window's maximum, the latest if
+   several do, also marks it with one dot at its height, when that cell holds more than one sample and the
+   dot falls above the cell's mean. A value above a 0-100 graph's ceiling is drawn at the ceiling and
+   labelled as measured, in the watch tone. A measured 0 is the bottom dot row (⣀), a missing sample or a
+   stall is a blank gap, never a zero, and time from before watching began is a faint `·` in every other
+   cell of the bottom row. Each graph is labelled with the average and maximum of its raw samples over the
+   window, never the minimum. Panels are never stacked or summed, and each graph title names its source.
    Exception, the large CPU panel only: a repeated guest line carries the previous value for one sample,
-   and two in a row are a gap (design section 5). Heat and lanes there show a mean, the plots a peak.
-   There the `·` is placed by bucket, on the bottom row of the busy and RAM plots; the heat block and the
-   lanes have no bottom dot row, so they stay blank before watching began.
+   and two in a row are a gap (design section 5). There the `·` is placed by bucket, on the bottom row of
+   the busy plots; the heat block and the lanes have no bottom dot row, so they stay blank before watching
+   began.
 
 ## How to validate
 
 - `scripts/check.sh --windows` builds `render_check.exe` and runs it. Zero failures is the bar.
 - `render_check busy 131 40` or `render_check bare 80 24` prints a frame to inspect by eye;
-  `render_check busy W H <overall|gpu|cpu>` prints a panel, and `render_check busy live` runs the
+  `render_check busy W H <overall|gpu|cpu|1-8>` prints a panel, and `render_check busy live` runs the
   panels with live keys.
 - `render_check busy` draws on the live console until Ctrl+C: colours, braille and Korean text need a
   person's eyes in Windows Terminal. Legacy conhost is unchecked.
@@ -62,25 +73,24 @@ which core owns, reads schema 1 of the collector's line.
   `render_check vt <fixture> W H FILE [span_s]` writes one frame's VT bytes to a file, `render_check measure`
   prints frame bytes and build time, and `render_check quick` skips the size sweeps, for mutating the renderer.
 
-## Current state (2026-11-02)
+## Current state (2026-11-02, slice 1 built)
 
 | item | value |
 |---|---|
-| source | `src/ui` 5719 lines, of which `render_check.cpp` 3215 |
-| checks | 120649, 0 failed, run on Windows 2026-11-02 after merging main's graph rule (`scripts/check.sh --windows`, which also ran `lost_check`, 143, 0 failed). Rerun on Linux with g++ as `render_check quick`: 5293, 0 failed; 11 mutants of the merged rule (bucket placement, the `·` in the plots, the stall at `kKeepMs`, `kStepMs`, when watching began) were built and run that way, and all are caught. The 97 mutants of the ring, buckets, colours and large layout from before the merge were not rerun, and main's own mutant list was not kept. `handle_keys` in `main.cpp` has no automated check |
-| sizes checked | widths 1 to 300, heights 1 to 66, all three panels: hostile numbers at every size, the other cases at every third size including 300 and 66. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, spans 60 s and 15 min; 4, 8, 14, 20, 21, 40 and 64 threads, normal and hostile, at five widths. The graph rule: 60 s panels at 131 by 40, 80 by 24 and 200 by 60; the large layout at 100 by 34, 131 by 40 and 200 by 60, both spans |
-| frame bytes, 131 by 40 | noisy 33392, contended 16176, idle 14107, stale 15232; noisy at 40 threads 44542 and at 64 threads 43388, rerun 2026-11-02 after the merge and unchanged. Budget 48 KiB |
-| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.32 to 0.69 ms, worst noisy at 131 by 40, rerun 2026-11-02 after the merge. Budget 5 ms |
+| source | `src/ui` 7635 lines, of which `render.cpp` 3038, `render_check.cpp` 4134, `history.h` 135, `keys.h` 89 |
+| checks | `render_check` 170347, 0 failed, and `lost_check` 143, 0 failed, under `scripts/check.sh --windows` after 01384a4. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
+| sizes checked | widths 1 to 300, heights 1 to 66, every panel, hostile numbers at every size and the other cases at every third. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, ranges 1 and 10 minutes; 4, 8, 14, 20, 21, 40, 64 and 65 threads |
+| frame bytes, 131 by 40 | noisy 33287, noisy at 64 threads 41208, panel 2 13492, panel 4 10504 (7745 at 100 by 34). Budget 48 KiB |
+| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.32 to 0.67 ms. Budget 5 ms |
+| history push | 0.032 ms with 390 processes, the per-process ring included |
+| history | 10 minutes in 601 samples, five memory floats a sample for panel 4; the per-process ring keyed by side, pid, start and name, a first reading stored as a gap, every slot written every push, and past max(1024, twice the rows of the newest sample) the slot least recently seen reused, never a selected one; nothing is refused |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
-| console | Windows Terminal checked by eye once for the older panels; conhost not checked. The large layout and `t` ran live through a pseudo-terminal, and its colours were read from rendered images, not seen in Windows Terminal |
+| console | Windows Terminal checked by eye once for the older panels; conhost not checked. The live key checks of `design/panel-grammar.md` section 8 (Korean IME, ConPTY and OpenSSH, numpad with NumLock off) are not run |
 
 ## Open questions
 
 - A step back of `kStepMs` (1 s) or less during a stall, with the new sample still after the newest one, is
   not corrected: those samples sit up to a second too close to now. Below that it cannot be told from jitter.
-- Closes with slice 1's commit 2, which removes the caption (decision of 2026-11-02, slice 1). The large layout's axis says `collecting: N s of M s` from the oldest kept sample, not from when watching
-  began. After a stall that clears the ring it says collecting while the cells are a gap, not dotted. Whether
-  it should count from `watched_from_ms()` instead is open.
 - PROPOSED (`ROADMAP.md`): GPU holders first in the Windows list, an `unattributed` line between the
   device total and the split, about 10 Windows rows, idle virtual NICs hidden.
 - PROPOSED: `--replay FILE` through the same `render()`, which would also give the recorded fixtures
@@ -167,6 +177,26 @@ which core owns, reads schema 1 of the collector's line.
   - The seam change of commit 1 is additive flags, `schema` stays 1 (`contracts/core.md`).
   Alt+key decodes as `esc` then the key, so Alt+Q quits, under the owner's decision that keys follow the shared
   grammar: the source is machtop's key parser (`src/keys.cpp` at 246c2cb, `key_parser::next`: an ESC followed by any byte but `[` or `O` is `esc` on its own, so Alt+key, which a terminal sends as ESC then the key, reads as `esc` then the key); the grammar's text does not state it yet. Still open: the live key checks the design lists in section 8.
+- 2026-11-02. Slice 1 as built, where it departs from `docs/design/panel-grammar.md`, commits 2 to 4 (dc33e18,
+  345e358, 8f9d7d8, 64019d6, fixed by ee42854). `↑`/`↓` and `tab` are offered, and act, only on a panel that draws a
+  selection, so they came with panel 3 and panel 4, not before. Key `4` opened a not-built page until panel 4 landed
+  (01384a4). `apply_key` takes the view state, the key and what is selectable, not the history, width or height.
+  Alt with an arrow is the arrow: Alt+key reads as `esc` then the key only for keys that are characters. Each sample
+  is clamped to the graph's scale before a cell's mean, so one sample over 100 cannot lift its neighbours, while
+  `avg` and `max` are of the raw samples. `each cell N s` has one decimal below 10 s.
+- 2026-11-02. Slice 1 as built, commit 6 (ac703b5, 9af1ac4). `--text` shows the `?` marks, `stat rss` and `n/a`
+  for an unrated process's cores too, since it is the same frame. Panel 1 has no rule line of its own, so
+  `? not yet checked` sits on its title row. The over-100 `*` on a label and on the caption `VM level, not exact
+  shares` are drawn together or not at all. At 100 columns guest names on panel 3 are cut to 5 columns. A narrow
+  head with WSL down still reports the collector's restarts. The large layout's floor is 29 rows at 20 threads,
+  two above `design/cpu-panel.md`'s 27, for the `N of M` line and the history. A process whose first reading has
+  no earlier one to rate against reads `n/a` cores, never 0.
+- 2026-11-02. Slice 1 as built, commit 7 (01384a4), the zoom rule the design's mockups lacked: spread is
+  max(max - min, floor), bottom max(0, min - 0.1 spread), top bottom + 1.2 spread, as machtop's `sample_series` at
+  246c2cb. Floors: 64 MiB for whole-machine memory, 4 MiB per process. Labels are GiB or MiB with the fewest decimals
+  that still tell bottom from top. Below 80 columns panel 4 stacks its two sides. The design's check "never a line
+  with a Windows and a guest GiB figure" holds as "guest figures only right of the divider", since the stacked and
+  side-by-side layouts share rows differently.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.
