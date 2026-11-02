@@ -46,7 +46,7 @@ No raw file was saved for this section; the numbers were read live.
 | `/dev/dxg` scan is complete without root | **No.** 36 of about 64 processes could not be read (`dxg_denied`), so a root GPU process would be missed |
 | Killed collector recovers | Yes, within about 3 s, with `restarts` counted |
 | Collector ends with `winwsltop` | Yes, none left after a normal exit |
-| Guest memory vs host | Guest limit 31.22 GiB of 63.75 GiB host. Guest used 2 GiB and cache 7 GiB against about 10 GiB `vmmemWSL`, read minutes apart |
+| Guest memory vs host | Guest limit 31.22 GiB of 63.75 GiB host. Guest used 2 GiB and cache 7 GiB against about 10 GiB `vmmemWSL`, read minutes apart. Read in one sample on 2026-11-02: section "Memory and process collectors checked" |
 
 The -612 ms between WSL and Windows timestamps in one sample is mostly sample age, not clock offset.
 Clock alignment was added afterwards; see the WSL clock rate section below and `wsl-collector/PROTOCOL.md`.
@@ -321,6 +321,33 @@ Where the load ran, and what else moved:
 | `Thermal Zone` temperature moves under sustained load | **False here.** 301 and 3010 in all 299 rounds, including 217.0 s of burners, with `% Passive Limit` 100 and `Throttle Reasons` 0. It is not a live temperature | `experiments/05-cpu-contention/results/analysis-2026-11-01.txt` |
 | `% Performance Limit` and `Performance Limit Flags` move | `Not checked`, still: 100 and 0 on every LP in all 299 rounds, at all-core load too. Nothing was limited that these report, or they do not report, and a run this short cannot tell which | `experiments/05-cpu-contention/results/analysis-2026-11-01.txt` |
 | Status of a failed whole-array PDH read | Observed: `Hv LP` `% Idle Time` failed 81 times, rounds 85 to 269, with 0x800007d8, `PDH_CALC_NEGATIVE_VALUE`, only around saturation. `\Processor Information` `% Processor Performance` and `Actual Frequency` failed once each, in round 243, with 0x800007d6, `PDH_CALC_NEGATIVE_DENOMINATOR`. These are this run's failures, and that experiment 04's four were the same is `Not checked` | `experiments/05-cpu-contention/results/analysis-2026-11-01.txt`, `experiments/05-cpu-contention/results/run1-probe-2026-11-01.txt` |
+
+## Memory and process collectors checked
+
+Run 2026-11-02, non-elevated, on whatever the machine was doing. Same machine line as the top of this
+file (`experiments/06-memory-process/results/run1-static-2026-11-02.txt`). No load was started. The only
+processes started were idle ones the run ended itself: `sleep` in the guest and `ping.exe` to 127.0.0.1.
+There were two runs. Run 1 read both sides beside `winwsltop --record 60`, with 25 Windows rounds and
+219 guest rounds. Run 2 read Windows alone, 10 rounds, with more `\Memory` counters. A figure here is
+one idle state, not a range of states. `experiments/06-memory-process/README.md` says how independent
+each comparison is: on both sides the second reading comes from the same OS's own counts, so the checks
+show bindings and units, with one exception. The exception is the `vmmemWSL` row, where the two
+readings come from different kernels.
+
+| claim | status | evidence |
+|---|---|---|
+| Windows `available` is `\Memory\Available Bytes` | Observed, bindings only. The counter moved 1.750-22.887 MiB between the readings either side of the collector (run 1). The collector sat inside them in 15 of 25 rounds and 3 of 10, and outside by at most 3100672 B and 7766016 B. A round from the first reading to the last took 2.340-2.834 s, and `Get-Counter` does not say when within its call it sampled | `experiments/06-memory-process/results/analysis-2026-11-02.txt`, `experiments/06-memory-process/results/analysis-run2-2026-11-02.txt` |
+| Windows `commit_used` and `commit_limit` are `\Memory\Committed Bytes` and `Commit Limit` | Observed, bindings only. Commit sat inside in 11 of 25 and 5 of 10 rounds, outside by at most 2756608 B and 5906432 B, while the counter moved up to 24.371 and 25.379 MiB. Limit was equal in 25 of 25 and 10 of 10, and it never moved | same |
+| Windows `cache` (`GetPerformanceInfo` `SystemCache`) is a known `\Memory` figure | **Unresolved.** It matches no sum tried. It is above standby (reserve + normal + core) by 809.0 to 823.6 MiB, below standby + modified by 844.7 to 977.7 MiB, and above standby + `Cache Bytes` by 160.3 to 161.6 MiB in all 25 rounds of run 1 and 160.6 to 161.8 MiB in all 10 of run 2. None of the five counters run 2 added equals that gap. Task Manager's "Cached" was not read, so whether this matches it is `Not checked` | same |
+| Windows per-process working set and private bytes are `Get-Process` `WorkingSet64` and `PrivateMemorySize64` | Observed, bindings only (.NET reads the same NT call), so the hand-written struct's offsets and units hold. Run 1: 8011 comparisons over 364 pids. Working set equal 7729, inside 278, outside 4. Private equal 7777, inside 230, outside 4. Run 2: 3160 over 335 pids, outside 2 each. Outside by at most 581632 B and 630784 B | same |
+| Windows create time is constant while a process lives | Observed. The collector's key equalled `Get-Process` `StartTime` (`GetProcessTimes`, another path to the same field) in 7882 and 3040 reads, and differed in 0. `StartTime` could not be read in 8154 and 3281, access denied non-elevated. Every pid had one create time across the rounds it was seen in (403 and 345 pids), the long `ping.exe` in 25 of 25 and 10 of 10 rounds | same |
+| Windows create time differs after a pid is reused | `Not checked`: no reuse was seen. The 25 and 10 short `ping.exe` had distinct pids, and no pid's create time changed | same |
+| Guest swap used is `free -b` Swap used | `Not checked`: 0 in the collector, `free -b` and `/proc/meminfo` throughout, with 8589934592 B of swap. A value that never moved | `experiments/06-memory-process/results/analysis-2026-11-02.txt` |
+| Guest per-process RSS is `/proc/pid/status` `VmRSS` and `ps` RSS | **No.** The collector shows `/proc/pid/stat` field 24 times the page size. It equals the bracketing reads 1775 times, sits inside them 16 times and is never outside, over 71 pids. `VmRSS` and `ps` are higher. Read in the same pass, `VmRSS` minus stat rss was 73728 to 2568192 B and above 0 in all 10159 reads, so the collector is never above `VmRSS` and is low by up to 2568192 B. Why the kernel's two figures differ was not checked | same |
+| Guest per-process cores are `/proc/pid/stat` utime + stime over the collector's own interval | Observed, bindings only (the same file). Cores times step times HZ lands within 0.0507 of a whole tick (HZ 100), which is the rounding to 3 decimals. Per interval, 302 comparisons with ticks moving and 0 outside, plus 1359 at zero. Over the 59.580 s window, all 7 processes that used CPU were inside. `ps` `cputimes` agrees at its 1 s resolution only. Guest ticks and guest `CLOCK_MONOTONIC` are both the guest's, so the WSL clock rate below does not enter | same |
+| The guest's page cache is held as `vmmemWSL` working set | **Unresolved.** One record line holds both sides: `vmmemWSL` 2628.1-2642.1 MiB, guest used (total less available) 1726.3-1748.6 MiB, cached 360.6-364.9 MiB, total less `MemFree` 1865.8-1885.7 MiB. Working set exceeded used + cached by 522.9 to 541.7 MiB, and total less `MemFree` by 748.1 to 767.1 MiB. So the cache fits inside it, but so would a VM overhead of that size. Cache moved 4.2 MiB, too little to test whether working set follows it. A test needs the cache to change, which this run did not do | same |
+| Guest `starttime` is constant while a process lives | Observed. The run's `sleep`, pid 48992, read `starttime` 616497 in all 219 rounds, and each of 139 pids had one value | same |
+| Guest `starttime` differs after a pid is reused | `Not checked`: no reuse is possible in this run. `ns_last_pid` went from 48991 to 49944 with `pid_max` 4194304 | `experiments/06-memory-process/results/analysis-2026-11-02.txt`, `experiments/06-memory-process/results/run1-static-2026-11-02.txt` |
 
 ## WSL clock rate (2026-10-31)
 
