@@ -180,8 +180,9 @@ of the collector's line.
 - 2026-11-02. Slice 1 as built, where it departs from `docs/design/panel-grammar.md`, commits 2 to 4 (dc33e18,
   345e358, 8f9d7d8, 64019d6, fixed by ee42854). `↑`/`↓` and `tab` are offered, and act, only on a panel that draws a
   selection, so they came with panel 3 and panel 4, not before. Key `4` opened a not-built page until panel 4 landed
-  (01384a4). `apply_key` takes the view state, the key and what is selectable, not the history, width or height.
-  Alt with an arrow is the arrow: Alt+key reads as `esc` then the key only for keys that are characters. Each sample
+  (01384a4). `apply_key` takes the view state, the key and the snapshot, not the history, width or height.
+  Alt with an arrow is the arrow: Alt+key reads as `esc` then the key only for a key that types a character, and
+  Alt with a numpad digit is Windows' Alt code entry and nothing. Each sample
   is clamped to the graph's scale before a cell's mean, so one sample over 100 cannot lift its neighbours, while
   `avg` and `max` are of the raw samples. `each cell N s` has one decimal below 10 s.
 - 2026-11-02. Slice 1 as built, commit 6 (ac703b5, 9af1ac4). `--text` shows the `?` marks, `stat rss` and `n/a`
