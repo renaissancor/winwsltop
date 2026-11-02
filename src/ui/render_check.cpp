@@ -265,6 +265,21 @@ void check_reader() {
   v = read_wsl(R"({"schema":1,"busy_pct":1,"memory":{},"cpu_split":null,"load":null})");
   check(v.ok && !v.cpu_user && !v.load[0], "a null cpu_split or load does not fail the line");
 
+  // rated and start, additive keys of schema 1 (PROTOCOL.md, processes): a row without them, from an older
+  // collector, is not rated and has no identity beyond its pid.
+  v = read_wsl(R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"rated":true,"start":98765432},{"pid":2,"rated":false,"start":null},{"pid":3,"rated":null},{"pid":4}]})");
+  check(v.ok && v.processes.size() == 4, "reads rated and start");
+  check(v.processes[0].rated && v.processes[0].start == 98765432u, "rated true, and start's value");
+  check(!v.processes[1].rated && !v.processes[1].start, "rated false, and a null start is no identity");
+  check(!v.processes[2].rated, "a null rated is not rated");
+  check(!v.processes[3].rated && !v.processes[3].start, "absent, neither: an older collector's row is not rated");
+  check(!read_wsl(busy_json()).processes[0].rated && !read_wsl(busy_json()).processes[0].start, "the busy line, which has neither, reads them as unknown");
+  for (const char* bad : {R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"rated":1}]})", R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"rated":"true"}]})",
+                          R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"rated":tru}]})", R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"start":"5"}]})",
+                          R"({"schema":1,"busy_pct":1,"memory":{},"processes":[{"pid":1,"start":true}]})"}) {
+    check(!read_wsl(bad).ok, std::string("a rated that is not a bool, or a start that is not a number, refuses the line: ") + bad);
+  }
+
   for (const char* bad : {"", "{", "[]", "null", "{\"schema\":1}", "{\"schema\":1,\"busy_pct\":1,\"memory\":{}} x", "{\"schema\":1,\"busy_pct\":nan,\"memory\":{}}",
                           "{\"schema\":1,\"busy_pct\":-inf,\"memory\":{}}", "{\"schema\":1,\"busy_pct\":1,\"memory\":{},\"distro\":\"a\\q\"}",
                           "{\"schema\":1,\"busy_pct\":1,\"memory\":{},\"distro\":\"a\\u12\"}", "{\"schema\":\"1\",\"busy_pct\":1,\"memory\":{}}"}) {
