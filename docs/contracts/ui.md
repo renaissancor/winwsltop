@@ -56,10 +56,11 @@ of the collector's line.
    stall is a blank gap, never a zero, and time from before watching began is a faint `·` in every other
    cell of the bottom row. Each graph is labelled with the average and maximum of its raw samples over the
    window, never the minimum. Panels are never stacked or summed, and each graph title names its source.
-   Exception, the large CPU panel only: a repeated guest line carries the previous value for one sample,
-   and two in a row are a gap (design section 5). There the `·` is placed by bucket, on the bottom row of
-   the busy plots; the heat block and the lanes have no bottom dot row, so they stay blank before watching
-   began.
+   Exception, wherever a guest figure is kept over time from the large layout's rule: the large CPU panel,
+   panel 4's guest used and cache, and the per-process histories of panels 3 and 4. There a repeated guest
+   line carries the previous value for one sample, and two in a row are a gap (`design/cpu-panel.md` section
+   5). On the large CPU panel the `·` is placed by bucket, on the bottom row of the busy plots; the heat block
+   and the lanes have no bottom dot row, so they stay blank before watching began.
 
 ## How to validate
 
@@ -78,11 +79,12 @@ of the collector's line.
 | item | value |
 |---|---|
 | source | `src/ui` 7635 lines, of which `render.cpp` 3038, `render_check.cpp` 4134, `history.h` 135, `keys.h` 89 |
-| checks | `render_check` 170347, 0 failed, and `lost_check` 143, 0 failed, under `scripts/check.sh --windows` after 01384a4. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
+| checks | `render_check` 168810, 0 failed, and `lost_check` 143, 0 failed, under `scripts/check.sh --windows` after 679fc5f. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
 | sizes checked | widths 1 to 300, heights 1 to 66, every panel, hostile numbers at every size and the other cases at every third. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, ranges 1 and 10 minutes; 4, 8, 14, 20, 21, 40, 64 and 65 threads |
-| frame bytes, 131 by 40 | noisy 33287, noisy at 64 threads 41208, panel 2 13492, panel 4 10504 (7745 at 100 by 34). Budget 48 KiB |
-| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.32 to 0.67 ms. Budget 5 ms |
-| history push | 0.032 ms with 390 processes, the per-process ring included |
+| frame bytes, 131 by 40 | noisy 33249, noisy at 64 threads 41170, panel 2 13492, panel 4 10508 (7749 at 100 by 34). Budget 48 KiB |
+| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.31 to 0.69 ms. Budget 5 ms |
+| history push, MSVC | 0.032 ms with 390 processes, the per-process ring included. 2000 processes with 50 new a second: 0.161 ms mean, 0.297 ms worst, `selected_processes` included; the first push at 2000 takes 2.72 ms, once. `render_check measure`, one run each |
+| per-process slots | never shrink: a spike to 2000 processes leaves about 4100 slots, about 20 MB, until exit |
 | history | 10 minutes in 601 samples, five memory floats a sample for panel 4; the per-process ring keyed by side, pid, start and name, a first reading stored as a gap, every slot written every push, and past max(1024, twice the rows of the newest sample) the slot least recently seen reused, never a selected one; nothing is refused |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once for the older panels; conhost not checked. The live key checks of `design/panel-grammar.md` section 8 (Korean IME, ConPTY and OpenSSH, numpad with NumLock off) are not run |
@@ -102,8 +104,11 @@ of the collector's line.
   Needs a snapshot field and a ledger row, or that row of the design changed.
 - A collector that restarted while its line still reads is not named in the large layout: `collector_status`
   has no row there. The overall panel keeps it.
-- `read_wsl` still runs three times a sample and allocates each time, in `lost_tracker`, `history::push` and `render`. The ring
-  itself allocates nothing after the first push.
+- `read_wsl` runs about 7 times a sample on panels 3 and 4, and allocates each time: once each in `lost_tracker`,
+  `history::push` and `render`, and in `selectable_lists` every time it is called, which is through `selection_of`
+  for each panel body and footer that draws a selection, and from `apply_key` on `tab` and the arrows. Parse the line once a sample and hand the
+  view to each reader? Not urgent at the measured frame times; left for later. The ring itself allocates nothing after
+  its slots are made.
 
 ## Decision log
 
@@ -135,6 +140,8 @@ of the collector's line.
   partial step back during a stall. On the large layout the unwatched cells are the buckets before the one
   watching began in, `floor(t / bucket)` as `make_axis` places a sample; the 60 s panels keep main's placement,
   as `plot_columns` places one. `render_check` reads both gutters, `  0│` and `  0 │`.
+  Superseded in part by slice 1 (2026-11-02): `history` keeps 10 minutes in 601 samples, so the clearing stall is
+  600 s, not 900 s, and there is no 15-minute span.
 - 2026-11-02, the owner, recorded by core. The shared panel grammar from machtop (`docs/panels.md`, "Shared
   grammar" and "Decisions") overrules winwsltop's existing panel design. It supersedes three refusals in
   `docs/design/cpu-panel.md`: list focus and the sort key (section 6), the `[s]` sort (section 4, "Refused, and
@@ -198,6 +205,21 @@ of the collector's line.
   that still tell bottom from top. Below 80 columns panel 4 stacks its two sides. The design's check "never a line
   with a Windows and a guest GiB figure" holds as "guest figures only right of the divider", since the stacked and
   side-by-side layouts share rows differently.
+- 2026-11-02. Slice 1 as built, the final audit's fixes (679fc5f).
+  - `selected_processes` returns the keys remembered, pid, name and the start last seen, not the rows they resolve to,
+    so a selected process that has left the list is still named and its slot kept. A key with no start is matched by
+    pid and name. A list never moved in names nothing: its first row is in the sample.
+  - Eviction. `push` marks the whole current sample seen before placing any row, so a new process never takes the slot
+    of one in the same sample. Slots let go go on a free list, used first. At the cap it gathers, once a push, the slots
+    that are used, not in the sample and not kept, least recently seen first. A backward clock step moves each process's
+    last-seen time with its samples, so the slots do not grow. Slots never shrink.
+  - The zoom label (supersedes the label part of the commit 7 entry above). A printed range spans at least 4 units of
+    its last printed digit: GiB with 1 to 3 decimals while the top is at least 1 GiB, else MiB with 0 to 3. The bottom
+    is rounded down and the top up, so every sample drawn lies inside the printed range. `avg` and `max` take one
+    decimal fewer than the range, never under one. A gutter prints the two ends only if both fit 4 columns whole, else
+    it is blank. The cores history's gutter prints its floor as `0.05` whole.
+  - `?` marks added: the guest's `load?`, `steal?` and process count (`guest count? 64`, `top 8 of 64?`), on panels 1,
+    3 and 4, and panel 3's rule line says `? not yet checked` whenever the guest's line is read.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.
@@ -223,6 +245,7 @@ of the collector's line.
   collector when the two 1 Hz loops slip, and blanks about 2 s. A WSL value is plotted at the
   Windows sample time. A backward clock step shifts the stored samples using `interval_s`, and clears
   them at a stall of the keep span, 900 s since the large CPU panel; a forward step reads as a stall.
+  Superseded in part: the keep span is 600 s since slice 1, and a cell is the mean of its samples, not the highest.
 - 2026-11-01. Keys are decided on the virtual key code, so Delete does nothing and `q` should work
   under Hangul input. Not tried with a real IME: if it delivers `VK_PROCESSKEY`, `q` does not quit in
   that mode. Ctrl+C always does.

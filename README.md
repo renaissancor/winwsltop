@@ -60,8 +60,9 @@ all, even under load. winwsltop reads both sides at once and keeps them apart:
   memory panels, and a JSON record you can save.
 
 Each graph names its source. Windows and WSL figures are never added together, because they
-describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero. On the CPU panel, one late WSL
-reading carries the last value for a second, because the two sides' clocks slip.
+describe overlapping resources, and a sample that never arrived shows as a gap in the graph, not a zero. On the CPU panel, on the memory
+panel's WSL used and cache, and in the selected process's history, one late WSL reading carries the last value
+for a second, because the two sides' clocks slip.
 
 ## Get it
 
@@ -87,7 +88,7 @@ The binary isn't code-signed, so Windows SmartScreen may warn you the first time
 | `q` | Quit. `ㅂ` with Korean input on, Alt+Q and Ctrl+C work too |
 
 A figure marked `?` is one the tool shows but has not yet checked against a second source on this machine:
-Windows cache and WSL swap. The WSL process memory column reads `stat rss`, the kernel's `/proc/pid/stat`
+Windows cache, WSL swap, WSL load, WSL steal and WSL's process count. The WSL process memory column reads `stat rss`, the kernel's `/proc/pid/stat`
 figure, which runs a little below what `ps` shows.
 
 The CPU panel is built for a dark terminal. A light theme stays readable only in part.
