@@ -448,8 +448,9 @@ into its threads.
   `range`. Memory zooms, as machtop's `sample_series` does at 246c2cb: spread is max(max - min, floor), the
   bottom max(0, min - 0.1 spread) and the top the bottom plus 1.2 spread, with a floor of 64 MiB here, so a few
   pages of noise do not fill the plot. Labels are GiB or MiB with the fewest decimals that tell bottom from top.
-  This rule, as built in 01384a4, replaces the ranges in the mockups below, which were worked out by hand and
-  follow no rule: the build prints `range 24.7–24.8 GiB` where the mockup has `24.75–24.82`. The guest's are
+  This rule, as built in 01384a4, rules over the ranges in the mockups below. Those were computed by the same
+  formula in a scratch script, but printed with decimals picked by hand, which no rule stated: the build prints
+  `range 24.7–24.8 GiB` where the mockup has `24.75–24.82`. The guest's are
   from rows; Windows' carry `?`.
 - **Each side's processes by memory**, Windows by working set and the guest by RSS, both `?`, with
   `N of M`, scrolling and `tab` as panel 3.
