@@ -1,104 +1,143 @@
 # Panel grammar, slice 1
 
-Status: PROPOSED, 2026-11-02, for review. Nothing here is decided until `contracts/ui.md` records it.
+Status: PROPOSED, 2026-11-02, revised after a UX review and a systems review ("fix first", both at 326a2e1)
+and machtop's answers. Nothing here is decided until `contracts/ui.md` records it.
 
-The shared grammar is machtop's `docs/panels.md` (outside this repository), which the owner made
-authoritative on 2026-11-02: where it is clear, winwsltop follows it, and `design/cpu-panel.md`'s
-refusals of list focus, the `s` sort and per-process history are superseded. [`../panels.md`](../panels.md)
-is winwsltop's reading of it and is being corrected in parallel, so every claim below was checked
-against [`../measurable.md`](../measurable.md) and the code, not taken from it. Rows are cited by claim.
+The shared grammar is machtop's `docs/panels.md`, branch `grammar-tab`, commit f7e24f2, section "Shared
+grammar" (outside this repository). The owner made it authoritative on 2026-11-02: where it is clear,
+winwsltop follows it, and `design/cpu-panel.md`'s refusals of list focus, the `s` sort, scrolling and
+per-process history are superseded. [`../panels.md`](../panels.md) records winwsltop's decisions on it.
+Every claim about a counter below was checked against [`../measurable.md`](../measurable.md) and the code,
+and rows are cited by claim.
 
 ## 0. The slice, and what it cuts
 
 | part | in this slice |
 |---|---|
-| 1. Keys and footer | Yes, on every panel |
-| 2. Selection, focus and the selected row's history | Panel 3 only, both layouts, with a per-process ring |
-| 3. Panel 4 Memory | Yes, from the rows that exist, with what it waits for named on the panel |
-| 4. Graph labels, average and maximum | Yes, every braille graph, and rule 8 changes |
+| 1. Figures without a ledger row | A mark, `?`, on every figure the screen shows without a row, and experiment 0 to clear them |
+| 2. Keys and footer | Every panel |
+| 3. Selection, scrolling and the selected row's history | Panel 3, both layouts, with a per-process ring and the seam change it needs |
+| 4. Panel 4 Memory | Built |
+| 5. Graphs: scale, mean cells, `avg` and `max` | Every braille graph; rule 8 changes |
 
 Cut from the brief, and why:
 
-- **Panel 1 gets no selection.** machtop's overview is a summary, not a list to select in
-  (`list_rows` returns nothing for it, and its footer omits `↑↓` there), and winwsltop's target panel 1
-  has no process lists at all ([`../panels.md`](../panels.md), 1, "Not here"). Adding focus to two lists
-  that the next slice removes is wasted work.
-- **Panel 2 gets no selection yet.** Its lists sit under five graphs and are 3 and 2 rows long in the
-  `busy` fixture. Making it list-on-top means re-laying the panel, and ROADMAP 1 (Windows holders first,
-  `unattributed` between device and split) re-lays it too. Doing both at once, in slice 2, lays it out
-  once. `←`/`→` and the labels of part 4 do reach panel 2 now.
-- **`s` sorts nothing yet.** In machtop `s` acts on panel 7 only; panels 3 and 4 sort on the one figure
-  their question is about. Panel 7 is not built, so `s` and `ㄴ` are decoded and tested but act nowhere,
-  and no footer offers them.
-- **Panels 5 to 8 are not built.** Their keys switch to a page that says so (part 1).
-- **The contention verdict is left out**, as the owner asked: its threshold is open.
+- **Panel 1 gets no selection.** machtop's overview is a summary, not a list to select in (its
+  `list_rows` returns nothing there), and winwsltop's target panel 1 has no process lists
+  ([`../panels.md`](../panels.md), 1, "Not here").
+- **Panel 2 gets no selection yet.** Making it list-on-top re-lays the panel, and ROADMAP 1 (Windows holders
+  first, `unattributed`) re-lays it too; slice 2 does both at once. `←`/`→` and part 5 reach panel 2 now.
+- **`s` sorts nothing yet.** In machtop it acts on panel 7, which is not built. `s` and `ㄴ` are decoded and
+  tested, act nowhere and are in no footer.
+- **Panels 5 to 8 are not built.** Their keys open a page that says so.
+- **The contention verdict is left out**, as the owner asked.
 
-## 1. Keys and footer
+## 1. Figures without a ledger row
+
+`CLAUDE.md` rule 2: nothing is built on a counter before the ledger records it. The reviews found that
+today's screen already shows several figures with no row, and that this design leaned on one:
+
+| figure | on screen today | why it has no row |
+|---|---|---|
+| Windows available, and used and free from it | panel 1 `MEM`, panel 3 `RAM` | "Windows collector checked against Windows" checks total only |
+| Windows commit, cache | panel 1 `MEM` | same |
+| Windows per-process working set | panels 1 and 3, `WS GiB` | the `vmmemWSL` row checks one process, not the read for every process |
+| Guest per-process cores | panels 1 and 3, the WSL lists, and their sort | no row reads `/proc/pid/stat` against another clock. The 19.718 in "Guest busy stays high when the host has taken the vCPU" is the burner's own count, not `/proc` |
+| Guest per-process RSS | panels 1 and 3, `RSS GiB` (`render.cpp` lines 1765, 1839, 1847) | no row |
+| Guest swap used | panel 1 `MEM` | no row |
+
+**Decision: these stay where they are, and on any panel that shows them their label carries `?`**, in the
+`dim` tone, and the panel's rule line says once `? not yet checked`. A figure that is not on screen today
+and has no row, Windows private bytes, is not shown. The alternative, hiding them all until experiment 0,
+empties panel 4 and the WSL list of panel 3; it is the owner's choice (section 8).
+
+**Experiment 0, read only, no load, no GPU** (evidence; the owner decides whether it runs): Windows
+available, commit and cache against `Get-Counter` and Task Manager; several processes' working set and
+private bytes against `Get-Process`; guest swap against `free -b`; guest RSS against `/proc/pid/status`
+`VmRSS` and `ps`; guest per-process cores against `ps` `TIME` over the same window; guest used and cache
+beside `vmmemWSL` working set read in one sample; and that a process's create time (Windows) and
+`starttime` (guest) are constant while it lives and differ after a pid is reused. Each row that lands
+removes its `?`; nothing moves.
+
+Rows the slice does build on: Windows total and `vmmemWSL` working set ("Windows collector checked against
+Windows"); guest total, used and cache ("WSL collector checked", "Guest memory vs host", read live);
+guest memory pressure ("CPU contention checked", "`/proc/pressure` memory and io", 0 in every case);
+Windows per-process cores ("CPU contention checked", "Windows loses work to the VM": the burner's process
+time read 19.320 cores alone and 13.253 beside WSL), which do not add up to busy ("CPU counters checked",
+"Process cores account for Windows busy": No), so no process's history is summed or drawn against busy.
+
+## 2. Keys and footer
 
 **Question:** what can I do on this panel, and where else can I go?
 
 ### Keys
 
-| key | does | where |
+| key | does | panels | in the footer |
+|---|---|---|---|
+| `1`-`8`, numpad 1-8 with NumLock on | Switch panel; 5-8 open a "not built yet" page | all | the panel list |
+| `↑` `↓` | Move the selection in the focused list; stop at its ends, no wrap; a long list scrolls (part 3) | 3, 4 | there only |
+| `←` | Range further back: 1 → 5 → 10 minutes, clamped | 2, 3, 4 | there only, with the range |
+| `→` | Range nearer: 10 → 5 → 1 minute, clamped | 2, 3, 4 | there only |
+| `←` `→` on 1 and 5-8 | Nothing: no graph to change. The range is kept | | no |
+| `↑` `↓` on 1, 2 and 5-8 | Nothing: no list to select in | | no |
+| `tab` | Focus the next selectable list, wrapping; nothing with one | 3, 4, when both lists are selectable | then only |
+| `s`, `ㄴ` | Nothing in this slice | | no |
+| `esc` | Panel 1. Every panel keeps its focus and selections; the range is kept | all | no |
+| `q`, `ㅂ` | Quit. Ctrl+C still quits | all | yes |
+| `t` | Nothing: the range replaces it | | no |
+| Shift+Tab | Nothing (machtop f7e24f2: there is no Shift+Tab; its parser drops `ESC [ Z` whole) | | no |
+
+The range is one setting for the screen, as machtop's `view_state.range`; `←` further back and `→` nearer,
+clamped, as machtop's `apply`.
+
+### Decoding
+
+winwsltop reads key records from `CONIN$` with VT input off (`console.cpp`), so `←` arrives as `VK_LEFT`
+and `esc` as `VK_ESCAPE`, never as bytes: a bare `esc` cannot be the start of an arrow's sequence, and the
+grammar's short delay is met by construction. A key is decided by its virtual key code first, as today.
+If that gives nothing, as under an IME reporting `VK_PROCESSKEY`, the character decides through machtop's
+2-set Korean table: U+3142 `ㅂ` is `q`, U+3134 `ㄴ` is `s`. Ctrl held means no key. Shift is allowed,
+because some layouts need it for digits, except with Tab.
+
+Three cases only a person can check live, at 100 by 34 and 131 by 40:
+
+| case | what happens | mitigation in this slice |
 |---|---|---|
-| `1`-`8`, numpad 1-8 | Switch panel. 5-8 show a "not built yet" page | everywhere |
-| `↑` `↓` | Move the selection one row in the focused list. Stop at the list's first and last row, no wrap; a long list scrolls to follow (part 2) | panels 3, 4 |
-| `←` | Range further back: 1 → 5 → 10 minutes, clamped | panels with a graph: 2, 3, 4 |
-| `→` | Range nearer: 10 → 5 → 1 minute, clamped | same |
-| `tab` | Focus the next selectable list on the panel, wrapping. With one selectable list, nothing | panel 3, and only while both sides' lists are selectable |
-| `s`, `ㄴ` | Nothing in this slice (panel 7) | none |
-| `esc` | Panel 1. Each panel keeps its focus and its selections; the range is kept | everywhere |
-| `q`, `ㅂ` | Quit. Ctrl+C still quits | everywhere |
-| `t` | Nothing: the range replaces it | none |
-| Shift+Tab | Nothing, as in machtop, whose parser drops `ESC [ Z` | none |
+| OpenSSH into Windows: `esc` then a key, typed fast, reaches the console host as one Alt+key | Today Alt+key is dropped, so both keys are lost | **Taken:** Alt+key without Ctrl decodes as `esc` then the key. winwsltop gives Alt no meaning, so nothing else changes. AltGr arrives as Ctrl+Alt and stays dropped |
+| Korean IME holding a lone `ㅂ` in composition | If the IME reports only `VK_PROCESSKEY` and commits nothing, `q` waits for the next key | None cheap: the virtual key is tried first, which is `Q` under most IMEs. Ctrl+C always quits |
+| Numpad with NumLock off | The arrows arrive as `VK_UP` and the others without the enhanced flag, the same codes, so they work | None needed. With NumLock on, numpad 2, 4, 6 and 8 switch panels, as digits do |
 
-The range is one setting for the whole screen, as machtop's `view_state.range` is. Copied from machtop:
-`←` is further back, `→` nearer, both clamped (machtop `apply`).
-
-**Decoding.** winwsltop reads key records from `CONIN$` with VT input off (`console.cpp`), so `←` arrives
-as `VK_LEFT` and `esc` as `VK_ESCAPE`, never as bytes. A bare `esc` cannot be mistaken for the start of
-an arrow's sequence, so the shared grammar's short delay is met by construction and no timer is added.
-Where bytes do arrive, over ConPTY or OpenSSH, the console host's own input parser turns them into key
-records before winwsltop reads them; that path is not checked (section 7).
-
-A key is decided by its virtual key code first, as today. If that gives nothing, as under an IME that
-reports `VK_PROCESSKEY`, the character decides, through machtop's 2-set Korean table (`keys.cpp`
-`kJamo`): U+3142 `ㅂ` is `q`, U+3134 `ㄴ` is `s`. Ctrl or Alt held means no key, as today. Shift is
-allowed, because some layouts need it for digits, except with Tab.
-
-The decoder becomes a pure function in a new `src/ui/keys.h`, with no Windows header, so `render_check`
-can run it on Linux too: `key_event key_for(uint16_t vk, char32_t ch, uint32_t modifiers)`. Applying a
-key also becomes pure, `apply_key(view_state&, key_event, snapshot, history, width, height)` in
-`render.h`, so the behaviour `handle_keys` holds today, which has no automated check
-(`contracts/ui.md`, Current state), is checked. `main.cpp` keeps the polling, the redraw on a key and
-the quit.
+The decoder is a header-only pure function, `src/ui/keys.h`, `inline key_event key_for(uint16_t vk,
+char32_t ch, uint32_t modifiers)` with the jamo table `inline constexpr`, so `msvc.cmd` needs no change
+and `render_check` includes it and runs it on Linux too. Applying a key is pure as well,
+`apply_key(view_state&, key_event, const snapshot&, const history&, int width, int height)` in
+`render.cpp`, so what `handle_keys` does today without a check (`contracts/ui.md`, Current state) is
+checked. `main.cpp` keeps the polling, the redraw on a key and the quit.
 
 ### Footer
 
-machtop's `footer()`: the panels on the left, the keys that act on this panel on the right. When both
-do not fit, every panel but the current one shrinks to its number. Labels are machtop's short ones,
-with winwsltop's own 8: `overview gpu cpu mem disk net procs` and `vm cost`. Three tones: the current
-panel lit (`title`, bold), a built panel `dim`, a panel not built yet `faint`. The right side lists
-only keys that act here, with the range's current value.
+machtop's `footer()`: the panels on the left, the keys that act on this panel on the right; when both do
+not fit, every panel but the current one shrinks to its number. Labels are machtop's short ones with
+winwsltop's 8: `overview gpu cpu mem disk net procs vm cost`. The current panel is lit (`title`, bold), a
+built one `dim`, one not built `faint`, which f7e24f2 made shared grammar.
 
-Footers generated from those rules, in order: panel 1 at 131 and 100 columns, panel 3 at 131 and 100,
-panel 4 at 100, panel 2 at 80:
+Footers, in order: panel 1 at 131 and 100 columns, panel 3 at 131 and 100, panel 4 at 100, panel 2 at 80:
 
 ```
 1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                                                           q quit
 1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                            q quit
 1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                            ↑↓ select  tab list  ←→ 1 min  q quit
 1 2 3 cpu 4 5 6 7 8                                            ↑↓ select  tab list  ←→ 1 min  q quit
-1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost       ↑↓ select  ←→ 1 min  q quit
+1 2 3 4 mem 5 6 7 8                                            ↑↓ select  tab list  ←→ 1 min  q quit
 1 2 gpu 3 4 5 6 7 8                                             ←→ 1 min  q quit
 ```
 
-Tones the text cannot show, on panel 3's lines: `3 cpu` is lit; `1`, `2` and `4` are `dim`; `5` to `8` are `faint`.
+On panel 3's lines, `3 cpu` is lit, `1`, `2` and `4` are `dim`, `5` to `8` `faint`.
 
-A panel that is not built, at 100 by 34 (title, then this, then the footer):
+A panel not built, at 100 by 34: the title, then this, then the footer.
 
 ```
-DISK ──────────────────────────────────────────────────────────────────────────────── not built yet
+DISK ───────────────────────────────────────────────────────────────────────────────── not built yet
 
 Which disk is busy, and is it the WSL disk? The disk rows are on panel 1 until this panel is built.
 ```
@@ -108,135 +147,149 @@ Each of 5 to 8 carries its question from [`../panels.md`](../panels.md) and wher
 
 ### State and cost
 
-`view_state` in `render.h`, replacing `view` and `render_options`: the panel, the range index, and per
-panel the focused list and one selection key per list (part 2). Under 1 KiB, nothing per second. A key
-redraws the last snapshot at once, as `1`-`3` do today. Frame cost: none beyond the footer's own text.
+`view_state` in `render.h` replaces `view` and `render_options`: the panel, the range, and per panel the
+focused list and a selection key per list. Under 1 KiB, nothing per second. A key redraws the last
+snapshot at once, as `1`-`3` do today.
 
 ### render_check must check
 
-- `key_for`: every row of the key table, numpad digits, `9` and `0` give nothing, `T` gives nothing,
-  Ctrl+Q and Alt+Q give nothing, Shift+1 gives `1`, Shift+Tab gives nothing, `VK_PROCESSKEY` with U+3142
-  gives `q` and with U+3134 gives `s`, and every other jamo maps as machtop's table does.
-- `apply_key` sequences: `3 tab tab` returns focus to Windows; `3 tab esc 3` keeps WSL focused; `↓↓↓ esc 3`
-  keeps the third row; `←←←` stops at 10 minutes and `→→→` at 1; `tab` on panels 1, 2 and 4 changes
-  nothing; `tab` on panel 3 with WSL unavailable changes nothing; `↑` on the first row stays.
-- Footer: at widths 1 to 300 on every panel, never wider than the screen, the current panel always
-  named, `tab list` only on panel 3 with two selectable lists, `←→` only where a graph is drawn, no `[t]`,
-  and `s` nowhere.
-- `--text` is unchanged: no history, no footer.
+- `key_for`: every row of the key table; numpad digits; `9`, `0` and `T` give nothing; Ctrl+Q gives
+  nothing; Alt+Q gives `esc` then `q`; Ctrl+Alt+Q gives nothing; Shift+1 gives `1`; Shift+Tab gives
+  nothing; `VK_PROCESSKEY` with U+3142 gives `q` and with U+3134 `s`; every other jamo maps as machtop's
+  table does.
+- `apply_key`: `3 tab tab` returns focus to Windows; `3 tab esc 3` keeps WSL focused; `↓↓↓ esc 3` keeps the
+  third row; `←←←` stops at 10 minutes, `→→→` at 1; `←` on panel 1 leaves the range; `tab` on 1 and 2
+  changes nothing; `tab` on 3 with WSL unavailable changes nothing; `↑` on the first row stays.
+- Footer at widths 1 to 300 on every panel: never wider than the screen, the current panel always named,
+  `tab list` only where two lists are selectable, `↑↓` only on 3 and 4, `←→` only on 2, 3 and 4, no `[t]`,
+  no `s`.
+- `--text` is unchanged.
 
 ### Out of scope
 
-Mouse, paging (`PgUp`, `PgDn`, `Home`, `End`), a help overlay, saving the range between runs, Shift+Tab.
+Mouse, paging (`PgUp`, `PgDn`, `Home`, `End`), a help overlay, saving the range between runs.
 
-## 2. Selection, focus and the selected row's history
+## 3. Selection, scrolling and the selected row's history
 
-**Question:** what has this one process been doing over the last minutes, on its own side?
+**Question:** what has this one process been doing over the last minutes?
 
-Panel 3 is where both sides' process lists already sit side by side (`contracts/ui.md` rule 3), so it
-takes the grammar first.
+Panel 3 is where both sides' process lists already sit side by side (`contracts/ui.md` rule 3).
 
 ### Behaviour
 
-- Each list keeps one selection, as a key: pid and name. machtop keys by name because its rows are apps
-  grouped by name; winwsltop's rows are processes, and the `contended` fixture alone has 41 rows named
-  `svchost.exe`. The name stops a reused pid from inheriting a selection.
-- With no key, or a key whose row has left the list, the selection is the list's first row, as in
-  machtop. The key is kept, so the row is selected again if it comes back. Before any `↑`/`↓` the history
-  therefore follows the busiest process. `↑`/`↓` set the key from the row the selection is on.
-- **Lists scroll** (shared grammar, "Selection"; `panels.md` Decisions, fab781f), copied from machtop's
-  `app_table` and `move_selection`:
-  - `↑`/`↓` move through every row of the list, not only those shown, and stop at its ends without
-    wrapping.
-  - With `n` rows of space, the first row drawn is 0 while the selection is in the first `n`, else
-    `selection - n + 1`: once the selection passes the bottom it stays on the last row shown. Nothing is
-    stored for the offset; it is worked out from the selection each frame, so moving back up keeps the
-    selection on the bottom row until the top of the list is shown again. No paging.
-  - Each list ends with a `dim` line, `N of M`: `N` the rows shown, `M` the rows in the list, as machtop's
-    `status_row`. The guest list adds the guest's own count, `6 of 6 · 64 in the guest`, because the
-    collector's line holds the top 30 by cores then RSS plus every holder (`PROTOCOL.md`, `processes`), so
-    `↓` reaches those and no further.
-  - The count moves out of the list's heading, which was `top 6 of 46 by cores` and now reads `by cores`:
-    `top` stops being true once the list scrolls.
-  - The unfocused list scrolls by its own selection too, so `tab` back finds it where it was.
-- Focus starts on Windows. The focused list's heading is lit and its selected row is marked `▶` on the
-  selection background (machtop's `44;62;76`). The other list's heading is `dim`, and its selected row
-  has no `▶` and no background.
-- **Each column draws its own list's selected row** under its list. The focused column's history heading
-  is lit and the other's `dim`. This is the one place the slice reads the grammar rather than copies it:
-  machtop has one list per panel, so "the history below follows focus" has no two-column case there.
-  Drawing one history across both columns would break `design/cpu-panel.md`'s rule that a column shares
-  one time axis and Windows and WSL never share a graph. Open question 1 in section 7.
-- Under the lists, per column: a heading, then a 2-row braille plot on the column's time axis, fixed 0 to
-  100 percent of that side's threads (rule 8). The heading gives the name, pid and `avg` and `max` in
-  cores over the range (part 4), and what 100 is: `of 20 threads` on Windows, `of 20 vCPUs` in the guest,
-  shortened to `of 20` below 131 columns.
-- Every list row gains a 2-column lead, `▶ ` or blank, taken from the name column, as machtop's
-  `table_row` does. A `cores` of `100.00` still fits.
+From machtop f7e24f2, "Selection" and "tab":
 
-Windows per-process cores are a measurement (ledger, CPU contention checked, "Windows loses work to the
-VM": the burner read 19.320 cores alone and 13.253 beside WSL), and they do not add up to busy (ledger,
-CPU counters checked, "Process cores account for Windows busy": No), so a process's history is never
-summed with another's or drawn against the side's total. A guest process's cores are what the guest
-counted, not what it got (ledger, CPU contention checked, "Guest busy stays high when the host has taken
-the vCPU": the burner's threads counted 19.718 cores while `Hv VP` ran 5.735), which is why its heading
-says `vCPUs` and the head row above already says `WSL short ≈14`.
+- Each list remembers its selected row by identity: a process by pid and name. If that row leaves the list
+  the selection falls to the first row; the key is kept, so the row is selected again if it returns. Before
+  any `↑`/`↓` the history follows the busiest process.
+- `↑`/`↓` move through every row of the list and stop at its ends. With `n` rows of space the first row
+  drawn is 0 while the selection is in the first `n`, else `selection - n + 1`, so past the bottom the
+  selection stays on the last row shown. The offset is worked out from the selection each frame, as
+  machtop's `app_table` does; no paging. Each list scrolls by its own selection, focused or not.
+- Each list ends with a `dim` `N of M` line, rows shown of rows in the list. The guest's adds its own count,
+  `6 of 6 · 64 in the guest`, because the collector's line holds the top 30 by cores then RSS plus every
+  holder (`PROTOCOL.md`, `processes`). The list headings drop `top N of M`, which scrolling makes untrue.
+- Focus starts on Windows. The focused list's heading is lit and its selected row marked `▶` on the
+  selection background (machtop's `44;62;76`); the other's heading is `dim` and shows no `▶`. Every list row
+  has a 2-column lead for the `▶`, taken from the name column.
+- **One history, full width, below both lists**, following focus and titled with its list:
+  `Windows · cpu_burn.exe 31000 · cores` (f7e24f2: "never one per list (two side by side invite comparing
+  rows the panel keeps apart)", which is `contracts/ui.md` rule 3). Cores are drawn from 0 to the window's
+  maximum rounded up to 1, 2 or 5 times a power of ten, never below 0.05 cores (machtop's per-app CPU
+  floor), and the title's right side reads `avg A  max M  scale S` (part 5). A guest process's history is
+  titled `cores?, guest's count`: what the guest counted, not what it got ("Guest busy stays high when the
+  host has taken the vCPU"), and with no row of its own yet (part 1).
 
-### The per-process ring: added in this slice
+### Rows
 
-Panel 3's history and panel 4's both need it, and without it selection is decoration. Cost at 1 s × 10
-minutes:
+Head row 4 (`RAM 41.2/63.7 GiB  free 22.5 GiB`) and the 2-row RAM plots go to panel 4: 3 rows. The
+`N of M` line, the history's title and its 2 rows take 4. Rows are given in this order: title, rule, 3
+heads, lanes, caption, heat block and axis, list headings, `N of M`, 3 list rows, the history, the footer;
+then the busy plots 3 rows; then list rows up to 6; then the busy plots up to 12; then the history up to 6;
+then the lists. **A list keeps at least 3 rows**: below that the history goes first, and selection still
+shows. So at 34 the busy plots have 3 rows and the lists 5; at 40, 8 and 6.
+
+The small layout, under 100 columns or too short for the large one, stacks the two lists as today and puts
+the one history under both, by the same 3-row rule.
+
+The busy plots' `avg` and `max` sit on the column's axis row, in place of `each cell N s` where that does
+not fit (part 5), so they show at 34 rows too.
+
+### The per-process ring
+
+Panel 3's history and panel 4's need it. Cost at 1 s × 10 minutes:
 
 | item | size |
 |---|---|
-| One process slot: 601 samples × (cores, memory) as `float` | 4808 bytes |
-| This machine: 360 Windows processes (ledger, "Windows collector checked against Windows") and at most 30 guest processes plus holders (`PROTOCOL.md`, `processes`) | about 400 slots, 1.9 MB |
-| Cap | 1024 slots, 4.9 MB |
-| The existing ring after the range change: 601 × 608 bytes (`sizeof(history_sample)` with g++) | 365 KB, down from 548 KB at 901 |
+| A slot: 601 samples × (cores, memory) as `float` | 4808 bytes |
+| This machine: 360 Windows processes ("Windows collector checked against Windows") and the guest's 30 plus holders | about 400 slots, 1.9 MB |
+| Slots kept | 1024, or twice the rows of the newest sample if that is more; 4.9 MB at 1024 |
+| The existing ring after the range change: 601 × 608 bytes (`sizeof(history_sample)` with g++), plus 5 floats for panel 4 | 377 KB, down from 548 KB at 901 |
 
-- The slots live beside the existing ring in `history`, indexed by the same ring position, so a stall, a
-  clock step or a clear moves them with it at no cost. `kKeepMs` becomes 600000 and `kCapacity` 601,
-  since the range now stops at 10 minutes.
-- A slot is keyed by side, pid and a hash of the name; one hash lookup per process per sample. A slot no
-  process has filled for `kKeepMs` is freed. Slots come in chunks of 64, allocated when needed and never
-  moved, so there is no allocation per second.
-- Windows: every row but pid 0, cores and working set. Guest: every row in the collector's line, cores
-  and RSS, with the large layout's repeat rule (a repeated line carries its value once, a second repeat is
-  a gap; ui rule 8's exception), and a gap from `kStaleS`. RSS is stored but not drawn until it has a
-  ledger row (part 3).
+- Slots sit beside the existing ring, indexed by the same ring position, so a stall, a clock step or a clear
+  moves them with it. `kKeepMs` becomes 600000 and `kCapacity` 601, since the range stops at 10 minutes.
+- **Identity.** A slot is keyed by side, pid and start: Windows' create time, which `processes.cpp` already
+  reads for its own key, and the guest's `starttime`, which `collector.py` already reads for its own. A reused
+  pid, with the same name or not, gets a new slot. Both need the seam change below.
+- **A first reading is not a measurement.** A process's first sample reads 0 cores because there is no
+  earlier time to subtract (`src/host/processes.cpp` lines 104-111, `rated`; `collector.py` line 145, `if old
+  else 0.0`). The ring stores it as NaN. This needs the seam change below.
+- **Every push writes every slot.** A slot whose process did not report writes NaN at the new position;
+  otherwise the value from 10 minutes earlier would show when the ring wraps. 1024 slots × 2 floats is
+  8 KB of writes a second.
+- **At the cap the slot least recently seen is cleared and reused; nothing is refused.** A guest parallel
+  build that churns the top 30 fills slots with short-lived compilers, and they are the first reused. The
+  selected rows' slots are never taken. An evicted process that returns starts again, with a gap before.
+- Windows: every row but pid 0, cores and working set. Guest: every row in the line, cores and RSS, with the
+  large layout's repeat rule (a repeated line carries its value once, a second repeat is a gap) and a gap
+  from `kStaleS`.
+
+### The seam change it needs
+
+Both are additive keys, so `schema` stays 1, as `vm.vmmem_cores_known` did (`contracts/core.md`, decision of
+2026-11-01: a flag beside the value, not a changed value):
+
+| where | field | unit and source |
+|---|---|---|
+| `snapshot.h` `process_row`, the record | `cores_known` | bool: the row had an earlier reading, `processes.cpp`'s `rated` |
+| same | `create_time` | 100 ns since 1601, `SystemProcessInformation` `CreateTime`, already read |
+| `PROTOCOL.md` `processes`, `wsl_view` | `rated` | bool: false on a process's first reading |
+| same | `start` | clock ticks since boot, `/proc/pid/stat` field 22, already read |
+
+If the owner prefers `cores` to read `null` on a first reading instead, that changes the meaning of a key
+and raises `schema` in `PROTOCOL.md`, `collector.py` and `wsl_view.cpp` in one commit (`contracts/core.md`
+rule 4). The ledger rows these identity fields want are in experiment 0.
 
 ### When the selected row has no history yet
 
 | case | the history shows |
 |---|---|
-| Just launched | The plot's unwatched cells are faint `·`, as every graph's are; `avg` and `max` over what exists |
-| Process first seen 40 s ago, range 5 minutes | Blank before it was first seen, which is a gap: watched, nothing to measure. Drawn from then on |
-| Guest process outside the collector's top 30 for a while | Blank for those samples |
-| `vmmemWSL` cores unknown (`vmmem_cores_known` false) | Blank, never 0 |
-| 1024 slots in use | One `dim` line in place of the plot: `history not kept: over 1024 processes`. Never a flat line |
-| WSL unavailable or stale | The WSL list says why, as today, nothing is selectable there, and `tab` does nothing |
-| Window too small for the history | machtop's rule: the history is dropped before the lists go under 3 rows each; selection still shows |
+| Just launched | Faint `·` in the unwatched cells, as every graph; `avg` and `max` over what exists |
+| A process's first reading | Blank for that sample, never 0 |
+| First seen 40 s ago, range 5 minutes | Blank before then: watched, nothing to measure |
+| Guest process outside the top 30 for a while | Blank for those samples |
+| `vmmemWSL` cores unknown | Blank, never 0 |
+| WSL unavailable or stale | The WSL list says why, as today; nothing to select there; `tab` does nothing |
+| Window too small | The history goes before a list falls under 3 rows |
 
 ### Mockups
 
-From `render_check`'s `contended` fixture, as `render_check contended 131 40` and `100 34` print it
-today, with RAM removed and the history added. Every plot is drawn by `render.cpp`'s own `make_axis`,
-`bucket_cells` (mean, part 4) and `plot_block` on the fixture's history; the per-process values are what
-`history::push` would store from the fixture's rows; widths and heights were checked by script. The
-fixture's process rows do not change at the onset (`quiet_moment` leaves them), so both histories are
-flat; `render_check` should give `cpu_burn.exe` and `cpu_burn` 0 cores in `quiet_moment`, and then they
-show the step. Focus is on Windows.
+From `render_check contended 131 40` and `100 34` as they print today, with RAM removed and the rest
+added. **The fixture is amended first, as `render_check` must be:** in `quiet_moment` both burners read 0
+cores, so the histories step where the busy plots do. Every plot is drawn by `render.cpp`'s own
+`make_axis`, `bucket_cells` (mean) and `plot_block` on that history; the values are what `history::push`
+would store from the fixture's rows; widths and heights were checked by script.
 
-131 by 40:
+131 by 40, focus on Windows:
 
 ```
 winwsltop  21:43:51  data 0.4 s old  every 1.0 s
-CPU ─────────────────────────────────────────────────────────────────────── two systems' own views of overlapping work, never added
+CPU ─────────────────────────────────────────────────── ? not yet checked · two systems' own views of overlapping work, never added
 100%  WINDOWS  user 65 · kernel 6 · VM 29                        │ 100%  WSL  user 99 · sys 1 · iowait 0, as idle
       whole machine, includes the WSL VM                         │       guest view, inside the VM · Ubuntu-24.04
 VM ran 5.76 of 20 threads · ≈41 ready, 13 VM                     │ WSL short ≈14 of 20 vCPUs, inferred · load 19.8
-busy  avg 60%  max 100%                                          │ busy  avg 60%  max 100%
 100 │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │ 100 │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+    │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │     │                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
@@ -256,27 +309,27 @@ E0  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀�
 E2  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v14 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 E4  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v16 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 E6  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v18 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-     -60s ──────────────── each cell 1.0 s ───────────────── now │      -60s ──────────────── each cell 1.0 s ───────────────── now
-Windows  by cores                                                │ WSL  by cores, dxg: no usage measured
-   cores     pid name                          thr WS GiB        │    cores     pid name                     thr RSS GiB st dxg
-▶  13.25   31000 cpu_burn.exe                   21    0.1        │    19.72    4121 cpu_burn                  21     0.1  R
-    5.76    7120 vmmemWSL                       22   10.1 WSL VM │     0.10    4388 python3                   12     2.0  S holder
-    0.42       4 System                        310    0.0        │     0.04    2000 node                      11     0.4  S
-    0.31   11736 vmwp.exe                       40    0.1 WSL VM │     0.03    2001 sshd                       1     0.0  S
-    0.22    9001 카카오톡.exe                   60    0.4        │     0.02    2002 systemd                    1     0.0  S
-    0.20   10000 svchost.exe                    12    0.0        │     0.01    2003 dbus-daemon                1     0.0  S
+     -60s ──── busy avg 60% max 100% · each cell 1.0 s ───── now │      -60s ──── busy avg 60% max 100% · each cell 1.0 s ───── now
+Windows  by cores                                                │ WSL  by cores?, guest's count · dxg: no usage measured
+   cores     pid name                         thr WS GiB?        │   cores?     pid name                     thr RSS GiB? st dxg
+▶  13.25   31000 cpu_burn.exe                  21     0.1        │    19.72    4121 cpu_burn                  21      0.1  R
+    5.76    7120 vmmemWSL                      22    10.1 WSL VM │     0.10    4388 python3                   12      2.0  S holder
+    0.42       4 System                       310     0.0        │     0.04    2000 node                      11      0.4  S
+    0.31   11736 vmwp.exe                      40     0.1 WSL VM │     0.03    2001 sshd                       1      0.0  S
+    0.22    9001 카카오톡.exe                  60     0.4        │     0.02    2002 systemd                    1      0.0  S
+    0.20   10000 svchost.exe                   12     0.0        │     0.01    2003 dbus-daemon                1      0.0  S
 6 of 46                                                          │ 6 of 6 · 64 in the guest
-cpu_burn.exe 31000 · cores avg 13.25  max 13.25 of 20 threads    │ cpu_burn 4121 · cores avg 19.72  max 19.72 of 20 vCPUs
-100 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │ 100 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-  0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │   0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+Windows · cpu_burn.exe 31000 · cores                                                                  avg 7.73  max 13.25  scale 20
+ 20 │                                                      ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀
+  0 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                            ↑↓ select  tab list  ←→ 1 min  q quit
 ```
 
-100 by 34:
+100 by 34, after `tab`: focus on WSL, so its heading is lit and `▶` is in its list:
 
 ```
 winwsltop  21:43:51  data 0.4 s old  every 1.0 s
-CPU ──────────────────────────────────────── two systems' own views of overlapping work, never added
+CPU ──────────────────── ? not yet checked · two systems' own views of overlapping work, never added
 100%  WINDOWS  user 65 · kernel 6 · VM 29        │ 100%  WSL  user 99 · sys 1 · iowait 0, as idle
       whole machine, includes the WSL VM         │       guest view, inside the VM · Ubuntu-24.04
 VM ran 5.76 of 20 threads · ≈41 ready, 13 VM     │ WSL short ≈14 of 20 vCPUs, inferred · load 19.8
@@ -296,374 +349,377 @@ E0  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀�
 E2  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v14 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 E4  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v16 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 E6  │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │ v18 │▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
-     -60s ──────── each cell 1.4 s ───────── now │      -60s ──────── each cell 1.4 s ───────── now
-Windows  by cores                                │ WSL  by cores, dxg: no usage measured
-   cores     pid name          thr WS GiB        │    cores     pid name      thr RSS GiB st dxg
-▶  13.25   31000 cpu_burn.exe   21    0.1        │    19.72    4121 cpu_burn   21     0.1  R
-    5.76    7120 vmmemWSL       22   10.1 WSL VM │     0.10    4388 python3    12     2.0  S holder
-    0.42       4 System        310    0.0        │     0.04    2000 node       11     0.4  S
-    0.31   11736 vmwp.exe       40    0.1 WSL VM │     0.03    2001 sshd        1     0.0  S
-    0.22    9001 카카오톡.exe   60    0.4        │     0.02    2002 systemd     1     0.0  S
+     -60s ───── busy avg 60% max 100% ────── now │      -60s ────── busy avg 60% max 100% ────── now
+Windows  by cores                                │ WSL  by cores? · dxg: no usage measured
+   cores     pid name         thr WS GiB?        │   cores?     pid name      thr RSS GiB? st dxg
+   13.25   31000 cpu_burn.exe  21     0.1        │ ▶  19.72    4121 cpu_burn   21      0.1  R
+    5.76    7120 vmmemWSL      22    10.1 WSL VM │     0.10    4388 python3    12      2.0  S holder
+    0.42       4 System       310     0.0        │     0.04    2000 node       11      0.4  S
+    0.31   11736 vmwp.exe      40     0.1 WSL VM │     0.03    2001 sshd        1      0.0  S
+    0.22    9001 카카오톡.exe  60     0.4        │     0.02    2002 systemd     1      0.0  S
 5 of 46                                          │ 5 of 6 · 64 in the guest
-cpu_burn.exe 31000 · avg 13.25 max 13.25 of 20   │ cpu_burn 4121 · avg 19.72 max 19.72 of 20
-100 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │ 100 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-  0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │   0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+WSL · cpu_burn 4121 · cores?, guest's count                           avg 11.50  max 19.72  scale 20
+ 20 │                                        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+  0 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 1 2 3 cpu 4 5 6 7 8                                            ↑↓ select  tab list  ←→ 1 min  q quit
 ```
 
-Against today's frames: head row 4 (`RAM 41.2/63.7 GiB  free 22.5 GiB`) and the 2-row RAM plots are gone,
-3 rows. The history takes 3 rows under the lists and the `N of M` line one more. Rows go in this order:
-title, rule, 3 heads, lanes, heat block and axis, list headings, `N of M`, 3 list rows, the history, the
-footer; then the busy plots' 3 rows; then list rows up to 6; then the busy label row (part 4); then the
-busy plots grow. So at 34 the lists show 5 rows, one fewer than `design/cpu-panel.md`'s 6, and the label
-row does not fit; at 40 they show 6, the label row is there, and the busy plots have 7 rows, down from 9.
-The sixth row at 34 is the cost of the `N of M` line; the list scrolls, so no process is out of reach. At 100 the onset cell reads `⣤`, the
-mean of a quiet and a busy second, where today's peak drew `⣿` (part 4).
-
-Tones: `Windows` and the left history heading lit, `WSL` and the right one `dim`; the `▶` row on the
-selection background.
+`avg 7.73`: `cpu_burn.exe` read 13.25 cores in the 35 samples since the onset and 0 in the 25 before. At 100
+the onset cell of the busy plots reads `⣤`, the mean of a quiet and a busy second (part 5).
 
 ### State and cost
 
 | | |
 |---|---|
-| Memory | the ring above, about 1.9 MB here, at most 4.9 MB |
-| Push | about 400 hash lookups and 800 float writes a second. Budget: under 0.5 ms with MSVC `/O2`, measured by `render_check measure` |
-| Frame | two `bucket_cells` passes over at most 601 samples. Budget: the 5 ms frame build, now 0.32 to 0.69 ms |
-| Bytes | same rows as the RAM plots it replaces, plus one background run. Under 48 KiB on the noisy fixture |
+| Memory | the ring above, about 1.9 MB here, 4.9 MB at 1024 slots |
+| Push | about 400 lookups, 800 value writes and the NaN writes, a second. Budget under 0.5 ms with MSVC `/O2`, measured by `render_check measure` |
+| Frame | one history over at most 601 samples. Budget 5 ms, now 0.32 to 0.69 ms |
+| Bytes | about the RAM plots' it replaces, plus one background run; under 48 KiB on the noisy fixture |
 
 ### render_check must check
 
-- The ring: a process seen, then gone for `kKeepMs`, frees its slot; 1025 processes give the
-  `history not kept` line and no plot; a stall of `kKeepMs` clears slots with the ring; a backward clock
-  step keeps a slot's values in their samples; a pid reused under another name starts a new slot; a
-  repeated guest line carries once and the second repeat is a gap; a stale line is a gap; pid 0 never
-  gets a slot.
-- Selection: default is the first row; a key whose row leaves the list falls back to the first and
-  comes back when it returns; `▶` appears exactly once on the panel, in the focused list; the unfocused
-  list has no `▶`; the history heading names the selected row's pid.
-- The history: at 100 by 34 and 131 by 40 for all four fixtures; never a 0 where the slot is NaN; the
-  unwatched `·` on a fresh start; `vCPUs` in the right heading and `threads` in the left at 131.
-- Scrolling, on a list of 46 in 5 rows: `↓` 4 times keeps row 1 drawn first; the fifth `↓` draws rows
-  2 to 6 with the selection last; `↓` at row 46 stays; `↑` from 46 keeps the selection on the bottom row
-  until row 5, then the list is drawn from row 1; `N of M` reads `5 of 46` throughout; the guest line's
-  `· 64 in the guest`; no heading says `top`.
-- Rows: at 34 the lists show 5 rows and at 40 they show 6; at heights 17 to 66 nothing overlaps; hostile names in the
-  heading are made safe; frame bytes under budget.
-- Nothing on panel 3 says `RAM`.
+- The ring: a process gone for `kKeepMs` frees its slot; at the cap the least recently seen slot is reused,
+  a selected one never, and no process is refused; a slot that missed a sample reads NaN there after the
+  ring wraps, not its old value; a stall of `kKeepMs` clears the slots; a backward clock step keeps a slot's
+  values in their samples; a reused pid with the same name and another start gets a new slot; a first
+  reading (`cores_known` or `rated` false) is NaN; a repeated guest line carries once and a second repeat is
+  a gap; a stale line is a gap; pid 0 gets no slot.
+- Selection: default first row; a row that leaves falls back to the first and comes back when it returns;
+  exactly one `▶` on the panel, in the focused list; the history's title starts with the focused list's
+  name and names the selected pid.
+- Scrolling on 46 rows in 5: `↓` 4 times keeps row 1 drawn first; the fifth draws rows 2 to 6 with the
+  selection last; `↓` at 46 stays; `↑` from 46 keeps the selection on the bottom row until row 5, then the
+  list is drawn from row 1; `5 of 46` throughout; `· 64 in the guest`; no heading says `top`.
+- The history at 100 by 34 and 131 by 40 for all four fixtures: `scale 20` for the burner, `scale 0.05` for
+  an idle process, never a 0 where the slot is NaN; `guest's count` in a WSL title.
+- Rows: 5 list rows at 34 and 6 at 40; at heights 17 to 66 nothing overlaps; hostile names in the title are
+  made safe; frame bytes under budget; nothing on panel 3 says `RAM`; every `?` column carries `?`.
 
 ### Out of scope
 
-Selection on panels 1 and 2, paging, per-thread rows, a history of GPU percent per process (slice 2,
-with panel 2), and opening a process into its threads.
+Selection on panels 1 and 2, paging, per-thread rows, per-process GPU history (slice 2), opening a process
+into its threads.
 
-## 3. Panel 4 Memory
+## 4. Panel 4 Memory
 
-**Question:** where is physical memory going, on each side, and how much of the machine does the VM hold?
-
-### What has a row, and what waits
-
-| figure | shown | ledger |
-|---|---|---|
-| Windows total | yes | "Windows collector checked against Windows": total memory 63.75 GiB both |
-| `vmmemWSL` working set | yes | same section: 10.15 GiB both |
-| Per-process working set, Windows | yes, the list | the same read: `processes.cpp` fills every row's working set and `vm.vmmem_working_set` from one field, so the `vmmemWSL` check is a check of one row, not of many |
-| Guest total, used (total less available), cache | yes | "WSL collector checked", "Guest memory vs host": read live, not checked against a second tool |
-| Guest pressure, memory | yes | "CPU contention checked", "`/proc/pressure` memory and io": observed, 0 in every case |
-| Windows available, commit, cache | **waits** | no row: only total is checked |
-| Guest swap used | **waits** | no row |
-| Guest per-process RSS | **waits** | no row |
-| Windows private bytes | **waits** | no row, and not on screen today |
-| Whether the guest's cache is held as `vmmemWSL` working set | **not shown** | the one reading read the two minutes apart ("Guest memory vs host") |
-
-**How a waiting figure is shown:** its place holds `waits for a ledger row`, `dim`, never a number. The
-WSL list is that sentence until RSS has a row, so panel 4 has one selectable list and no `tab`. The guest
-and `vmmemWSL` sit in their own columns and are never compared on screen, so nothing needs to stand in
-for the hypothesis.
-
-Panel 1 shows Windows available, commit and cache, guest swap and guest RSS today, and panel 3 shows
-Windows used and free, all without a row, against `CLAUDE.md` rule 2, as disk and network were before
-`TODO.md` item 20. Section 8 asks for the item and the experiment that closes both. The experiment reads
-only and starts no load. When its rows land, each `waits` turns into its number in the same place, and
-the WSL list appears in the right column with the geometry of the left.
+**Question:** where is physical memory going on each side, and how much of the machine does the VM hold?
 
 ### Layout
 
-Two columns, as panel 3: heads, then each side's list by memory, then the selected row's history,
-as machtop's `list_body`: the history takes `clamp((height - head) / 3, 3, 12)` rows, here
-`(height - 8)`, and none when the list would go under 5 rows. The default selection is the first row,
-which is `vmmemWSL` whenever the VM is the largest working set, so the panel opens on the VM's
-history. The plot is 0 to 100 percent of the side's total; its heading gives `avg` and `max` in GiB.
+- **Heads**, one format in both columns: `SIDE  used U of T GiB · cache C`, then the side's label, then
+  its other figures: commit on Windows, swap and `PSI mem 0.00% avg10` in the guest.
+- **The VM on its own row**, full width, away from the guest's figures: `VM  vmmemWSL working set 10.1 GiB
+  · Windows' view of the VM, included in WINDOWS`. Never compared with the guest's used plus cache: whether
+  the guest's cache is held in that working set is unchecked ("Guest memory vs host" read the two minutes
+  apart), and experiment 0 reads them in one sample.
+- **Each side's used and cache over the range**, a 2-row plot each with a title giving `avg`, `max` and
+  `range`. Memory zooms, as machtop's does: from a little under the window's minimum to a little over its
+  maximum, never narrower than 64 MiB here, so a few pages of noise do not fill the plot. The guest's are
+  from rows; Windows' carry `?`.
+- **Each side's processes by memory**, Windows by working set and the guest by RSS, both `?`, with
+  `N of M`, scrolling and `tab` as panel 3.
+- **One history, full width**, following focus, titled `Windows · vmmemWSL 7120 · working set?`. Zooming,
+  never narrower than 4 MiB, machtop's per-app floor. The default selection is the first row, which is
+  `vmmemWSL` while the VM holds the largest working set, so the panel opens on the VM's history.
+
+Rows: title, rule, 3 heads, the VM row, 2 used-and-cache blocks of 3 rows, list headings 2, `N of M`, the
+history's title, the footer: 17 fixed. The history takes `clamp((height - 16) / 3, 2, 12)` plot rows and
+the lists the rest, but a list keeps at least 3 rows and the history gives way first. At 40: 8 and 15; at
+34: 6 and 11.
 
 ### Mockups
 
-From `render_check busy` with `demo_minute`, the fixture with Windows memory and a guest line. Its 5 s
-stall shows as the gap in the history. The 40 `svchost.exe` rows are the fixture's own. At 131 by 40 the
-selection is on the default first row; at 100 by 34 it is after 16 presses of `↓`, on the 17th row, so the
-list has scrolled and the selection sits on its last row shown; the history then shows that `svchost.exe`,
-0.04 percent of the machine, its bottom dot row only.
+From `render_check busy` with `demo_minute`, the fixture with Windows memory and a guest line; its 5 s stall
+shows as the gap in every history, and the 40 `svchost.exe` rows are the fixture's own. Its memory figures
+do not change over the minute, so each zoomed plot is a flat line near its floor with the range printed.
 
-131 by 40:
+131 by 40, default selection:
 
 ```
 winwsltop  21:43:50  data 1.2 s old  every 1.0 s
-MEMORY ────────────────────────────────────────────────────────────────── two systems' own views of overlapping memory, never added
-63.7 GiB  WINDOWS  total                                         │ 7.3/31.2 GiB  WSL  used · cache 7.0 GiB
-          whole machine, includes the WSL VM                     │               guest view, inside the VM · Ubuntu-24.04
-VM  vmmemWSL working set 10.1 GiB, Windows' view                 │ pressure mem 0 · swap waits for a ledger row
-available, commit, cache wait for a ledger row                   │
-                                                                 │
-Windows  by working set                                          │ WSL  processes by RSS wait for a ledger row
-   WS GiB     pid name                              cores        │
-▶   10.15    7120 vmmemWSL                           3.10 WSL VM │
-     7.00    9002 Game.Shipping-Win64-Test-with-a-…  2.84        │
-     0.38    9001 카카오톡.exe                       0.22        │
-     0.08   11736 vmwp.exe                           0.31 WSL VM │
-     0.04   10000 svchost.exe                        0.20        │
-     0.04   10004 svchost.exe                        0.20        │
-     0.04   10008 svchost.exe                        0.19        │
-     0.03   10012 svchost.exe                        0.19        │
-     0.03   10016 svchost.exe                        0.18        │
-     0.03   10020 svchost.exe                        0.18        │
-     0.03   10024 svchost.exe                        0.18        │
-     0.03   10028 svchost.exe                        0.17        │
-     0.03   10032 svchost.exe                        0.17        │
-     0.03   10036 svchost.exe                        0.16        │
-     0.03   10040 svchost.exe                        0.16        │
-     0.03   10044 svchost.exe                        0.16        │
-     0.03   10048 svchost.exe                        0.15        │
-17 of 46                                                         │
-                                                                 │
-vmmemWSL 7120 · working set avg 10.15  max 10.15 GiB of 63.7     │
-100 │                                                            │
-    │                                                            │
-    │                                                            │
-    │                                                            │
-    │                                                            │
-    │                                                            │
-    │                                                            │
-    │                                                            │
-    │⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤     ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤ │
-  0 │⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿     ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿ │
-1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                                      ↑↓ select  ←→ 1 min  q quit
+MEMORY ────────────────────────────────────────────── ? not yet checked · two systems' own views of overlapping memory, never added
+WINDOWS  used? 24.7 of 63.7 GiB · cache? 12.0                    │ WSL  used 7.3 of 31.2 GiB · cache 7.0
+         whole machine, includes the WSL VM                      │      guest view, inside the VM · Ubuntu-24.04
+         commit? 31.0 of 80.0 GiB                                │      swap? 0.0 GiB · PSI mem 0.00% avg10
+VM  vmmemWSL working set 10.1 GiB · Windows' view of the VM, included in WINDOWS
+used? avg 24.8 max 24.8 · range 24.75–24.82 GiB                  │ used avg 7.3 max 7.3 · range 7.28–7.35 GiB
+    │                                                            │     │
+    │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀     ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │     │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀     ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀
+cache? avg 12.0 max 12.0 · range 11.99–12.07 GiB                 │ cache avg 7.0 max 7.0 · range 6.99–7.07 GiB
+    │                                                            │     │
+    │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀     ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │     │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀     ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀
+Windows  by working set?                                         │ WSL  by RSS?
+   WS GiB?     pid name                             cores        │   RSS GiB?     pid name                                       st
+▶    10.15    7120 vmmemWSL                          3.10 WSL VM │       6.00    4121 python3                                    R
+      7.00    9002 Game.Shipping-Win64-Test-with-a…  2.84        │       2.26    2000 python3                                    S
+      0.38    9001 카카오톡.exe                      0.22        │       2.18    2001 ollama                                     S
+      0.08   11736 vmwp.exe                          0.31 WSL VM │       2.10    2002 node                                       S
+      0.04   10000 svchost.exe                       0.20        │       2.01    2003 cargo                                      S
+      0.04   10004 svchost.exe                       0.20        │       2.00    4388 한글추론기                                 S
+      0.04   10008 svchost.exe                       0.19        │       1.93    2004 clang++                                    S
+      0.03   10012 svchost.exe                       0.19        │       1.84    2005 rustc                                      S
+      0.03   10016 svchost.exe                       0.18        │       1.76    2006 ld.lld                                     S
+      0.03   10020 svchost.exe                       0.18        │       1.68    2007 sshd                                       D
+      0.03   10024 svchost.exe                       0.18        │       1.59    2008 systemd                                    S
+      0.03   10028 svchost.exe                       0.17        │       1.51    2009 dbus-daemon                                S
+      0.03   10032 svchost.exe                       0.17        │       1.42    2010 python3                                    S
+      0.03   10036 svchost.exe                       0.16        │       1.34    2011 ollama                                     S
+      0.03   10040 svchost.exe                       0.16        │       1.26    2012 node                                       S
+15 of 46                                                         │ 15 of 29 · 64 in the guest
+Windows · vmmemWSL 7120 · working set?                                                  avg 10.15  max 10.15  range 10.14–10.22 GiB
+10.2│
+    │
+    │
+    │
+    │
+    │
+    │
+10.1│⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶           ⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶⣶
+1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost                            ↑↓ select  tab list  ←→ 1 min  q quit
 ```
 
-100 by 34:
+100 by 34, after 16 presses of `↓`: the 17th row is selected, the list has scrolled and the selection sits on
+its last row shown:
 
 ```
 winwsltop  21:43:50  data 1.2 s old  every 1.0 s
-MEMORY ─────────────────────────────────── two systems' own views of overlapping memory, never added
-63.7 GiB  WINDOWS  total                         │ 7.3/31.2 GiB  WSL  used · cache 7.0 GiB
-          whole machine, includes the WSL VM     │       guest view, inside the VM · Ubuntu-24.04
-VM  vmmemWSL working set 10.1 GiB                │ pressure mem 0 · swap waits for a ledger row
-available, commit, cache wait for a ledger row   │
-                                                 │
-Windows  by working set                          │ WSL  processes by RSS wait for a ledger row
-   WS GiB     pid name              cores        │
-     0.04   10000 svchost.exe        0.20        │
-     0.04   10004 svchost.exe        0.20        │
-     0.04   10008 svchost.exe        0.19        │
-     0.03   10012 svchost.exe        0.19        │
-     0.03   10016 svchost.exe        0.18        │
-     0.03   10020 svchost.exe        0.18        │
-     0.03   10024 svchost.exe        0.18        │
-     0.03   10028 svchost.exe        0.17        │
-     0.03   10032 svchost.exe        0.17        │
-     0.03   10036 svchost.exe        0.16        │
-     0.03   10040 svchost.exe        0.16        │
-     0.03   10044 svchost.exe        0.16        │
-▶    0.03   10048 svchost.exe        0.15        │
-13 of 46                                         │
-                                                 │
-svchost.exe 10048 · avg 0.03 max 0.03 GiB        │
-100 │                                            │
-    │                                            │
-    │                                            │
-    │                                            │
-    │                                            │
-    │                                            │
-    │                                            │
-  0 │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀   ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │
-1 overview  2 gpu  3 cpu  4 mem  5 disk  6 net  7 procs  8 vm cost       ↑↓ select  ←→ 1 min  q quit
+MEMORY ─────────────── ? not yet checked · two systems' own views of overlapping memory, never added
+WINDOWS  used? 24.7 of 63.7 GiB · cache? 12.0    │ WSL  used 7.3 of 31.2 GiB · cache 7.0
+         whole machine, includes the WSL VM      │      guest view, inside the VM · Ubuntu-24.04
+         commit? 31.0 of 80.0 GiB                │      swap? 0.0 GiB · PSI mem 0.00% avg10
+VM  vmmemWSL working set 10.1 GiB · Windows' view of the VM, included in WINDOWS
+used? avg 24.8 max 24.8 · range 24.75–24.82 GiB  │ used avg 7.3 max 7.3 · range 7.28–7.35 GiB
+    │                                            │     │
+    │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀   ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │     │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀   ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀
+cache? avg 12.0 max 12.0 · range 11.99–12.07 GiB │ cache avg 7.0 max 7.0 · range 6.99–7.07 GiB
+    │                                            │     │
+    │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀   ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ │     │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀   ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀
+Windows  by working set?                         │ WSL  by RSS?
+   WS GiB?     pid name             cores        │   RSS GiB?     pid name                        st
+      0.04   10008 svchost.exe       0.19        │       6.00    4121 python3                     R
+      0.03   10012 svchost.exe       0.19        │       2.26    2000 python3                     S
+      0.03   10016 svchost.exe       0.18        │       2.18    2001 ollama                      S
+      0.03   10020 svchost.exe       0.18        │       2.10    2002 node                        S
+      0.03   10024 svchost.exe       0.18        │       2.01    2003 cargo                       S
+      0.03   10028 svchost.exe       0.17        │       2.00    4388 한글추론기                  S
+      0.03   10032 svchost.exe       0.17        │       1.93    2004 clang++                     S
+      0.03   10036 svchost.exe       0.16        │       1.84    2005 rustc                       S
+      0.03   10040 svchost.exe       0.16        │       1.76    2006 ld.lld                      S
+      0.03   10044 svchost.exe       0.16        │       1.68    2007 sshd                        D
+▶     0.03   10048 svchost.exe       0.15        │       1.59    2008 systemd                     S
+11 of 46                                         │ 11 of 29 · 64 in the guest
+Windows · svchost.exe 10048 · working set?                   avg 26.7  max 26.7  range 26.3–31.1 MiB
+ 31 │
+    │
+    │
+    │
+    │
+ 26 │⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤        ⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤
+1 2 3 4 mem 5 6 7 8                                            ↑↓ select  tab list  ←→ 1 min  q quit
 ```
 
-At `←` to 5 minutes the same plot at 100 columns reads, from the same fixture, with the unwatched `·`
-before the 61 s it holds:
+The same history after `←`, at 5 minutes, all its rows: the unwatched `·` before the 61 s the fixture holds,
+and the bottom row the same as above:
 
 ```
-100 │
-  0 │· · · · · · · · · · · · · · · · · ⣀⣀⣀⣀⣀⣀⣀⣀⣀
+ 31 │
+    │
+    │
+    │
+    │
+ 26 │· · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤⣤ ⣤⣤⣤⣤⣤⣤⣤
 ```
 
 ### State and cost
 
-The per-process ring of part 2, no more. The panel draws one history; its frame is smaller than panel 3's.
+The ring of part 3, plus 5 floats a sample for the side figures (Windows used and cache, `vmmemWSL` working
+set, guest used and cache): 12 KB. Four 2-row plots and one history a frame.
 
 ### render_check must check
 
-- The labels `whole machine, includes the WSL VM` and `guest view, inside the VM`, and `waits for a
-  ledger row` for each waiting figure at every size; no number for available, commit, cache, swap or RSS
-  anywhere on panel 4; never one line holding both a Windows and a guest GiB figure.
-- The Windows list sorted by working set, then pid; pid 0 left out; `WSL VM` on `vmmemWSL` and `vmwp.exe`.
-- The default selection is the first row, and its history heading names it.
-- After 16 `↓` at 100 by 34 the list is drawn from row 5 with the 17th row last and marked; `13 of 46`
-  under it; the history heading names pid 10048.
-- WSL stopped: the right column says why; panel 4's footer never offers `tab`.
+- The labels `whole machine, includes the WSL VM` and `guest view, inside the VM`; `?` on Windows used,
+  cache, commit, working set, guest swap and RSS, and on nothing else; never a line holding a Windows and a
+  guest GiB figure; the VM row on its own line.
+- Lists sorted by memory then pid; pid 0 left out; `WSL VM` on `vmmemWSL` and `vmwp.exe`.
+- After 16 `↓` at 100 by 34 the list is drawn from row 7 with the 17th last and marked, `11 of 46` under it,
+  and the history's title names pid 10048.
+- A zoomed plot prints `range` and never draws under its floor; a flat series draws one line, not blank.
+- WSL stopped: the right column says why, and the footer drops `tab`.
 - Sizes 1 to 300 by 1 to 66 for `busy`, `bare` and hostile names; frame bytes under budget.
 
 ### Out of scope
 
-The WSL list until RSS has a row; private bytes and commit per process; growth over the window
-(machtop's panel 4 has it, and it needs a decision on how growth is measured); a sum of Windows used and
-guest used, which counts the guest twice.
+Private bytes and commit per process; growth over the window (machtop's panel 4 has it, and how growth is
+measured is undecided); a sum of Windows used and guest used, which counts the guest twice.
 
-## 4. Graph labels: average and maximum
+## 5. Graphs: scale, mean cells, `avg` and `max`
 
 **Question:** over the range I chose, how loaded was this, typically and at worst?
 
-### Decision
+### Decision, from machtop f7e24f2
 
-machtop's rule, copied:
+1. **A cell is the mean of the samples in its slice of the window; a sample stands for the second before
+   it.** NaN never counts. This replaces the highest sample on the 60 s panels and the peak on the large
+   layout's busy plots; the heat block and the lanes already take the mean.
+2. **`avg` and `max` cover the whole window**, worked out from the samples, not the cells, so a max can sit
+   above every cell. Never the minimum. In the graph's unit. With no sample in the range, no label.
+3. **Scale by measure.** A measure with a real ceiling is drawn 0 to 100%. Any other is drawn from 0 to the
+   window's maximum rounded up to 1, 2 or 5 times a power of ten, never below its floor, and prints
+   `scale` and that top; a graph that zooms prints `range` and its bottom and top.
 
-1. **Every braille graph's cell, or dot column, is the mean of the samples in it.** NaN never counts.
-   This replaces the highest sample on the 60 s panels and the peak on the large layout's busy plots.
-   The heat block and the lanes already take the mean and are unchanged.
-2. **Every braille graph is labelled `avg A max M`** over the selected range, worked out from the
-   samples, not the cells, so a one-second spike the mean flattens still shows in `max`. Never the
-   minimum. In the graph's own unit: percent, GiB, W, cores. Over 100 is printed as measured (rule 5):
-   the `busy` fixture's VM split reads `max 112%`. With no sample in the range, no label, as machtop.
-3. The axis caption `peak over mean · 20 s` becomes `each cell 20 s`, and `collecting: N s of M s` goes:
-   the `·` says it, as in machtop. That also closes the `contracts/ui.md` open question on that caption
-   after a stall.
+| measure | scale | floor |
+|---|---|---|
+| Windows busy, guest busy, GPU utilization, the VM and Windows split, GPU memory of the device, power of its limit | 0 to 100% | |
+| A process's cores, either side | 0 to `scale` | 0.05 cores, machtop's per-app CPU |
+| A process's working set or RSS | zoom, `range` | 4 MiB, machtop's per-app memory |
+| `vmmemWSL` working set; Windows and guest used and cache | zoom, `range` | 64 MiB: whole-machine figures move by tens of MiB, and 4 MiB would draw that as a cliff |
+| Heat block, lanes | the ramp, unchanged | |
 
-Why mean: at 1 minute a cell holds about one sample, so nothing changes; at 10 minutes a 43-cell plot holds
-14 samples a cell, where peak paints any one-second burst as 14 seconds of it, the reason the heat block
-already takes the mean (`design/cpu-panel.md` section 5). `max` keeps the burst's height in words.
+4. **The cell holding the window's maximum** gets one more dot at the maximum's height, above its mean,
+   when a cell holds more than one sample. At 10 minutes on a 43-cell plot a cell holds 14 samples, so a
+   one-second spike to 100% has a mean of about 7, the lowest dot row, and looks like 0. The `max` label
+   says how high but not when; the dot says when. One dot, in the plot's own tone, costs no row. machtop
+   does not do this yet (section 8).
+5. **Over 100.** The split is engine time grouped by side and can pass 100 ("Shares add to 100%": no, in
+   "Experiment 01 result"). The cell clamps; the label prints as measured with a `*` in `watch`, and the
+   same frame puts `*` after the caption `VM level, not exact shares`, which is why. A window with nothing
+   over 100 shows neither.
+6. The axis caption `peak over mean · 20 s` becomes `each cell 20 s`, and `collecting: N s of M s` goes: the
+   `·` says it. That closes the `contracts/ui.md` open question on that caption.
 
-Where the label sits:
+`plot_columns` (`render.cpp` lines 811-834) keeps no count: it takes `std::max` into each dot column. It
+gains a sum and a count per column; a sample adds its value to every column from the one after the previous
+joined sample up to its own, which is the span it stands for, and each column is its sum over its count.
+It also returns the column holding the window's maximum, for item 4. `bucket_cells` already takes the mean.
+
+### Where the label sits
 
 | graph | label |
 |---|---|
-| 60 s-style graphs: panel 2, the small panel 3 | the middle of its own axis row, which costs no row |
-| The large layout's busy plots | the busy label row, head row 4's old place, from 35 rows |
-| Histories of a selected row (parts 2 and 3) | its heading |
-| Heat block, lanes | none: they are colour, and their heads give the instant figure |
+| 60 s panels: panel 2, the small panel 3 | its own axis row, between `-60s` and `now`, which costs no row |
+| The large layout's busy plots | the column's axis row, with `each cell N s` after it where it fits |
+| A history and panel 4's used and cache | its title |
+| Heat block, lanes | none: their heads give the instant figure |
 
 ### Mockup
 
-Panel 2 is otherwise unchanged, so only its axis rows are shown, from `render_check busy 131 40 gpu` and
-`100 34 gpu`, with `avg` and `max` from `demo_minute`'s 56 samples:
+Panel 2's axis rows, from `render_check busy 131 40 gpu` and `100 34 gpu`, with `avg` and `max` over
+`demo_minute`'s 56 samples; its VM split peaks at 112:
 
 131 by 40, rows 18 and 32:
 
 ```
-    -60s ────── avg 60% max 95% ────── now      -60s ───── avg 37% max 112% ────── now      -60s ────── avg 16% max 38% ────── now
+    -60s ────── avg 60% max 95% ────── now      -60s ───── avg 37% max 112%* ───── now      -60s ────── avg 16% max 38% ────── now
     -60s ─────────────── avg 8.4 max 9.8 GiB ─────────────── now      -60s ──────────────── avg 129 max 182 W ──────────────── now
 ```
 
-100 by 34, rows 11, 19 and 26:
+100 by 34, the WSL VM title's second row (row 4), then rows 11, 19 and 26:
 
 ```
-    -60s ───────── avg 60% max 95% ────────── now      -60s ───────── avg 37% max 112% ───────── now
+                                                         VM level, not exact shares*
+    -60s ───────── avg 60% max 95% ────────── now      -60s ──────── avg 37% max 112%* ───────── now
     -60s ───────── avg 16% max 38% ────────── now
     -60s ─────── avg 8.4 max 9.8 GiB ──────── now      -60s ──────── avg 129 max 182 W ───────── now
 ```
 
-Panel 3's busy label row and history headings are in part 2's mockups.
-
 ### Rule 8, proposed text
 
-> Graphs use a fixed 0-100 scale with time on the x axis. A cell is the mean of the samples in it; a
-> measured 0 is the bottom dot row (⣀), a missing sample or a stall is a blank gap, never a zero, and time
-> from before watching began is a faint `·` in every other cell of the bottom row. Each graph is labelled
-> with the average and maximum of its samples over the range, never the minimum. Panels are never stacked
-> or summed, and each graph title names its source.
+> Graphs have time on the x axis. A measure with a real ceiling (a percentage of one core, a device or the
+> whole machine) is drawn 0 to 100; any other is drawn from 0 to the window's maximum rounded up to 1, 2 or
+> 5 times a power of ten, never below its floor, and prints `scale` and that top, or zooms and prints
+> `range`. A cell is the mean of the samples in its slice of the window, and the cell holding the window's
+> maximum also marks it with one dot. A measured 0 is the bottom dot row (⣀), a missing sample or a stall is
+> a blank gap, never a zero, and time from before watching began is a faint `·` in every other cell of the
+> bottom row. Each graph is labelled with the average and maximum of its samples over the window, never the
+> minimum. Panels are never stacked or summed, and each graph title names its source.
 
 The large-layout exception keeps its repeat rule and drops "the plots a peak".
 
 ### render_check must check
 
-- A 10-minute range with one 100 among 0s: the cell is under 100 and the label says `max 100`.
-- `avg` and `max` of a fixture against values worked out by hand, including over 100.
-- No label when every sample in the range is a gap; no `min` anywhere; no `peak over mean` and no
-  `collecting:` in any frame.
-- The labelled axis rows keep `-60s`, `-5m`, `-10m` and `now`, and drop the label before either end.
+- 10 minutes with one 100 among 0s: the cell is under 100, the label says `max 100`, and that cell has the
+  extra dot; at 1 minute no extra dot appears.
+- `plot_columns`: two samples in one column give their mean; a joined gap of two columns takes the later
+  sample in both.
+- `avg` and `max` against values worked out by hand, including over 100; `max 112%*` and the caption's `*`
+  with `demo_minute`, neither with every split value at or under 100.
+- `scale 20` for 13.25 cores, `scale 0.05` for 0.01; `range` on every zoomed plot.
+- No label when every sample in the range is a gap; no `min`, `peak over mean` or `collecting:` anywhere.
+- Labelled axis rows keep `-60s`, `-5m`, `-10m` and `now`, and drop the label before either end.
 
 ### Out of scope
 
-Labels on the heat block and the lanes; a scale other than 0-100 (open question 3).
+Labels on the heat block and the lanes.
 
-## 5. Costs against the budgets
+## 6. Costs against the budgets
 
 | budget (`contracts/ui.md`, `design/cpu-panel.md` section 8) | after this slice |
 |---|---|
-| Frame bytes, 131 by 40, noisy fixture: under 48 KiB, now 33392 | about the same: the history replaces the RAM plots row for row. Asserted |
-| Frame build: under 5 ms, now 0.32 to 0.69 ms | plus two passes over 601 samples. Measured |
-| History: one flat ring, no per-second allocation | 601 samples, 365 KB, plus about 1.9 MB of process slots here, 4.9 MB at most, allocated in chunks |
-| Own CPU: no more than 0.5% of a core above the old build | the push's hash lookups. Measured live as before, two runs |
-| New PDH counters, collector line | none, none |
+| Frame bytes, 131 by 40, noisy fixture: under 48 KiB, now 33392 | about the same: the history replaces the RAM plots. Asserted |
+| Frame build: under 5 ms, now 0.32 to 0.69 ms | plus one history and, on panel 4, four small plots. Measured |
+| History: one flat ring, no per-second allocation | 601 samples, 377 KB, plus process slots, about 1.9 MB here, allocated in chunks of 64 |
+| Own CPU: no more than 0.5% of a core above the old build | the push's lookups and writes. Measured live, two runs |
+| New PDH counters | none |
+| Collector line | two keys a process, `rated` and `start`: about 25 bytes for each of up to 32 rows |
 
-## 6. Build plan
+## 7. Build plan
 
-Small commits, each with `scripts/check.sh` and `--windows`. A commit that changes a signature both
-sides use goes in one commit, owned by ui with core's file changed by request, as `design/cpu-panel.md`
-commit 7 was.
+Small commits, each with `scripts/check.sh` and `--windows`. A commit that changes something both sides use
+is one commit, as `design/cpu-panel.md` commit 2 was. `render_check.cpp` includes `render.cpp`, `history.h`
+and `keys.h`, so every new piece of ui code is in what it checks.
 
 | # | owner | change |
 |---|---|---|
-| 0 | evidence | Memory experiment, read only, no load: Windows available, commit and cache against `Get-Counter` and Task Manager's own figures, several processes' working set and private bytes against `Get-Process`, guest `/proc/meminfo` and swap against `free -b`, guest RSS against `/proc/pid/status`, and guest used plus cache beside `vmmemWSL` working set in one sample. Ledger rows. May run beside 1 to 5 |
-| 1 | ui | Range: `kKeepMs` 600000, `kCapacity` 601, ranges 1, 5 and 10 minutes, the range passed to `plot_columns` and the 60 s `unwatched_cells`. Part 4: mean cells, `avg` and `max` labels, the captions. `t` steps through the new ranges until commit 4. `render_check` |
-| 2 | ui | `src/ui/keys.h` and `.cpp`, `key_for` and the jamo table; `console::poll()` returning a `key_event`, beside `poll_key` until commit 4. `msvc.cmd` `SOURCES` by request to core. `render_check` key table |
-| 3 | ui | `view_state`, `apply_key`, the footer, the unbuilt panels, `render()` taking `view_state`, with the old overload kept forwarding. `render_check` sequences and footers |
-| 4 | ui, core | `main.cpp`: `handle_keys` on `console::poll()` and `apply_key`, help text, `t` gone. The old overload, `poll_key`, `next_span`, `span_key_acts` and `render_options` removed. A fresh auditor reads 1 to 4 |
-| 5 | ui | The per-process ring; panel 3 selection, focus, the history, RAM out. `render_check` |
-| 6 | ui | Panel 4 from the rows that exist when it is built. `render_check` |
-| 7 | core | `README.md` "Use"; `contracts/ui.md` rule 8, decisions and state; `design/cpu-panel.md` superseded notes; `panels.md`; `ROADMAP.md` 2; `TODO.md`. A fresh auditor reads the whole |
+| 0 | evidence | Experiment 0 (part 1). The owner decides whether it runs. It may run beside the rest, and each row it lands is a one-line ui change |
+| 1 | core, collect | **The seam** (part 3): `process_row` `cores_known` and `create_time`; `PROTOCOL.md` `rated` and `start`; `collector.py` and its embedded copy; `processes.cpp`; `wsl_view`; `jsonl.cpp`, `json-output.md`, `check_json.py`. Additive, `schema` stays 1. Before the ring |
+| 2 | ui | Range: `kKeepMs` 600000, `kCapacity` 601, ranges 1, 5 and 10 minutes, passed to `plot_columns` and the 60 s `unwatched_cells`. Part 5: mean cells and the sum and count in `plot_columns`, the maximum's dot, scale by measure, `avg` and `max`, the `*`, the captions. `t` steps the new ranges until commit 5 |
+| 3 | ui | `src/ui/keys.h`, header-only; `console::poll()` returning a `key_event`, beside `poll_key` until commit 5. Key table checks |
+| 4 | ui | `view_state`, `apply_key`, the footer, the unbuilt pages, `render()` taking `view_state` with the old overload kept forwarding |
+| 5 | ui, core | `main.cpp` on `console::poll()` and `apply_key`, help text, `t` gone; the old overload, `poll_key`, `next_span`, `span_key_acts` and `render_options` removed. A fresh auditor reads 1 to 5 |
+| 6 | ui | The `?` marks on panels 1 and 3; the fixture amendment (burners 0 in `quiet_moment`); the per-process ring; panel 3's selection, scrolling, one history; RAM out |
+| 7 | ui | Panel 4 |
+| 8 | core | `README.md` "Use"; `contracts/ui.md` rule 8, decisions and state; `design/cpu-panel.md` notes; `panels.md`; `ROADMAP.md` 2; `TODO.md`. A fresh auditor reads the whole |
 
-`history.h` is ui's (`ARCHITECTURE.md`, `src/ui/`); nothing in this slice touches a seam, `snapshot.h`,
-`PROTOCOL.md` or the record, and `--once`, `--record` and `--text` are unchanged.
+This slice touches both seams, `snapshot.h` and `PROTOCOL.md`, in commit 1, and the record gains two keys.
+`--text` is unchanged.
 
-## 7. Open questions
+## 8. Open questions
+
+**Answered by machtop (f7e24f2), now in the design:** one history, full width, following focus (part 3);
+a process keyed by pid and name; scale by measure (part 5); mean cells and window-wide `avg` and `max`;
+Shift+Tab does nothing; the `faint` tone for panels not built.
 
 For machtop:
 
-1. Two lists side by side: does each keep its own history, the unfocused one `dim` (this design), or
-   does one history follow focus?
-2. Selection key: name for apps, pid and name for processes. Worth one line in the shared grammar?
-3. Scale: winwsltop's rule 8 is fixed 0-100; machtop's `sample_series` scales each series to a nice
-   ceiling and labels it `scale`. The shared text says neither. A process at 0.2 of 20 cores is one dot
-   row here.
-4. A cell is the mean of its samples in machtop's code but not its text. Add it?
-5. machtop's text has `tab`; its code does not yet (`apply` has no case and `key_parser` drops 0x09).
-   Shift+Tab is dropped as `ESC [ Z`; intended?
-6. Footer tones: winwsltop adds a third, `faint` for a panel not built. machtop shows its unbuilt GPU panel
-   like any other.
+1. The dot at the window's maximum (part 5, item 4). Adopt it, or keep the label alone?
+2. The over-100 `*` (part 5, item 5) has no machtop case; it is winwsltop's own.
 
 For the owner:
 
-7. Panel 1 gets no selection and panel 2 waits for slice 2 (section 0).
-8. Panel 4 shows no Windows available, commit or cache and no WSL list until experiment 0's rows land,
-   while panel 1 keeps showing them without a row. Close that gap with the same experiment, or hide them
-   on panel 1 too?
-9. Panel 3 at 34 rows shows 5 list rows, not the design's 6, to make room for `N of M`, and the busy
-   label row appears only from 35 rows. The alternative is a 2-row busy plot at 34.
-10. `collecting: N s of M s` is removed (part 4.3).
-11. Unchecked: the IME fallback with a real Korean IME, and `esc` and the arrows over ConPTY and OpenSSH.
-    `render_check` covers the decoder, not the console; a person runs each key live at 100 by 34 and 131
-    by 40.
+3. Figures already on screen without a ledger row stay, marked `?` (part 1). The alternative is to hide them
+   until experiment 0, which leaves panel 4 with heads and the VM's history only, and panel 3 with no WSL
+   list.
+4. Whether experiment 0 runs. It is read only and starts no load.
+5. The seam change as additive flags (this design) or as `null` cores with a `schema` bump (part 3).
+6. Panel 1 gets no selection and panel 2 waits for slice 2 (section 0).
+7. Panel 3 at 34 rows shows 5 list rows, not `design/cpu-panel.md`'s 6, for the `N of M` line and the
+   history. The other way is a 2-row busy plot at 34.
+8. Alt+key decodes as `esc` then the key, for OpenSSH (part 2). Alt+Q then quits.
+9. Unchecked live: the IME holding a lone `ㅂ`, `esc` and the arrows over ConPTY and OpenSSH, and the
+   numpad with NumLock off. A person runs each key at 100 by 34 and 131 by 40.
 
-## 8. Changes needed in other files
+## 9. Changes needed in other files
 
 Written as requests; this file changes nothing else.
 
 | file | change |
 |---|---|
-| `docs/README.md` | Index this file, or `scripts/check.sh` fails once it is tracked |
-| `docs/contracts/ui.md` | Decision entries for: the range replacing `t`; `tab`, focus and per-column histories; the selection key; the per-process ring and its cap; mean cells and `avg`/`max` labels with rule 8's new text; the caption removed; panel 4 from existing rows. Supersede the 2026-11-01 entries "Where several samples share a column the highest is drawn" and the keys entry for `1`, `2`, `3`, `q`. Close the open question on the `collecting` caption |
-| `docs/design/cpu-panel.md` | A note at sections 4 ("`[s]` sort ... Cut"), 6 (`t`; "No sort key, text entry, scrolling or list focus") and 11 (per-process history) that this file supersedes them; RAM moved to panel 4 |
-| `docs/panels.md` | `tab` agreed (machtop 3e0f34b); range 1, 5, 10 decided; `avg`/`max` decided; panel 4's waits as in part 3 |
+| `docs/contracts/ui.md` | Decision entries: the range replacing `t`; `tab`, focus, scrolling and the one history; the selection key; the ring, its identity, its cap and eviction; scale by measure, mean cells, the maximum's dot, `avg` and `max`, the `*`, with rule 8's new text; the caption removed; the `?` mark; panel 4. Supersede the 2026-11-01 entries "Where several samples share a column the highest is drawn" and the keys entry for `1`, `2`, `3`, `q`. Close the open question on the `collecting` caption |
+| `docs/contracts/core.md` | Decision entry for the seam change of commit 1 |
+| `docs/contracts/collect.md` | `rated` and `start` in the collector; `cores_known` and `create_time` in `processes.cpp` |
+| `docs/design/cpu-panel.md` | Notes at sections 4, 6 and 11 that this file supersedes them; RAM moved to panel 4; 5 list rows at 34 |
+| `docs/panels.md` | The one history, scale by measure, the `?` mark, panel 4 as in part 4 |
 | `docs/ROADMAP.md` | Section 2: per-process history built for cores and memory |
-| `docs/TODO.md` | New item: Windows available, commit, cache, used and free, guest swap and guest RSS on panels 1 and 3 have no ledger row (`CLAUDE.md` rule 2), as item 20 was for disk and network. Owner collect, evidence |
-| `docs/contracts/evidence.md` | The memory experiment of commit 0 as a request |
-| `README.md` | "Use": keys `1`-`8`, `←`/`→`, `↑`/`↓`, `tab`, `esc`, `q`; `t` gone; panel 4 |
-| `scripts/msvc.cmd` | `src/ui/keys.cpp` in `SOURCES` (commit 2) |
+| `docs/TODO.md` | New item: the figures of part 1's table are on screen with no ledger row (`CLAUDE.md` rule 2), as item 20 was for disk and network; owner collect and evidence; closed by experiment 0 |
+| `docs/contracts/evidence.md` | Experiment 0 as a request |
+| `README.md` | "Use": keys `1`-`8`, `←`/`→`, `↑`/`↓`, `tab`, `esc`, `q`; `t` gone; panel 4; what `?` means |
