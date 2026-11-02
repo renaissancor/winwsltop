@@ -74,6 +74,9 @@ and units only). What it does to each `?`:
 | Guest per-process cores | `?` cleared | "Guest per-process cores are `/proc/pid/stat` utime + stime ...": observed, bindings only |
 | Guest swap used | `?` stays | "Guest swap used is `free -b` Swap used": `Not checked`, it read 0 throughout |
 | Guest per-process RSS | relabelled, no `?` | "Guest per-process RSS is `/proc/pid/status` `VmRSS` and `ps` RSS": No. The collector shows `/proc/pid/stat` field 24 times the page size and matches it, which reads up to 2568192 B below `VmRSS` |
+| Guest load | `?` added (679fc5f), `load?` | "`/proc/loadavg`": observed changing, never read against a second source |
+| Guest steal | `?` added (679fc5f), `steal?` | "`/proc/stat` fields move": `steal` `Not checked`, 0 ticks throughout; "`steal` shows lost CPU": False here |
+| Guest process count | `?` added (679fc5f), `guest count?` and `top N of M?` | no row: "WSL collector checked" does not compare the collector's count with another |
 
 Guest RSS keeps its source and is labelled as what it reads: the column heading becomes `stat rss GiB` on
 panels 1, 3 and 4, and a history titled with it says `stat rss`, not `RSS`. The lead's call, 2026-11-02:
@@ -256,13 +259,16 @@ Panel 3's history and panel 4's need it. Cost at 1 s × 10 minutes:
 | A slot: 601 samples × (cores, memory) as `float` | 4808 bytes |
 | This machine: 360 Windows processes ("Windows collector checked against Windows") and the guest's 30 plus holders | about 400 slots, 1.9 MB |
 | Slots kept | 1024, or twice the rows of the newest sample if that is more; 4.9 MB at 1024 |
-| The existing ring after the range change: 601 × 608 bytes (`sizeof(history_sample)` with g++), plus 5 floats for panel 4 | 377 KB, down from 548 KB at 901 |
+| The existing ring after the range change: 601 × 640 bytes (`sizeof(history_sample)` with g++, panel 4's 5 floats included) | 384.6 KB, down from 548 KB at 901 |
 
 - Slots sit beside the existing ring, indexed by the same ring position, so a stall, a clock step or a clear
   moves them with it. `kKeepMs` becomes 600000 and `kCapacity` 601, since the range stops at 10 minutes.
 - **Identity.** A slot is keyed by side, pid and start: Windows' create time, which `processes.cpp` already
   reads for its own key, and the guest's `starttime`, which `collector.py` already reads for its own. A reused
-  pid, with the same name or not, gets a new slot. Both need the seam change below.
+  pid is meant to get a new slot, but that the start differs after reuse is `Not checked` on either side (ledger,
+  "Memory and process collectors checked": no reuse was seen). Until the ledger shows it, the name is the only
+  backstop: a reused pid with the same name and an unchanged start would share the old slot. Both need the seam
+  change below.
 - **A first reading is not a measurement.** A process's first sample reads 0 cores because there is no
   earlier time to subtract (`src/host/processes.cpp` lines 104-111, `rated`; `collector.py` line 145, `if old
   else 0.0`). The ring stores it as NaN. This needs the seam change below.
@@ -405,7 +411,7 @@ the onset cell of the busy plots reads `⣤`, the mean of a quiet and a busy sec
 |---|---|
 | Memory | the ring above, about 1.9 MB here, 4.9 MB at 1024 slots |
 | Push | about 400 lookups, 800 value writes and the NaN writes, a second. Budget under 0.5 ms with MSVC `/O2`, measured by `render_check measure` |
-| Frame | one history over at most 601 samples. Budget 5 ms, now 0.32 to 0.69 ms |
+| Frame | one history over at most 601 samples. Budget 5 ms, now 0.31 to 0.69 ms |
 | Bytes | about the RAM plots' it replaces, plus one background run; under 48 KiB on the noisy fixture |
 
 ### render_check must check
@@ -450,8 +456,9 @@ into its threads.
   pages of noise do not fill the plot. Labels are GiB or MiB with the fewest decimals that tell bottom from top.
   This rule, as built in 01384a4, rules over the ranges in the mockups below. Those were computed by the same
   formula in a scratch script, but printed with decimals picked by hand, which no rule stated: the build prints
-  `range 24.7–24.8 GiB` where the mockup has `24.75–24.82`. The guest's are
-  from rows; Windows' carry `?`.
+  `range 24.7–24.8 GiB` where the mockup has `24.75–24.82`. The final audit's rule (679fc5f, `contracts/ui.md`)
+  then replaced "fewest decimals": at least 4 units of the last digit, the bottom rounded down and the top up. The
+  guest's used and cache rest on ledger rows; Windows' cache carries `?` (part 1).
 - **Each side's processes by memory**, Windows by working set and the guest by RSS, both `?`, with
   `N of M`, scrolling and `tab` as panel 3.
 - **One history, full width**, following focus, titled `Windows · vmmemWSL 7120 · working set?`. Zooming,
@@ -710,8 +717,8 @@ Labels on the heat block and the lanes.
 | budget (`contracts/ui.md`, `design/cpu-panel.md` section 8) | after this slice |
 |---|---|
 | Frame bytes, 131 by 40, noisy fixture: under 48 KiB, now 33392 | about the same: the history replaces the RAM plots. Asserted |
-| Frame build: under 5 ms, now 0.32 to 0.69 ms | plus one history and, on panel 4, four small plots. Measured |
-| History: one flat ring, no per-second allocation | 601 samples, 377 KB, plus process slots, about 1.9 MB here, allocated in chunks of 64 |
+| Frame build: under 5 ms, now 0.31 to 0.69 ms | plus one history and, on panel 4, four small plots. Measured |
+| History: one flat ring, no per-second allocation | 601 samples, 384.6 KB, plus process slots, about 1.9 MB here, allocated in chunks of 64 |
 | Own CPU: no more than 0.5% of a core above the old build | the push's lookups and writes. Measured live, two runs |
 | New PDH counters | none |
 | Collector line: under 8 KiB, see `contracts/collect.md` | two keys a process, `rated` and `start`: 796 bytes more at 30 rows, 4205 to 4213 bytes in all, as built (e37993d) |
