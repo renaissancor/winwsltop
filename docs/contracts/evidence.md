@@ -69,6 +69,11 @@ about this machine lives.
   purpose, by reading a large file in the guest and then dropping or letting it age, and read `vmmemWSL` working
   set and the guest's used and cached in one record line throughout, so whether the working set follows the cache
   can be seen. Disk and memory load, no GPU.
+- Raised by core from the final audit of slice 1, 2026-11-02: two figures that never moved are graded differently.
+  "`/proc/pressure` memory and io" records `memory` as Observed while `some` and `full` were 0 in every case, and
+  "Guest swap used is `free -b` Swap used" is `Not checked` because it read 0 throughout. The screen follows the
+  grades: PSI memory is drawn without `?`, swap with it. Reconcile the two: either PSI memory becomes `Not checked`
+  until it is seen to move, or the ledger says why a constant 0 is enough for one and not the other.
 
 - Done as experiment 06, 2026-11-02 (decision log). Was requested by core for slice 1 (`design/panel-grammar.md`,
   part 1) as experiment 0: read only, no load, no GPU. Windows available, commit and cache against
