@@ -11,7 +11,7 @@ names a defect.
 May read: everything in the repository.
 May write: `LICENSE`, `src/core/`, `src/main.cpp`, `src/record/`, `src/analysis/`,
 `wsl-collector/PROTOCOL.md`,
-`scripts/`, `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/TODO.md`,
+`scripts/`, `docs/design/`, `docs/panels.md`, `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/TODO.md`,
 `docs/contracts/`, `docs/releases/`, `docs/json-output.md`, `CLAUDE.md`, `AGENTS.md`, `README.md`, `.claude/`, `.gitignore`, `.gitattributes`.
 May not write: `src/host/`, `src/gpu/`, `src/wsl/`, `src/ui/`, `experiments/`, `docs/measurable.md`,
 `wsl-collector/collector.py`. A change needed there is written as a request in your report.
