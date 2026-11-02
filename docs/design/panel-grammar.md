@@ -712,9 +712,11 @@ Decided by the owner, 2026-11-02:
 6. Panel 1 gets no selection and panel 2 waits for slice 2 (section 0). Accepted as proposed.
 7. Panel 3 at 34 rows shows 5 list rows (part 3).
 
-Still open, for the owner:
+8. Alt+key decodes as `esc` then the key (part 2), so Alt+Q quits. Closed under the owner's standing decision
+   that keys follow machtop and sshvllmtop's shared grammar (`panels.md`, Decisions): the source is machtop's key parser (`src/keys.cpp` on `grammar-tab`, `key_parser::next`: an ESC followed by any byte but `[` or `O` is `esc` on its own, so Alt+key, which a terminal sends as ESC then the key, reads as `esc` then the key); the grammar's text does not state it yet.
 
-8. Alt+key decodes as `esc` then the key, for OpenSSH (part 2). Alt+Q then quits.
+Still open:
+
 9. Unchecked live: the IME holding a lone `ㅂ`, `esc` and the arrows over ConPTY and OpenSSH, and the
    numpad with NumLock off. A person runs each key at 100 by 34 and 131 by 40.
 
