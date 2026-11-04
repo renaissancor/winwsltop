@@ -120,6 +120,7 @@ totals, rows = snapshot["process_totals"], [row for row in snapshot["processes"]
 if totals["source"] != "derived":
     fail(f"process_totals.source is {totals['source']}")
 # An empty list is a failed read: the whole is unknown, so both figures are null, and only then.
+# Not reached in a live run: the check above already refuses an empty list. Tested with that check removed.
 if not snapshot["processes"]:
     if totals["working_set"] is not None or totals["cores"] is not None:
         fail(f"process_totals is {totals['cores']}, {totals['working_set']} with no processes: both null")

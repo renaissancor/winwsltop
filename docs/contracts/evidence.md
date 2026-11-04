@@ -51,7 +51,7 @@ about this machine lives.
 | raw result files | 56 tracked files under `experiments/*/results/`, 151786 lines in total, counted 2026-11-04 |
 | run with no file | experiment 01 run 1, idle baseline (3 s probe, noted in the ledger only) |
 | trials per case | 1; experiment 03 is one session of 3 windows and 10 network brackets |
-| ledger rows | 161 table rows in 20 tables |
+| ledger rows | 180 table body rows in 22 tables, counted 2026-11-05 |
 | numbers checked against raw files, 2026-11-01 audit | three ranges and four values were off and are corrected; three sections and four rows have no raw file and now say so |
 
 ## Open questions
