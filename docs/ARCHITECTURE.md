@@ -16,6 +16,7 @@ experiments/  ──measured facts──▶  docs/measurable.md  (the evidence l
                │
                ├──▶ src/analysis/attribution.cpp   derives gpu_split
                ├──▶ src/analysis/lost.cpp          infers lost, the only inference and the only figure across the two sides; derives cpu_derived
+               ├──▶ src/analysis/process_totals.h  derives process_totals, the Windows whole of the process rows
                ├──▶ src/record/jsonl.cpp           --once, --record N: one JSON line per snapshot
                └──▶ src/ui/render.cpp              live screen and --text; reads the snapshot and its own history of earlier ones
 
@@ -64,7 +65,7 @@ A target is a check that does not exist yet. Nothing may assume it runs.
 | `scripts/check.sh` passes on the Linux side: embedded collector in sync, ownership complete, docs indexed, links resolve | **exists**, run before every commit |
 | `scripts/check.sh --windows` builds `winwsltop.exe` and `render_check.exe` and runs the render checks | **exists**, needs the Windows toolchain |
 | `scripts/check.sh --windows` also runs `--help`, `--version` and bad arguments, and fails unless `--once` is one JSON line with exactly the keys `scripts/check_json.py` lists, all named in `docs/json-output.md` | **exists**, needs the Windows host |
-| `scripts/check.sh --windows` also builds `lost_check.exe`, which checks each clause of the `lost` gate and replays `experiments/05-cpu-contention/results/run1-record-2026-11-01.txt` through `lost_tracker` | **exists**, needs the Windows toolchain; no load, no live machine |
+| `scripts/check.sh --windows` also builds `lost_check.exe`, which checks each clause of the `lost` gate and `process_totals`, and replays `experiments/05-cpu-contention/results/run1-record-2026-11-01.txt` through `lost_tracker` | **exists**, needs the Windows toolchain; no load, no live machine |
 | `scripts/release.sh vX.Y.Z` builds `dist/winwsltop.exe` from a clean tree after `check.sh --windows`, and refuses a binary that imports a DLL outside its list, holds a private string or debug path in ASCII or UTF-16, lets a planted `wsl.exe`, `json.py`, collector, DLL or manifest take effect, or does not end 8 samples with real GPU, disk, network and live WSL data | **exists**, needs the Windows host; publishes nothing |
 | CI runs `scripts/check.sh` on push | TARGET: no `.github/` exists |
 | Recorded JSONL fixtures under `tests/` that the screen is rendered from | TARGET: `render_check.cpp` builds its snapshots by hand |

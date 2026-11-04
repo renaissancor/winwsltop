@@ -53,7 +53,7 @@ documents true.
 - `winwsltop --once` prints one line that a JSON parser accepts, and every key is in
   `docs/json-output.md` (`scripts/check.sh --windows`).
 - `scripts/lost_check.cpp`, built and run by `scripts/check.sh --windows`: each clause of the `lost` gate by
-  hand, a reset with changing values, `cpu_derived`, every state's and `source` label in the record, and a replay through `lost_tracker` of the fixture
+  hand, a reset with changing values, `cpu_derived`, `process_totals`, every state's and `source` label in the record, and a replay through `lost_tracker` of the fixture
   `experiments/05-cpu-contention/results/run1-record-2026-11-01.txt`, with
   `experiments/05-cpu-contention/results/run1-marks-2026-11-01.txt` to place each case. It starts no load.
 
@@ -227,3 +227,15 @@ documents true.
   is not a number now leaves the field empty and the line read. `check_json.py` accepts `null` and allows N × 0.0005
   below the sum of N rows sent, for per-row rounding. `apply_key` takes the history and `now_ms`, and places the range's
   end as the frame does, so `main.cpp` passes both at step G. `process_totals`' checks live in `lost_check` (E1).
+- 2026-11-04. Slice 2 step E1 built, `docs/design/panel-grammar-slice2.md` section 3, additive, `schema` stays 1.
+  Snapshot: `process_totals` (`known`, bool, false when `processes` is empty, a failed read; `cores`, cores, the sum
+  over rows other than pid 0 whose `cores_known` is true; `working_set`, bytes, the sum over rows other than pid 0).
+  Source: `snapshot.processes`, the same `SystemProcessInformation` reading as the rows, by the header-only
+  `process_totals_of` in `src/analysis/process_totals.h`, called in `main.cpp` once a sample beside `split_gpu`.
+  Ledger: "Windows collector checked against Windows", "Windows per-process working set and private bytes are
+  `Get-Process` ...", "Windows loses work to the VM"; not PDH busy, "Process cores account for Windows busy" being No.
+  Word `derived`. `cores` is NaN, and `null` in the record, also when the list was read but no row has `cores_known`,
+  so a first reading's unmeasured zeros never sum to a measured 0. The record has no `known` key, as the design's
+  table has none: `working_set` is `null` exactly when it is false. The checks the design asks for are in
+  `lost_check` (`totals_cases`), not `render_check`, which is ui's; `check_json.py` asks for `working_set` equal to
+  the rows' sum and `cores` equal to the known rows' within print rounding, stricter than the design's "at or above".
