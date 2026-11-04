@@ -64,7 +64,7 @@ void print_help(FILE* to) {
     "usage: winwsltop [--text | --once | --record N] [--distro NAME]\n"
     "\n"
     "  (no option)    live screen. Keys: 1-8 panel, left/right range 1, 5 or 10 minutes,\n"
-    "                 up/down select a process on panels 3 and 4, tab its other list,\n"
+    "                 up/down select a process on panels 2, 3 and 4, tab the other list on 3 and 4,\n"
     "                 esc panel 1, q or Alt+Q quit\n"
     "  --text         print one text frame and exit\n"
     "  --once         print one JSON line and exit; about 3 s, about 8 s if WSL does not answer\n"
@@ -134,23 +134,27 @@ int main(int argc, char** argv) {
   wwt::history hist;
   wwt::view_state view;  // What the keys have chosen: panel, range, focus and selections
   bool have_frame = false, quit = false;  // nothing to draw until the first sample after priming
-  const auto draw = [&] {
+  // now_ms is the wall clock the frame is drawn for; a key's redraw passes the one its keys were applied at.
+  const auto draw = [&](int64_t now_ms) {
     int w = 131, h = 40;
     screen->size(w, h);
     // A redirected live run has no panels to switch, so it gets the plain frame: no history, no footer.
-    if (screen->is_terminal()) screen->draw(wwt::render(s, w, h, unix_ms(), &hist, view));
-    else screen->draw(wwt::render(s, w, h, unix_ms(), nullptr, wwt::view_state{}));
+    if (screen->is_terminal()) screen->draw(wwt::render(s, w, h, now_ms, &hist, view));
+    else screen->draw(wwt::render(s, w, h, now_ms, nullptr, wwt::view_state{}));
   };
   // Called inside the wait, so a key redraws the last snapshot at once instead of up to a second later.
   // apply_key decides what each key does, quitting included; Ctrl+C is the console's, stop_requested().
   const auto handle_keys = [&] {
     if (!screen) return;
     bool acted = false;
+    // One clock reading for the keys and the redraw after them, so the list a key moves through is the list
+    // drawn: panel 2's rows depend on the range's end (design/panel-grammar-slice2.md section 5).
+    const int64_t now_ms = unix_ms();
     for (wwt::key_event e = screen->poll(); e.k != wwt::key::none && !quit; e = screen->poll()) {
-      if (!wwt::apply_key(view, e, s)) quit = true;
+      if (!wwt::apply_key(view, e, s, hist, now_ms)) quit = true;
       acted = true;
     }
-    if (acted && have_frame && !quit && screen->is_terminal()) draw();
+    if (acted && have_frame && !quit && screen->is_terminal()) draw(now_ms);
   };
   for (int i = 0; run == mode::live || i <= lines; ++i) {  // The first pass only primes the deltas.
     if (i) {
@@ -194,7 +198,7 @@ int main(int argc, char** argv) {
       const std::string frame = wwt::as_text(wwt::render(s, 131, 50, unix_ms(), nullptr, wwt::view_state{}));
       if (fwrite(frame.data(), 1, frame.size(), stdout) != frame.size() || fflush(stdout) != 0) return 1;
     } else {
-      draw();
+      draw(unix_ms());
       // A live run with nowhere to write would otherwise never end, and neither would its collector.
       if (screen->write_failed()) { delete screen; return 1; }
     }
