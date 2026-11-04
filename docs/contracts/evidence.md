@@ -127,6 +127,14 @@ about this machine lives.
 - PROPOSED, needs the user's approval: repeat experiment 05, with a partly busy guest under contention
   and a Windows-alone reference at 5 and 10 threads.
 
+- From experiment 07: which of the thread groups outside this distro's PID namespace are kernel threads, the VM's own
+  init or WSLg (ledger, "Guest process walk checked", "The collector's walk reaches every process in the WSL VM"). Not established without privileges.
+- From experiment 07, a future question: is the root cgroup's `cpu.stat`, which read close to `/proc/stat` busy at idle
+  in one run (same section, "Process cores summed over the walk are the guest's CPU"), a whole for the guest's CPU that a later design could use? It would need its own
+  rows, more than one run and a load that is not churn alone, before anything is built on it.
+- From experiment 07: experiment 07 is one run of 121 rounds in one idle state plus one 20 s churn. Repeat it before a
+  guest whole is reconsidered.
+
 ## Decision log
 
 - 2026-10-31. Experiment 01 verdict: Windows separates WSL's GPU work at VM level, under `vmwp.exe`,
@@ -184,3 +192,9 @@ about this machine lives.
   are constant while a process lives, reuse not seen; Windows cache Unresolved; guest swap Not checked, it read 0;
   guest RSS is No, it is `/proc/pid/stat` rss, below `VmRSS`; the guest cache in `vmmemWSL` Unresolved. Only the
   `vmmemWSL` row compares two kernels. One idle state, not a range of states.
+- 2026-11-04. Experiment 07, requested by core for slice 2 (`design/panel-grammar-slice2.md`, step D). One run, 121
+  rounds, non-elevated, no GPU load, one CPU load of 20 s (`churn.py`) that ended itself. Verdict (ledger, "Guest
+  process walk checked"): the collector's walk reads every process in this distro's PID namespace and nothing outside
+  it. It misses most thread groups in the VM and all of WSLg, and the CPU summed over it falls short of `/proc/stat` busy,
+  far short under churn, since a process that exits between walks is lost. So the sum is not the guest's whole,
+  and slice 2 drops `cores_total` and `rss_total`. One run, one idle state: a figure here is not a range of states.
