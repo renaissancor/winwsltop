@@ -959,22 +959,33 @@ std::vector<std::string> plot_rows(const std::vector<double>& cols, int rows, in
 // axis: cause and effect line up top to bottom.
 
 struct time_axis {
-  int cells = 0;
-  int64_t bucket_ms = 1;
-  int64_t last = 0;                            // The bucket of the right edge, floor(end_ms / bucket_ms)
+  int cells = 0;                               // Columns: per_cell to a braille or heat cell
+  int per_cell = 1;
+  int64_t bucket_ms = 1;                       // A column's
+  int64_t end_ms = 0;
+  int64_t last = 0;                            // The column of the right edge: the last of the cell end_ms falls in
   std::vector<const history_sample*> samples;  // Those on the axis and the one before, oldest first
   std::vector<int> cell;                       // The cell of each; below 0 for that one before
 };
 
 int64_t floor_div(int64_t a, int64_t b) { return a / b - (a % b != 0 && a < 0 ? 1 : 0); }
 
-// The right edge is the bucket end_ms falls in. Whole milliseconds, rounded up, so cells cover the span.
-time_axis make_axis(const history& h, int64_t end_ms, int64_t span_ms, int cells) {
+// The right edge is the cell end_ms falls in. A cell is whole milliseconds, rounded up so cells cover the
+// span and then up to an even number, on every axis, so that an axis of two columns a cell (per_cell 2,
+// design/panel-grammar-slice2.md section 4) halves it exactly: its columns 2c and 2c + 1 lie inside cell c of
+// the one-column axis over the same span and cells, whose right edge it shares. The last column is the second
+// half of the cell end_ms falls in, which may not have begun: bucket_cells draws that cell from its first half.
+time_axis make_axis(const history& h, int64_t end_ms, int64_t span_ms, int cells, int per_cell = 1) {
   time_axis a;
-  a.cells = std::max(0, cells);
-  if (a.cells == 0) return a;
-  a.bucket_ms = std::max<int64_t>(1, (span_ms + a.cells - 1) / a.cells);
-  const int64_t last = a.last = floor_div(end_ms, a.bucket_ms);
+  a.per_cell = std::clamp(per_cell, 1, 2);
+  a.end_ms = end_ms;
+  const int n = std::max(0, cells);
+  a.cells = n * a.per_cell;
+  if (n == 0) return a;
+  int64_t cell_ms = std::max<int64_t>(2, (span_ms + n - 1) / n);
+  cell_ms += cell_ms % 2;
+  a.bucket_ms = cell_ms / a.per_cell;
+  const int64_t last = a.last = floor_div(end_ms, cell_ms) * a.per_cell + a.per_cell - 1;
   const sample_range all = h.samples();
   for (size_t i = 0; i < all.size(); ++i) {
     const int64_t back = last - floor_div(all[i].unix_ms, a.bucket_ms);  // Cells left of the right edge
@@ -1024,6 +1035,9 @@ template <class Value> std::vector<double> bucket_cells(const time_axis& a, Valu
   for (size_t c = 0; c < out.size(); ++c) {
     if (count[c] > 1) out[c] /= count[c];
   }
+  // The right edge's second half, when it has not begun: the cell is what its first half measured, as a cell
+  // of one column would be, not a gap at now.
+  if (a.per_cell == 2 && a.cells >= 2 && a.last * a.bucket_ms > a.end_ms) out[static_cast<size_t>(a.cells - 1)] = out[static_cast<size_t>(a.cells - 2)];
   return out;
 }
 
@@ -1057,7 +1071,8 @@ int unwatched_cells(const history& h, int64_t end_ms, int cells, int64_t span_ms
 }
 
 // The same on a time axis, placed as make_axis places the first sample: the buckets before the one
-// watching began in. That bucket holds the first sample, so it is watched.
+// watching began in. That bucket holds the first sample, so it is watched. On an axis of two columns a cell,
+// columns.
 int unwatched_cells(const history& h, const time_axis& a) {
   if (!h.watching()) return a.cells;
   if (h.samples().empty()) return 0;
@@ -1700,19 +1715,16 @@ void gutter(row& r, std::string_view label, std::string_view bar = "│", tone c
   r.add(pad(label, kCpuGutter - 1), tone::dim).add(bar, c);
 }
 
-// A plot's cells are a whole bucket wide: both dots of a braille cell show the same value. The maximum's
-// dot, when its cell takes one, is in the right half, the later.
-std::vector<line> plot_block(const std::vector<double>& cells, int rows, std::string_view top, std::string_view bottom, int unwatched, const window_stats& st, double ceiling = 100) {
-  std::vector<double> dots;
-  dots.reserve(cells.size() * 2);
-  for (const double v : cells) dots.insert(dots.end(), 2, v);
-  const int mark = max_mark(st);
-  const std::vector<std::string> plot = plot_rows(dots, rows, mark < 0 ? -1 : 2 * mark + 1, st.max, ceiling);
+// A plot over an axis of two columns a cell (design/panel-grammar-slice2.md section 4): each dot column of a
+// braille cell is its own column of the axis, and the maximum's dot is in the column that holds it, left or
+// right. unwatched counts columns; the faint dot goes only in a cell both of whose columns are unwatched.
+std::vector<line> plot_block(const std::vector<double>& columns, int rows, std::string_view top, std::string_view bottom, int unwatched, const window_stats& st, double ceiling = 100) {
+  const std::vector<std::string> plot = plot_rows(columns, rows, max_mark(st), st.max, ceiling);
   std::vector<line> out;
   for (int y = 0; y < rows; ++y) {
     row r;
     gutter(r, y == 0 ? top : y == rows - 1 ? bottom : std::string_view());
-    for (const span& c : plot_line(plot[static_cast<size_t>(y)], y == rows - 1 ? unwatched : 0)) r.add(c.text, c.color);
+    for (const span& c : plot_line(plot[static_cast<size_t>(y)], y == rows - 1 ? unwatched / 2 : 0)) r.add(c.text, c.color);
     out.push_back(r);
   }
   return out;
@@ -2120,7 +2132,7 @@ std::vector<line> process_history(const history& h, const proc_id* id, int width
   title.add(id->side == 0 ? "Windows" : "WSL", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim);
   title.add(id->side == 0 ? " · cores" : " · cores, guest's count", tone::dim);
   const int slot = h.slot_of(*id);
-  const time_axis axis = make_axis(h, end_ms, span_ms, width - kCpuGutter);
+  const time_axis axis = make_axis(h, end_ms, span_ms, width - kCpuGutter, 2);
   const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.cores_at(slot, h.position(p))); };
   const window_stats st = bucket_stats(axis, value);
   const double top = scale_top(st.max, kCoresFloor);
@@ -2264,6 +2276,7 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   const int col = (width - kListGap) / 2, right_col = width - col - kListGap;
   const int64_t end = axis_end(h, now_ms);
   const time_axis axis = make_axis(h, end, span_ms, col - kCpuGutter);  // The smaller column: both plots are this wide
+  const time_axis halves = make_axis(h, end, span_ms, col - kCpuGutter, 2);  // The busy plots': two columns in each of axis's cells
   const int64_t collected = h.samples().empty() ? 0 : end - h.samples().front().unix_ms;
   const auto of = [](float history_sample::*series) { return [series](const history_sample& p) { return static_cast<double>(p.*series); }; };
   const auto mean = [&](float history_sample::*series) { return bucket_cells(axis, of(series)); };
@@ -2273,10 +2286,10 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   std::vector<line> right = wsl_heads(s, w, right_col, collected);
   const auto append = [](std::vector<line>& to, std::vector<line> from) { to.insert(to.end(), from.begin(), from.end()); };
 
-  const window_stats left_busy = bucket_stats(axis, windows_cpu), right_busy = bucket_stats(axis, of(&history_sample::wsl_busy));
-  const int unwatched = unwatched_cells(h, axis);  // One axis, so the same for every plot of both columns
-  append(left, plot_block(bucket_cells(axis, windows_cpu), plan.busy, "100", "  0", unwatched, left_busy));
-  append(right, plot_block(mean(&history_sample::wsl_busy), plan.busy, "100", "  0", unwatched, right_busy));
+  const window_stats left_busy = bucket_stats(halves, windows_cpu), right_busy = bucket_stats(halves, of(&history_sample::wsl_busy));
+  const int unwatched = unwatched_cells(h, halves);  // One axis, so the same for both busy plots
+  append(left, plot_block(bucket_cells(halves, windows_cpu), plan.busy, "100", "  0", unwatched, left_busy));
+  append(right, plot_block(bucket_cells(halves, of(&history_sample::wsl_busy)), plan.busy, "100", "  0", unwatched, right_busy));
   left.push_back(lane("kern", mean(&history_sample::own_kernel)));
   left.push_back(lane("VM", mean(&history_sample::vm_cpu)));
   right.push_back(lane("iowt", mean(&history_sample::wsl_iowait)));
@@ -2541,7 +2554,7 @@ std::vector<line> memory_history(const history& h, const proc_id* id, int width,
   title.add(id->side == 0 ? "Windows" : "WSL", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim);
   title.add(id->side == 0 ? " · working set" : " · stat rss", tone::dim);
   const int slot = h.slot_of(*id);
-  const time_axis axis = make_axis(h, end_ms, span_ms, width - kCpuGutter);
+  const time_axis axis = make_axis(h, end_ms, span_ms, width - kCpuGutter, 2);
   const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.memory_at(slot, h.position(p))); };
   window_stats st;
   zoom z;
@@ -2587,7 +2600,7 @@ panel_frame memory_frame(const snapshot& s, const wsl_view& w, const history& h,
   const bool wide = width >= kMemoryWide;
   const int col = wide ? (width - kListGap) / 2 : width, right_col = wide ? width - col - kListGap : width;
   const int64_t end = axis_end(h, now_ms);
-  const time_axis axis = make_axis(h, end, span_ms, std::max(1, col - kCpuGutter));
+  const time_axis axis = make_axis(h, end, span_ms, std::max(1, col - kCpuGutter), 2);
   const selection_view sv = selection_of(s, v, 4);
 
   panel_frame f;

@@ -3943,6 +3943,90 @@ void check_selection_identity() {
   check(!has(line_with(f, "▶"), " " + std::to_string(gk.pid) + " "), "a guest pid reused under the same name, another start: the selection falls");
 }
 
+// design/panel-grammar-slice2.md section 4: two time columns to a braille cell, on an axis that halves the
+// cell axis exactly, every cell's bucket even.
+void check_two_columns() {
+  const auto windows_busy = [](const history_sample& p) { return p.windows_cpu; };
+  const auto glyph = [](const std::vector<line>& block, int cell) {
+    const std::string t = as_text({block.back()});
+    std::string out = columns(t, kCpuGutter + cell, 1);
+    size_t i = 0;
+    return out.empty() ? char32_t{0} : next_cp(out, i);
+  };
+  // At 10 minutes on 43 cells: two samples one column apart in one cell, different values, a cell whose halves differ.
+  const time_axis cells43 = make_axis(history(), kNow, 600000, 43), cols43 = make_axis(history(), kNow, 600000, 43, 2);
+  check(cells43.bucket_ms == 13954 && cols43.bucket_ms == 6977 && cols43.cells == 86 && cols43.last == 2 * cells43.last + 1, "10 minutes on 43 cells: 13954 ms a cell, 6977 a column, the right edge shared");
+  const int64_t cell_start = cells43.last * cells43.bucket_ms;
+  history two;
+  two.push(rule_sample(cell_start + 100, 20, 0));
+  two.push(rule_sample(cell_start + 6977 + 100, 80, 1));
+  const time_axis a = make_axis(two, cell_start + 6977 + 100, 600000, 43, 2);
+  const std::vector<double> cols = bucket_cells(a, windows_busy);
+  check(cols.size() == 86 && cols[84] == 20 && cols[85] == 80, "each sample in its own column of the cell");
+  const char32_t both = glyph(plot_block(cols, 1, "", "", 0, bucket_stats(a, windows_busy)), 42);
+  check(both == 0x2800 + (0x40u | 0x80u | 0x20u | 0x10u), "and the braille cell's two columns differ: one dot left, three right");
+  // The right edge's second half not begun: the cell is its first half, not a gap.
+  history left_only;
+  left_only.push(rule_sample(cell_start + 100, 30, 0));
+  const std::vector<double> edge = bucket_cells(make_axis(left_only, cell_start + 100, 600000, 43, 2), windows_busy);
+  check(edge[84] == 30 && edge[85] == 30, "a newest cell whose second half has not begun draws its first half in both");
+  history right_only;
+  right_only.push(rule_sample(cell_start + 100, 30, 0));
+  right_only.push(rule_sample(cell_start + 7000, 70, 1));
+  const std::vector<double> later = bucket_cells(make_axis(right_only, cell_start + 7000, 600000, 43, 2), windows_busy);
+  check(later[84] == 30 && later[85] == 70, "a second half that has begun keeps its own value");
+
+  // The large layout: every busy-plot column lies inside the heat cell under it, at 100 and 131 columns, 1, 5 and
+  // 10 minutes, every bucket even, column 2c + 1 never across two cells.
+  const snapshot cs = contended();
+  const history ch = contended_history(cs);
+  for (const int w : {100, 131}) {
+    const int cells = (w - kListGap) / 2 - kCpuGutter;
+    for (const int64_t span : {60000LL, 300000LL, 600000LL}) {
+      const std::string at = " at " + std::to_string(w) + ", " + std::to_string(span / 60000) + " min";
+      const int64_t end = axis_end(ch, kNow);
+      const time_axis heat = make_axis(ch, end, span, cells), busy_axis = make_axis(ch, end, span, cells, 2);
+      bool inside = heat.bucket_ms % 2 == 0 && busy_axis.bucket_ms * 2 == heat.bucket_ms && busy_axis.last == 2 * heat.last + 1 && busy_axis.cells == 2 * heat.cells &&
+                    heat.samples == busy_axis.samples;
+      for (size_t i = 0; inside && i < heat.samples.size(); ++i) inside = busy_axis.cell[i] < 0 ? heat.cell[i] < 0 : busy_axis.cell[i] / 2 == heat.cell[i];
+      for (int c = 0; inside && c < heat.cells; ++c) {
+        const int64_t from = (heat.last - heat.cells + 1 + c) * heat.bucket_ms;
+        const int64_t col = busy_axis.last - busy_axis.cells + 1 + 2 * c;
+        inside = col * busy_axis.bucket_ms == from && (col + 2) * busy_axis.bucket_ms == from + heat.bucket_ms;
+      }
+      check(inside, "every busy-plot cell covers the heat cell's milliseconds" + at);
+      if (w == 131 && span == 60000) check(heat.bucket_ms == 1018, "at 131, 1 minute over 59 cells: 1017 ms rounds to an even 1018" + at);
+      if (w == 131 && span == 300000) check(heat.bucket_ms == 5086, "at 131, 5 minutes over 59 cells: 5085 ms rounds to an even 5086" + at);
+      check(frame_fits(large(cs, ch, w, 40, state_for(3, static_cast<int>(span / 1000))), w, 40), "the large layout fits" + at);
+    }
+  }
+
+  // The max dot lands in the column of the latest maximum, left or right.
+  for (const int side : {0, 1}) {
+    history m;
+    for (int k = 0; k < 14; ++k) {
+      const int64_t t = cell_start + 200 + k * 1000;  // 7 in the left column, 7 in the right
+      const bool spike = (side == 0 && k == 3) || (side == 1 && k == 10);
+      m.push(rule_sample(t, spike ? 90 : 10, k));
+    }
+    const time_axis ma = make_axis(m, cell_start + 200 + 13 * 1000, 600000, 43, 2);
+    const window_stats st = bucket_stats(ma, windows_busy);
+    const char32_t g = glyph(plot_block(bucket_cells(ma, windows_busy), 1, "", "", 0, st), 42);
+    const unsigned bits = static_cast<unsigned>(g - 0x2800);
+    check(st.max_at == 84 + side && st.max_count > 1, std::string("the maximum's column is the ") + (side ? "right" : "left"));
+    check(g >= 0x2800 && (bits & (side ? kDotRight[3] : kDotLeft[3])) && !(bits & (side ? kDotLeft[3] : kDotRight[3])), std::string("and its dot is drawn there, ") + (side ? "right" : "left"));
+  }
+
+  // · only in a cell both of whose columns are unwatched.
+  const std::vector<double> blank(20, kNaN);
+  const auto dotted = [&](int unwatched_columns) {
+    const std::string t = as_text({plot_block(blank, 1, "", "", unwatched_columns, window_stats{}).back()});
+    return columns(t, kCpuGutter, 10);
+  };
+  check(dotted(5) == "·         " && dotted(4) == dotted(5), "5 unwatched columns: 2 cells, the third half-watched has no dot");
+  check(dotted(6) == "· ·       ", "6 columns are 3 cells, and · goes in every other one");
+}
+
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
 void check_keys() {
   const auto is = [](const key_event& e, key k, int panel = 0, bool esc_first = false) { return e.k == k && e.panel == panel && e.esc_first == esc_first; };
@@ -4373,6 +4457,7 @@ int main(int argc, char** argv) {
   check_memory_panel();
   check_final_audit();
   check_selection_identity();
+  check_two_columns();
   if (!quick) {
     check_denied_note();
     check_holder_wording();
