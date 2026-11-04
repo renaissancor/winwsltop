@@ -4610,6 +4610,27 @@ void check_gpu_panel() {
     const int64_t end = step.samples().back().unix_ms;
     check(sl >= 0 && step.gpu_seen_ms(sl) == end - 1000 && end - step.gpu_seen_ms(sl) < 60000, "after a clock step back gpu_seen_ms lies in the range it did before");
   }
+  // Stacked (under 64 columns), 4 Windows rows and 2 holders: wherever the history is drawn the Windows list shows
+  // at least 3 rows after the split (audit finding 3).
+  {
+    const gpu_fixture g = gpu_minute(60, [](snapshot& s, int) {
+      s.gpu_engines.push_back({9001, "3D", 20});
+      s.gpu_engines.push_back({10000, "3D", 10});
+    });
+    int drawn = 0;
+    for (int rows = 1; rows <= 66; ++rows) {
+      const std::vector<line> f = render(g.s, 60, rows, g.s.unix_ms, &g.h, state_for(2));
+      if (row_at(f, 0, "Windows · vmwp.exe") < 0) continue;
+      ++drawn;
+      int shown = -1;
+      for (const line& l : f) {
+        const std::string t = as_text({l});
+        if (has(t, " of 4\n") && t.find(" of 4") == t.find(' ')) shown = atoi(t.c_str());
+      }
+      check(shown >= 3, "stacked at 60x" + std::to_string(rows) + ": the history only while the Windows list shows 3 rows, it shows " + std::to_string(shown));
+    }
+    check(drawn > 10, "the stacked fixture draws the history at many heights: " + std::to_string(drawn));
+  }
   // A stall of what is kept with the clock stepped back: no slot keeps a time ahead of the new sample, so a process
   // gone before the stall does not come back into the range when the clock reaches its old time (audit finding 6).
   {

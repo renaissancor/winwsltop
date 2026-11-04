@@ -2339,6 +2339,15 @@ std::vector<line> dxg_holder_list(const wsl_view& w, int col, int rows, bool& cu
   return out;
 }
 
+// The rows the Windows list gets out of avail, as gpu_lists splits it. Stacked: rule, two heads, two column rows,
+// N of M, the warning; the rest is shared, an odd row to the Windows list, and what it leaves goes to the holders.
+int gpu_windows_rows(const wsl_view& w, int width, int avail) {
+  if (width >= kSideBySideGpu) return avail - 4;  // The rule, its head, its columns and N of M
+  const int total = std::max(0, avail - 6 - denied_rows(w));
+  const int holders = w.ok ? static_cast<int>(std::min<size_t>(w.dxg_pids.size(), static_cast<size_t>(total))) : 0;
+  return total - std::min(total / 2, holders);
+}
+
 // avail covers everything drawn here. cut comes back true if the holder list left a row out; the Windows list
 // scrolls and says N of M.
 void gpu_lists(std::vector<line>& out, const snapshot& s, const wsl_view& w, const std::vector<gpu_row>& rows, const list_view& v, int width, int avail, bool& cut) {
@@ -2346,15 +2355,11 @@ void gpu_lists(std::vector<line>& out, const snapshot& s, const wsl_view& w, con
   list_view lv = v;
   if (width >= kSideBySideGpu) {
     const int col = (width - kListGap) / 2;
-    lv.rows = avail - 4;  // The rule, its head, its columns and N of M
+    lv.rows = gpu_windows_rows(w, width, avail);
     side_by_side(out, gpu_users_list(s, rows, col, lv), dxg_holder_list(w, width - col - kListGap, avail - 3 - denied_rows(w), cut), col);
     return;
   }
-  // Stacked: rule, two heads, two column rows, N of M, the warning. The rest is shared, and what the first
-  // list leaves over goes to the second.
-  const int total = std::max(0, avail - 6 - denied_rows(w));
-  const int holders = w.ok ? static_cast<int>(std::min<size_t>(w.dxg_pids.size(), static_cast<size_t>(total))) : 0;
-  lv.rows = total - std::min(total / 2, holders);
+  lv.rows = gpu_windows_rows(w, width, avail);
   const std::vector<line> top = gpu_users_list(s, rows, width, lv);
   const std::vector<line> bottom = dxg_holder_list(w, width, avail - 3 - denied_rows(w) - static_cast<int>(top.size()), cut);
   out.insert(out.end(), top.begin(), top.end());
@@ -2445,10 +2450,13 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   const bool side = width >= kSideBySideGpu;
   const int history_least = 1 + kHistoryRows + 1;  // Its title and rows, and the rule line after
   std::vector<line> lists;
-  // At least one row of each list, N of M, and the warning.
+  // At least one row of each list, N of M, and the warning. The Windows list keeps kLeastListRows, or all it has,
+  // after the stacked split, before the history takes a row (audit finding 3).
+  const int keep_rows = std::min(kLeastListRows, std::max(1, static_cast<int>(rows_drawn.size())));
+  int list_room = 0;
   if (const int least = (side ? 5 : 8) + denied_rows(w); room >= least) {
-    int list_room = std::min(room, kMaxGpuList);
-    if (const int keep = (side ? 4 : 7) + kLeastListRows + denied_rows(w); room - list_room < history_least && room - history_least >= keep) list_room = room - history_least;
+    list_room = std::min(room, kMaxGpuList);
+    if (room - list_room < history_least && gpu_windows_rows(w, width, room - history_least) >= keep_rows) list_room = room - history_least;
     bool cut = false;
     gpu_lists(lists, s, w, rows_drawn, list_for(sv, 0, 0), width, list_room, cut);
     room -= static_cast<int>(lists.size());
@@ -2459,7 +2467,7 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   }
   if (!device) f.hidden = true;
   int history_rows = 0;
-  if (!lists.empty() && room >= history_least) {
+  if (!lists.empty() && room >= history_least && gpu_windows_rows(w, width, list_room) >= keep_rows) {
     history_rows = std::clamp((room - 2) / 2, kHistoryRows, kMostHistoryRows);
     room -= history_rows + 1;
   } else {
