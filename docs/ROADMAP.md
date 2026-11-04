@@ -14,7 +14,11 @@ and `docs/measurable.md` first; two items below are also open questions in `docs
 
 ## 2. What beats btop
 - **History:** every graph shows 1, 5 or 10 minutes, and per-process history of cores and memory is built
-  (slice 1, `design/panel-grammar.md`). Still PROPOSED: a ring per GPU side and per-process GPU history (slice 2), and the
+  (slice 1, `design/panel-grammar.md`). Slice 2 (`design/panel-grammar-slice2.md`) draws a selected Windows
+  process against all Windows processes; the guest's histories stay one series, since the collector's walk sees
+  only its distro's PID namespace (ledger, "Guest process walk checked"). A guest whole waits for a source that
+  covers the VM, the root cgroup's `cpu.stat` the candidate (`contracts/evidence.md`). Still PROPOSED: a ring per GPU
+  side and per-process GPU history (slice 2, step G), and the
   braille chart of WSL vs Windows as panel 8's centrepiece, over the shared range (`panels.md`, Decisions).
 - **Contention verdict:** a plain line when both sides are busy and the GPU is near its limit, with the
   moment it began. Utilization alone hid -46% and -59% in experiment 01.

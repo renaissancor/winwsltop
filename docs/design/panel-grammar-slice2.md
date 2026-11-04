@@ -1,6 +1,8 @@
 # Panel grammar, slice 2
 
-Status: PROPOSED, 2026-11-04, design only; nothing here is built. The user approved the scope in section 0.
+Status: PROPOSED, 2026-11-04; being built. The user approved the scope in section 0. Built on `cpu-panel`: steps A,
+B and C (422f050, 9b6b174, 002c084), E1 (8881344, 9494198) and D (afa7b2d). D's verdict is No (section 2), so steps
+E2 and F2 are dropped and the guest's histories stay one series.
 machtop answered section 10's questions the same day; machtop leads on panel design, so they are decided and
 the sections below follow them.
 Slice 1 is [`panel-grammar.md`](panel-grammar.md), built; where this file changes something there, this file
@@ -64,6 +66,18 @@ not change.
 - After `↓` moves to a row, `row_key.start` is that row's start, and `selected_processes` passes it on.
 
 ## 2. A whole for WSL
+
+**Dropped, 2026-11-04, on experiment 07's verdict.** The walk reads every process in this distro's PID namespace
+and nothing outside it: it misses most thread groups in the VM and all of WSLg, and the CPU summed over it falls
+short of `/proc/stat` busy, far short when processes exit between walks (ledger, "Guest process walk checked",
+"The collector's walk reaches every process in the WSL VM", "WSLg's processes are in the walk" and "Process cores
+summed over the walk are the guest's CPU", all **No**; one run). A sum over the walk is not the guest's whole, so
+`cores_total` and `rss_total` are not added, steps E2 and F2 are dropped, and the guest's process histories on
+panels 3 and 4 stay one series, which step F1 draws. The protocol and `wsl_view` do not change. If a guest whole
+ever returns, its label is `processes in Ubuntu (this distro's namespace)`, the distro named as `wsl_view.distro`
+gives it; whether the root cgroup's `cpu.stat` could be the CPU whole is a future evidence question
+(`contracts/evidence.md`, open questions), not part of this slice. The rest of this section is the design as it
+stood before the verdict, kept for that case.
 
 **Owner:** evidence first (the `evidence` agent), then collect and core in one commit (the `collect` agent for
 `collector.py`, the `core` agent for the seam).
@@ -143,8 +157,8 @@ One whole per side, never one across them (`CLAUDE.md` rule 3; gap list section 
 |---|---|---|---|
 | Windows | cores | Σ `cores` over every row of `snapshot.processes` but pid 0 whose `cores_known` is true | `SystemProcessInformation`, the same reading as each row. Not PDH busy: "Process cores account for Windows busy" is **No**, so the part could exceed busy and the share would be meaningless |
 | Windows | working set | Σ `working_set` over every row but pid 0 | same |
-| WSL | cores | `cores_total` (section 2) | the collector's walk |
-| WSL | stat rss | `rss_total` (section 2) | same |
+| WSL | cores | none: section 2 is dropped | the guest's history is one series |
+| WSL | stat rss | none | same |
 
 The Windows list holds every process: "Windows collector checked against Windows", processes 360 against 360.
 Each term rests on "Windows per-process working set ... are `Get-Process` ..." (bindings only) and, for cores,
@@ -213,9 +227,10 @@ machtop's form, from `panels.md` "Part of the whole" exactly, with winwsltop's n
 
   `now N%` is the part over the whole at the latest sample where both are known, by machtop's `share_text`
   (`<1%` under half a percent), and blank when the whole is 0 or unknown. It is computed in `render.cpp` from two
-  values the snapshot holds; whether the screen may do that is Q7, and step F1 draws `now` only once Q7 is
-  answered yes. **The WSL whole's label is pending on step D**: the walk covers this distro's PID namespace only
-  (audit finding 3), so `all WSL processes` below stands for the label experiment 07 proposes. On panel 4 the whole is named for
+  values the snapshot holds, which Q7 allows: a ratio of two values already in the snapshot or history, for the
+  selected row, is display, not derivation. **The WSL whole's label is pending on step D**: the walk covers this distro's PID namespace only
+  (audit finding 3), and the guest has no whole after experiment 07 (section 2), so the `all WSL processes` forms
+below are not drawn; were a guest whole to return, its label is `processes in Ubuntu (this distro's namespace)`. On panel 4 the whole is named for
   its sum: `Σ working sets, all Windows processes avg … max …`, and `Σ stat rss, all WSL processes`; never
   `used`. Units as the measure prints them: cores with 2 decimals, memory in GiB or MiB by the scale.
 - **The legend**, one dim row under the heading, its swatches in the two tones:
@@ -233,8 +248,8 @@ machtop's form, from `panels.md` "Part of the whole" exactly, with winwsltop's n
 
 The one-row rule applies per side, over the samples in the window on screen:
 
-- the side has no whole: the guest before section 2 lands, or with a collector that does not send the totals,
-  or any sample where `process_totals.known` is false;
+- the side has no whole: the guest, always, since section 2 is dropped; Windows at any sample where
+  `process_totals.known` is false;
 - the side's list has one row;
 - the part equals the whole at every sample where both are known, within 1e-6 relative (machtop
   `part_equals_whole`); a second row appearing inside the window turns it back into part-of-whole;
@@ -268,8 +283,7 @@ one-row rule.
 - A fixture with one Windows process (pid 0 and one row): one series, no legend, no `now`, and the plot has the
   legend's row.
 - A part equal to the whole for the first half of the window and below it after: part-of-whole.
-- WSL, panel 3, line with no `cores_total`: one series, `guest's count` in the title, no `all WSL processes`.
-  With `cores_total`: part-of-whole, `all WSL processes`.
+- WSL, panels 3 and 4: one series, `guest's count` in panel 3's title, no legend, no `now`, no `all WSL processes`.
 - Panel 4: the history's plot starts at 0 (the bottom row is never blank where a sample exists), no `range` in
   its heading, `Σ working sets` in it and no `used`, in both forms (one series too); panel 4's used and cache
   plots still print `range`.
@@ -478,16 +492,15 @@ tracks below run in parallel because they share no file.
 | C | ui | 6, Q2 and Q3: range, avg, max and scale in the history heading; histories lose gutter and axis; memory's history from 0 as one series; `contracts/ui.md` rule 8 for these, in the same commit, so the rule is never stale (audit finding 9) | `render.cpp` `process_history`, `memory_history`, `plot_block`; `contracts/ui.md` rule 8 | B |
 | D | evidence | 2, experiment 07 and its ledger rows; the two pid-reuse rows if they can be had read only (section 9) | `experiments/07-*`, `docs/measurable.md` | nothing |
 | E1 | core | 3, the Windows whole | `snapshot.h`, `src/analysis/process_totals.h`, `main.cpp`, `jsonl.cpp`, `json-output.md`, `check_json.py`, `contracts/core.md` | nothing |
-| E2 | collect, core, one commit | 2, `cores_total` and `rss_total` | `collector.py`, `collector_embed.cpp`, `PROTOCOL.md`, `wsl_view.h`, `wsl_view.cpp`, `check_json.py`, `json-output.md`, `contracts/collect.md`, `contracts/core.md` | D's rows; after E1 (both touch `check_json.py` and `json-output.md`) |
-| F1 | ui | 3, part-of-whole, Windows side; the guest one series; `now N%` only if Q7 is answered yes | `history.h`, `render.cpp` push, histories, new plot functions | C, E1 |
+| E2 | dropped | ~~2, `cores_total` and `rss_total`~~ D's verdict is No (section 2) | `collector.py`, `collector_embed.cpp`, `PROTOCOL.md`, `wsl_view.h`, `wsl_view.cpp`, `check_json.py`, `json-output.md`, `contracts/collect.md`, `contracts/core.md` | D's rows; after E1 (both touch `check_json.py` and `json-output.md`) |
+| F1 | ui | 3, part-of-whole, Windows side, with `now N% of all` (Q7 decided); the guest one series | `history.h`, `render.cpp` push, histories, new plot functions | C, E1 |
 | G | ui, and core for one line, one commit | 5, Q4, Q5: panel 2's Windows list selectable, its rows from the range on screen and the `local` holders, ordered by GPU % then most recent use; the WSL list a reference list, no `tab`; the GPU history. History data, no seam change: the slot's `gpu` series and `gpu_seen_ms`; `apply_key` and `selectable_lists` take the history | `history.h`, `render.h` (`apply_key`), `render.cpp` panel 2 and the ring; `src/main.cpp`'s `apply_key` call (core) | F1 (same files) |
-| F2 | ui | 3, the guest side lit from `cores_total` and `rss_total` | `render.cpp` push and histories | G, E2 |
-| H | core | `contracts/ui.md` decisions and rule 8's part-of-whole and panel 2 text (step C's part already done), `panels.md` (panel 2's holder list not selectable, against its section 2 line), `panel-grammar.md` notes, `ROADMAP.md` 1 and 2, `README.md` keys for panel 2 | docs | F2 |
+| F2 | dropped | ~~3, the guest side lit from `cores_total` and `rss_total`~~ D's verdict is No | | |
+| H | core | `contracts/ui.md` decisions and rule 8's part-of-whole and panel 2 text (step C's part already done), `panels.md` (panel 2's holder list not selectable, against its section 2 line), `panel-grammar.md` notes, `ROADMAP.md` 1 and 2, `README.md` keys for panel 2 | docs | G |
 | I | auditor | a fresh auditor reads A to H against the code and the ledger | none | H |
 
-In parallel: the ui chain A, B, C; D; E1. Then E2 after D and E1, while F1 and G run. F2 joins the two.
-If D returns `No` on the walk's completeness, E2 and F2 are dropped and the guest's histories stay one series,
-which F1 already draws.
+In parallel: the ui chain A, B, C; D; E1, all built. D returned `No`, so E2 and F2 are dropped and the guest's
+histories stay one series, which F1 draws. What remains: F1, then G, then H and I.
 
 ## 9. Requests to other files
 
@@ -527,15 +540,16 @@ machtop leads on panel design (the user's standing decision, `docs/panels.md`, D
 - **Q6. Giving way:** the blank row goes first; the legend is kept with at least 2 plot rows; the legend goes only
   if that still does not fit, and the heading's `all Windows processes` then names the whole (section 3).
 
-## 11. Open after the audit of f270ef8
+## 11. After the audit of f270ef8
 
 A fresh auditor read this design at f270ef8. Findings 1 (even buckets, the two-column axis anchored on the cell
 axis), 2 (E1's checks in `lost_check`), 3 (the WSL whole is this distro's namespace; label pending on D) and 11
 (experiment 07's rows) were handled elsewhere and are recorded in sections 2, 3 and 4. Findings 4, 5 and 8 changed
-step G (section 5), 6 and 7 step E2 (section 2), 9 steps C and H (section 8). Finding 10 is Q7.
+step G (section 5), 6 and 7 step E2 (section 2, since dropped), 9 steps C and H (section 8). Finding 10 is Q7.
 
-
-- **Q7. May the screen compute `now N%`?** Section 3 moved the Windows whole into the snapshot because
+- **Q7. May the screen compute `now N%`? Decided by the user, 2026-11-04: yes.** `contracts/ui.md` now says that a
+  ratio of two values already in the snapshot or the history, for the selected row, is display, not derivation, so
+  step F1 shows `now N% of all`. The question as put: Section 3 moved the Windows whole into the snapshot because
   `contracts/ui.md` keeps the screen from "deriving a number that is not in the snapshot". The share is such a
   number: the selected row's value over the whole, computed in `render.cpp`. It cannot move into the snapshot,
   because it depends on the selection. `contracts/ui.md` has no rule that a ratio of two snapshot values, or a
@@ -543,4 +557,4 @@ step G (section 5), 6 and 7 step E2 (section 2), 9 steps C and H (section 8). Fi
   over the window and keeps Windows used as total less available (`history_sample.windows_used`). Options: amend
   `contracts/ui.md` to say that one snapshot value over another of the same side and the same reading, and
   statistics over the window, are display, not derivation; or leave `now N%` out of winwsltop's heading. For the
-  user. Step F1 leaves `now` out until it is answered.
+  user.
