@@ -27,7 +27,7 @@ of the collector's line.
   snapshots, and nothing else.
 - Deriving a number that is not in the snapshot. The history holds only earlier snapshots' values and
   is never written to disk. Summing engines, adding Windows to WSL, or guessing
-  a per-process GPU share are all forbidden.
+  a per-process GPU share are all forbidden. Rule 9's ratio is display, not derivation.
 - Changing what the collector sends. Request it from core.
 - The strict parser for the collector's line, `src/core/wsl_view.h` and `.cpp`, which `src/analysis` reads too.
 
@@ -67,6 +67,11 @@ of the collector's line.
    5). On the large CPU panel the `·` is placed by bucket, on the bottom row of the busy plots; the heat block
    and the lanes have no bottom dot row, so they stay blank before watching began.
    (Slice 2 step C, `design/panel-grammar-slice2.md` sections 4 and 6; decision of 2026-11-04.)
+9. A ratio of two values already in the snapshot or the history, for the selected row, is display, not
+   derivation: the selected process's value over its side's whole at the latest sample where both are known,
+   `now N% of all`, on the part-of-whole history. Both values come from one side and one reading; nothing else
+   the snapshot does not hold is worked out here (user's decision, 2026-11-04, `design/panel-grammar-slice2.md`
+   Q7).
 
 ## How to validate
 
@@ -232,6 +237,10 @@ of the collector's line.
   - The newest cell, whose second time column has not started yet, is drawn from its first column, so the right edge
     is not half empty for most of each bucket.
   - A memory scale below 1 GiB is rounded up in MiB, 1, 2 or 5 times a power of ten, not as a fraction of a GiB.
+- 2026-11-04, the user. Rule 9: a ratio of two values already in the snapshot or the history, for the selected row,
+  is display, not derivation, so the part-of-whole history shows `now N% of all` (slice 2 step F1). It answers Q7 of
+  `design/panel-grammar-slice2.md`, raised by the audit: the Windows whole had moved into the snapshot because the screen
+  may not derive, and the share, which depends on the selection, cannot.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.

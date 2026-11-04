@@ -81,10 +81,6 @@ documents true.
   machine has one group. Not added.
 - Should `vm.vmmem_cores` read `null` instead of 0 when `vmmem_cores_known` is false? It would match
   "unknown is null", but it changes an existing key, so it would raise `schema`. Left at 0.
-- Q7 of `docs/design/panel-grammar-slice2.md`, section 11: may the screen compute `now N%`, a selected row's value over
-  its side's whole? `contracts/ui.md` forbids "deriving a number that is not in the snapshot" and has no rule that a ratio
-  of two snapshot values, or a statistic over the window, is display. Amend that contract, or leave `now` out. For the
-  user; step F1 leaves `now` out until then.
 
 ## Decision log
 
@@ -239,3 +235,8 @@ documents true.
   table has none: `working_set` is `null` exactly when it is false. The checks the design asks for are in
   `lost_check` (`totals_cases`), not `render_check`, which is ui's; `check_json.py` asks for `working_set` equal to
   the rows' sum and `cores` equal to the known rows' within print rounding, stricter than the design's "at or above".
+- 2026-11-04, the user. Q7 of `docs/design/panel-grammar-slice2.md` answered yes, closing the open question: a ratio of
+  two values already in the snapshot or history, for the selected row, is display, not derivation (`contracts/ui.md`
+  rule 9), so step F1 shows `now N% of all`. Experiment 07 returned No (ledger, "Guest process walk checked"), so
+  `cores_total` and `rss_total` are not added: the protocol and `wsl_view` stay as they are, and steps E2 and F2 are
+  dropped.
