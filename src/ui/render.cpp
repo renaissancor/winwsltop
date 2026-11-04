@@ -3316,8 +3316,6 @@ bool apply_key_to(view_state& v, key_event e, const snapshot& s, const history* 
 
 bool apply_key(view_state& v, key_event e, const snapshot& s, const history& h, int64_t now_ms) { return apply_key_to(v, e, s, &h, now_ms); }
 
-bool apply_key(view_state& v, key_event e, const snapshot& s) { return apply_key_to(v, e, s, nullptr, 0); }
-
 std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, const view_state& v) {
   if (width <= 0 || height <= 0) return {};
   const wsl_view w = read_wsl(s.wsl_json);

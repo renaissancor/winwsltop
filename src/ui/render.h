@@ -62,11 +62,6 @@ struct view_state {
 // needs two lists to move between, which a missing WSL line leaves one of.
 bool apply_key(view_state& v, key_event e, const snapshot& s, const history& h, int64_t now_ms);
 
-// The same without the history: panel 2's list is then this sample's processes alone, not those that used an
-// engine earlier in the range, so ↑↓ there can disagree with the rows drawn. Kept until main.cpp passes the
-// history and now_ms (design/panel-grammar-slice2.md section 5, a request to core).
-bool apply_key(view_state& v, key_event e, const snapshot& s);
-
 // The rows panels 2, 3 and 4 have selected, every list, as the per-process ring knows them, from the keys
 // remembered, so a selected process that has left the list is still named: history::push keeps their slots,
 // and it keeps its history while it is away. A list never moved in names nothing; its first row is in the
