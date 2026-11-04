@@ -96,7 +96,7 @@ of the collector's line.
 | item | value |
 |---|---|
 | source | `src/ui` 9094 lines, of which `render.cpp` 3456, `render_check.cpp` 5126, `history.h` 175, `keys.h` 89 |
-| checks | `render_check` 187351, 0 failed, and `lost_check` 154, 0 failed, under `scripts/check.sh --windows` after 64b395b. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
+| checks | `render_check` 189092, 0 failed, and `lost_check` 154, 0 failed, under `scripts/check.sh --windows` after 64b395b. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
 | sizes checked | widths 1 to 300, heights 1 to 66, every panel, hostile numbers at every size and the other cases at every third. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, ranges 1 and 10 minutes; 4, 8, 14, 20, 21, 40, 64 and 65 threads |
 | frame bytes, 131 by 40 | noisy 32842 (23764 at 100 by 34), noisy at 64 threads 38789 and at 40 threads 39905, panel 2 13004, panel 4 11754 (8363 at 100 by 34), contended 15471 (11827 at 100 by 34). Budget 48 KiB |
 | frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.314 to 0.706 ms over the fixtures, ranges 1 and 10 minutes, panels 2 and 4, across four runs (core's and the re-audit's three); every figure varies run to run. Budget 5 ms |
