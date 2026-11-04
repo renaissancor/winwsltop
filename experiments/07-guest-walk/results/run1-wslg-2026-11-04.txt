@@ -1,0 +1,6 @@
+utc 2026-11-04T13:59:57Z
+/mnt/wslg exists: yes
+/mnt/wslg entries: PulseAudioRDPSink PulseAudioRDPSource PulseServer distro doc pulseaudio.log run runtime-dir stderr.log versions.txt weston.log wlog.log 
+WAYLAND_DISPLAY=wayland-0 DISPLAY=:0
+/tmp/.X11-unix: srwxrwxrwx X0 
+pids in this distro's /proc whose comm is weston, Xwayland or pulseaudio: 0

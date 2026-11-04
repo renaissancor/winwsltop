@@ -1,0 +1,42 @@
+run run1 2026-11-04, kernel 6.6.114.1-microsoft-standard-WSL2, distro Ubuntu, 20 vCPUs, HZ 100, uid 1000
+pid namespace pid:[4026532219], pid 1 comm systemd, /proc mount ['proc /proc proc rw,nosuid,nodev,noexec,noatime 0 0']
+rounds 121, intervals 120; churn 4852.367 to 4872.367 mono, 80 children, 16.720 CPU-s, 0.836 cores
+
+== 1. Does the walk read every entry it lists? ==
+listed equals read in 121 of 121 rounds; listed 45 to 71, read 45 to 71
+failed reads in the walk: 0 in total, by errno none
+
+== 2. Does the walk see every task in the VM? ==
+cgroup pids (this namespace) not in the walk: total 1 over all rounds; walk pids not in cgroups: 1
+cgroup procs printed as pid 0 (outside this PID namespace): 232 to 270; of them in the root cgroup: 232 to 270
+cgroup threads printed as 0: 276 to 314; visible processes in the root cgroup: 0 to 0; unreadable cgroups: 0 to 0
+thread groups: walk 45 to 71, cgroup total 282 to 341; walk share of all 0.158 to 0.208
+walk threads + cgroup threads at 0, against /proc/loadavg nr_threads read either side: inside 121 of 121, equal with both sides equal 118
+walk threads 168 to 197, loadavg nr_threads 449 to 511
+
+== 3. Cores: the sum over rated processes, beside wider wholes ==
+idle: 99 intervals, 99.000 s
+  core-seconds: process sum 8.640, child cgroups 10.774, root cgroup 13.224, /proc/stat busy 13.220
+  mean cores: process sum 0.087, child cgroups 0.109, root cgroup 0.134, /proc/stat busy 0.134
+  process sum over child cgroups 0.802, over busy 0.654; child cgroups less process sum 2.134 core-s
+  per interval: process sum 0.020 to 0.360, child cgroups 0.031 to 0.395, unrated 0 to 9, gone 0 to 11, forks 0 to 285
+churn: 21 intervals, 21.000 s
+  core-seconds: process sum 1.650, child cgroups 19.031, root cgroup 19.872, /proc/stat busy 19.880
+  mean cores: process sum 0.079, child cgroups 0.906, root cgroup 0.946, /proc/stat busy 0.947
+  process sum over child cgroups 0.087, over busy 0.083; child cgroups less process sum 17.381 core-s
+  per interval: process sum 0.030 to 0.190, child cgroups 0.069 to 1.179, unrated 0 to 6, gone 0 to 8, forks 2 to 47
+all: 120 intervals, 120.000 s
+  core-seconds: process sum 10.290, child cgroups 29.805, root cgroup 33.096, /proc/stat busy 33.100
+  mean cores: process sum 0.086, child cgroups 0.248, root cgroup 0.276, /proc/stat busy 0.276
+  process sum over child cgroups 0.345, over busy 0.311; child cgroups less process sum 19.515 core-s
+  per interval: process sum 0.020 to 0.360, child cgroups 0.031 to 1.179, unrated 0 to 9, gone 0 to 11, forks 0 to 285
+largest process cores above the sum: 0 of 120 intervals; above child cgroups: 0; process sum above child cgroups: 22
+churn: child cgroups less process sum 17.381 core-s over 21.000 s; less the idle rate 0.022 x 21.000 s: 16.928 core-s, against churn children's own 16.720 CPU-s
+
+== 4. RSS: the sum over every process, beside /proc/meminfo ==
+rss_total 2034417664 to 2153005056 B, mem used (MemTotal - MemAvailable) 2074980352 to 2180792320 B, MemTotal - MemFree 2245013504 to 2448416768 B
+rss_total less mem used -60473344 to 12865536 B; rss_total over mem used 0.972 to 1.006
+largest process rss above rss_total: 0 of 121 rounds
+
+== 5. Cost ==
+walk (collector processes()) ms: mean 0.802, max 2.730; sum alone ms: mean 0.0200, max 0.0760; whole probe round ms max 6.50

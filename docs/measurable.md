@@ -349,6 +349,29 @@ readings come from different kernels.
 | Guest `starttime` is constant while a process lives | Observed. The run's `sleep`, pid 48992, read `starttime` 616497 in all 219 rounds, and each of 139 pids had one value | same |
 | Guest `starttime` differs after a pid is reused | `Not checked`: no reuse is possible in this run. `ns_last_pid` went from 48991 to 49944 with `pid_max` 4194304 | `experiments/06-memory-process/results/analysis-2026-11-02.txt`, `experiments/06-memory-process/results/run1-static-2026-11-02.txt` |
 
+## Guest process walk checked
+
+Run 2026-11-04, one run of 121 rounds, non-elevated, as uid 1000 in `Ubuntu`, the only distro in the
+registry. Same machine line as the top of this file; Windows 10.0.26200.9711 and the kernel are in
+`run1-static-2026-11-04.txt`. No GPU load. One CPU load of 20 s (`churn.py`: 80 children of about 0.2 s
+each), which ended itself. The probe calls the collector's own `processes()`. The independent count is
+the cgroup hierarchy: this distro's cgroup namespace is the initial one, so `cgroup.procs` lists every
+task in the VM and prints a task outside this PID namespace as pid 0. `/proc/1/comm` is `systemd`, so
+the walk sees this distro's PID namespace only. One run, one idle state: a figure here is not a range
+of states.
+
+| claim | status | evidence |
+|---|---|---|
+| The collector's walk reads every process in this distro's PID namespace | Observed, one run: it read every numeric `/proc` entry it listed in 121 of 121 rounds (45 to 71), with 0 failed reads. The cgroup pids in this namespace matched the walk except 1 each way over the run, read moments apart | `experiments/07-guest-walk/results/analysis-2026-11-04.txt`, `experiments/07-guest-walk/results/run1-walk-2026-11-04.txt` |
+| The collector's walk reaches every process in the WSL VM | **No.** 232 to 270 thread groups printed as pid 0, all in the root cgroup, against the walk's 45 to 71 of 282 to 341: the walk saw 0.158 to 0.208 of them. Walk threads plus cgroup threads at 0 fell inside `/proc/loadavg`'s task count read either side in 121 of 121 rounds. Which of the hidden tasks are kernel threads, the VM's own init or WSLg was not established without privileges | same |
+| WSLg's processes are in the walk | **No.** WSLg was running (`/mnt/wslg` present, `DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`) and 0 pids in this distro's `/proc` were named `weston`, `Xwayland` or `pulseaudio` | `experiments/07-guest-walk/results/run1-wslg-2026-11-04.txt` |
+| Other distros are running | `Not checked`: only `Ubuntu` is registered, so none could be. `wsl.exe -l -v` was not run | `experiments/07-guest-walk/results/run1-static-2026-11-04.txt` |
+| Process cores summed over the walk are the guest's CPU | **No.** Idle, 99 s: 8.640 core-seconds over processes, 10.774 in this distro's cgroups (which keep exited processes' time), 13.224 in the root cgroup, 13.220 from `/proc/stat` busy; the sum was 0.654 of busy. Under churn, 21 s: 1.650 against 19.031, 19.872 and 19.880, 0.083 of busy. The cgroups' excess over the sum during churn, less the idle rate, was 16.928 core-seconds against the children's own 16.720 CPU-seconds, so a process that exits between walks is lost to the sum | `experiments/07-guest-walk/results/analysis-2026-11-04.txt`, `experiments/07-guest-walk/results/run1-churn-2026-11-04.txt` |
+| RSS summed over the walk is the guest's memory in use | **No** as a whole, though close here: 2034417664 to 2153005056 B against `MemTotal - MemAvailable` 2074980352 to 2180792320 B, ratio 0.972 to 1.006. Shared pages count once per process and hidden tasks are left out, so agreement here is not a property of the sum | `experiments/07-guest-walk/results/analysis-2026-11-04.txt` |
+| Summing costs little | Observed: the sums alone took 0.0200 ms mean, 0.0760 ms at most; the walk itself 0.802 ms mean, 2.730 ms at most | same |
+
+A sum of non-negative terms is at or above each term, so no row here records that.
+
 ## WSL clock rate (2026-10-31)
 
 No raw file was saved for this section; the numbers were read live.

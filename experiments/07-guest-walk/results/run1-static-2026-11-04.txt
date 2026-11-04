@@ -1,0 +1,7 @@
+utc 2026-11-04T13:57:00Z
+windows Microsoft Windows [Version 10.0.26200.9711]
+kernel 6.6.114.1-microsoft-standard-WSL2
+distro Ubuntu
+registered distros (HKCU Lxss DistributionName):
+    DistributionName    REG_SZ    Ubuntu
+pid namespace pid:[4026532219], pid 1 systemd
