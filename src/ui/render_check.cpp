@@ -4610,26 +4610,55 @@ void check_gpu_panel() {
     const int64_t end = step.samples().back().unix_ms;
     check(sl >= 0 && step.gpu_seen_ms(sl) == end - 1000 && end - step.gpu_seen_ms(sl) < 60000, "after a clock step back gpu_seen_ms lies in the range it did before");
   }
-  // Stacked (under 64 columns), 4 Windows rows and 2 holders: wherever the history is drawn the Windows list shows
-  // at least 3 rows after the split (audit finding 3).
+  // Stacked (under 64 columns): wherever the history is drawn the Windows list shows 3 rows, or all it has, after
+  // the split, and the holder list keeps a name row (audit finding 3 and its re-audit). Several widths, with and
+  // without the denied warning, so the height where the history would take the lists' last rows is met many times.
   {
-    const gpu_fixture g = gpu_minute(60, [](snapshot& s, int) {
-      s.gpu_engines.push_back({9001, "3D", 20});
-      s.gpu_engines.push_back({10000, "3D", 10});
-    });
-    int drawn = 0;
-    for (int rows = 1; rows <= 66; ++rows) {
-      const std::vector<line> f = render(g.s, 60, rows, g.s.unix_ms, &g.h, state_for(2));
-      if (row_at(f, 0, "Windows · vmwp.exe") < 0) continue;
-      ++drawn;
-      int shown = -1;
+    const auto shown_windows = [](const std::vector<line>& f, int of) {
+      const std::string tail = " of " + std::to_string(of) + "\n";
       for (const line& l : f) {
         const std::string t = as_text({l});
-        if (has(t, " of 4\n") && t.find(" of 4") == t.find(' ')) shown = atoi(t.c_str());
+        if (t.size() > tail.size() && t.compare(t.size() - tail.size(), tail.size(), tail) == 0 && t.find(' ') == t.find(" of ")) return atoi(t.c_str());
       }
-      check(shown >= 3, "stacked at 60x" + std::to_string(rows) + ": the history only while the Windows list shows 3 rows, it shows " + std::to_string(shown));
+      return -1;
+    };
+    const auto holders_shown = [](const std::vector<line>& f) {
+      const std::string t = as_text(f);
+      const size_t list = t.find("holders, no usage measured");  // Its column row says top N of M
+      const size_t at = list == std::string::npos ? list : t.find(" top ", list);
+      return at == std::string::npos ? -1 : atoi(t.c_str() + at + 5);
+    };
+    for (const int users : {4, 1, 2}) {
+      for (const bool denied : {true, false}) {
+        const gpu_fixture g = gpu_minute(60, [users, denied](snapshot& s, int) {
+          s.gpu_engines.clear();
+          s.gpu_memory.clear();
+          for (int i = 0; i < users; ++i) s.gpu_engines.push_back({i == 0 ? 11736u : 10000u + 4 * static_cast<uint32_t>(i), "3D", 50.0 - i});
+          if (!denied) s.wsl_json.replace(s.wsl_json.find("\"dxg_denied\":36"), 15, "\"dxg_denied\":0");
+        });
+        int drawn = 0;
+        for (const int width : {40, 48, 56, 60, 63}) {
+          for (int rows = 1; rows <= 66; ++rows) {
+            const std::vector<line> f = render(g.s, width, rows, g.s.unix_ms, &g.h, state_for(2));
+            const std::string n = " at " + std::to_string(width) + "x" + std::to_string(rows) + ", " + std::to_string(users) + " users" + (denied ? ", denied" : "");
+            if (row_at(f, 0, "Windows · vmwp.exe") < 0) continue;
+            ++drawn;
+            check(shown_windows(f, users) >= std::min(3, users), "with the history the Windows list keeps 3 rows or all it has" + n + ": " + std::to_string(shown_windows(f, users)));
+            check(holders_shown(f) >= 1, "and the holder list keeps a name" + n + ": top " + std::to_string(holders_shown(f)));
+          }
+        }
+        check(drawn > 40, "the stacked fixtures draw the history at many sizes: " + std::to_string(drawn));
+      }
     }
-    check(drawn > 10, "the stacked fixture draws the history at many heights: " + std::to_string(drawn));
+    // The re-audit's repro: one GPU user, two holders, 60x35 and 60x36: never `top 0 of 2`.
+    const gpu_fixture one = gpu_minute(60, [](snapshot& s, int) {
+      s.gpu_engines = {{11736, "3D", 50}};
+      s.gpu_memory.clear();
+    });
+    for (const int rows : {35, 36}) {
+      const std::string t = as_text(render(one.s, 60, rows, one.s.unix_ms, &one.h, state_for(2)));
+      check(!has(t, "top 0 of") && has(t, "python3"), "60x" + std::to_string(rows) + ", one user and two holders: a holder row is kept");
+    }
   }
   // A stall of what is kept with the clock stepped back: no slot keeps a time ahead of the new sample, so a process
   // gone before the stall does not come back into the range when the clock reaches its old time (audit finding 6).

@@ -2456,7 +2456,8 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   int list_room = 0;
   if (const int least = (side ? 5 : 8) + denied_rows(w); room >= least) {
     list_room = std::min(room, kMaxGpuList);
-    if (room - list_room < history_least && gpu_windows_rows(w, width, room - history_least) >= keep_rows) list_room = room - history_least;
+    // The lists keep their own least too: one holder row, whatever the Windows list needs.
+    if (room - list_room < history_least && room - history_least >= least && gpu_windows_rows(w, width, room - history_least) >= keep_rows) list_room = room - history_least;
     bool cut = false;
     gpu_lists(lists, s, w, rows_drawn, list_for(sv, 0, 0), width, list_room, cut);
     room -= static_cast<int>(lists.size());
