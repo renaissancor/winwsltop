@@ -6,7 +6,8 @@ In order. Everything here is PROPOSED until a contract's decision log records it
 and `docs/measurable.md` first; two items below are also open questions in `docs/contracts/`.
 
 ## 1. Now
-- Windows GPU holders first, or one holders block under GPU. Today `warp.exe`, the biggest user, is row 6.
+- Windows GPU holders: listed on panel 2 since slice 2, every process holding `Local Usage` memory, after those
+  with engine use in the range. Still open: whether they should lead, or form one holders block under GPU.
 - Show `unattributed` between device totals and the split, with a short source label per figure.
 - About 10 Windows rows, idle virtual NICs hidden, `dxg_denied` dimmed unless GPU use has no visible holder.
 - Test the split and `Local Usage` under a real load in the merged build. Check whether WSL memory
@@ -17,8 +18,8 @@ and `docs/measurable.md` first; two items below are also open questions in `docs
   (slice 1, `design/panel-grammar.md`). Slice 2 (`design/panel-grammar-slice2.md`) draws a selected Windows
   process against all Windows processes; the guest's histories stay one series, since the collector's walk sees
   only its distro's PID namespace (ledger, "Guest process walk checked"). A guest whole waits for a source that
-  covers the VM, the root cgroup's `cpu.stat` the candidate (`contracts/evidence.md`). Still PROPOSED: a ring per GPU
-  side and per-process GPU history (slice 2, step G), and the
+  covers the VM, the root cgroup's `cpu.stat` the candidate (`contracts/evidence.md`). Per-process GPU history is built for
+  Windows processes on panel 2 (slice 2). Still PROPOSED: a ring per GPU side, and the
   braille chart of WSL vs Windows as panel 8's centrepiece, over the shared range (`panels.md`, Decisions).
 - **Contention verdict:** a plain line when both sides are busy and the GPU is near its limit, with the
   moment it began. Utilization alone hid -46% and -59% in experiment 01.

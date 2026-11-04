@@ -263,7 +263,8 @@ Panel 3's history and panel 4's need it. Cost at 1 s × 10 minutes:
 
 - Slots sit beside the existing ring, indexed by the same ring position, so a stall, a clock step or a clear
   moves them with it. `kKeepMs` becomes 600000 and `kCapacity` 601, since the range stops at 10 minutes.
-- **Identity.** A slot is keyed by side, pid and start: Windows' create time, which `processes.cpp` already
+- **Identity.** (Slice 2, `panel-grammar-slice2.md` section 1, adds the start to what selects a row, so selection
+  and the ring now agree.) A slot is keyed by side, pid and start: Windows' create time, which `processes.cpp` already
   reads for its own key, and the guest's `starttime`, which `collector.py` already reads for its own. A reused
   pid is meant to get a new slot, but that the start differs after reuse is `Not checked` on either side (ledger,
   "Memory and process collectors checked": no reuse was seen). Until the ledger shows it, the name is the only
@@ -461,7 +462,9 @@ into its threads.
   guest's used and cache rest on ledger rows; Windows' cache carries `?` (part 1).
 - **Each side's processes by memory**, Windows by working set and the guest by RSS, both `?`, with
   `N of M`, scrolling and `tab` as panel 3.
-- **One history, full width**, following focus, titled `Windows · vmmemWSL 7120 · working set?`. Zooming,
+- **One history, full width**, following focus, titled `Windows · vmmemWSL 7120 · working set?`. (Superseded by
+  slice 2, `panel-grammar-slice2.md` sections 3 and 6: it draws from 0, a Windows row as part of all Windows
+  processes, its labels in the heading with no gutter.) Zooming,
   never narrower than 4 MiB, machtop's per-app floor. The default selection is the first row, which is
   `vmmemWSL` while the VM holds the largest working set, so the panel opens on the VM's history.
 

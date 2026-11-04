@@ -25,8 +25,9 @@ winwsltop watches two systems that share one machine. So on every panel:
 - **A Windows figure about the VM and the guest's own figure are two readings, both shown.** Where they
   disagree, the gap is the finding (the CPU panel's `lost`), named as inferred with its formula.
 - **WSL has no per-process GPU use.** `/dev/dxg` holders are identity only (ledger, the table at the
-  top, "`/dev/dxg` holders identify the Linux process", and WSL collector checked). A holder can be
-  selected, and its history then says `no usage measured` instead of drawing a graph.
+  top, "`/dev/dxg` holders identify the Linux process", and WSL collector checked). The holder list
+  is a reference list, not selectable, so no history ever stands in for usage that is not measured (machtop,
+  2026-11-04, `design/panel-grammar-slice2.md` Q5).
 
 ## Shared grammar
 
@@ -41,8 +42,9 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
   Decided by machtop 2026-11-02, added to the shared grammar in machtop's `docs/panels.md`. Here it is
   how a panel moves between its Windows list and its WSL list, which `contracts/ui.md` rule 3 forbids
   merging.
-  - Each list keeps its own selected row, a process by pid and name (machtop 246c2cb), so the selection
-    survives a reorder. Switching lists resets neither.
+  - Each list keeps its own selected row, a process by pid, name and start time (pid and name where the start
+    is 0), so the selection survives a reorder and a reused pid is another process. The name goes once the ledger
+    has rows on pid reuse, leaving pid and start, as machtop's (slice 2, `design/panel-grammar-slice2.md` section 1). Switching lists resets neither.
   - The list holding the selection has its heading lit; the other list's heading is dim and its rows
     show no ▶.
   - `s` sorts the list holding the selection, and the one history below the lists, full width and titled
@@ -86,11 +88,12 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
 - **Core detail:** the device (utilization, memory, power, clock: ledger, GPU device and memory
   collectors checked), then the VM-level split, `VM level, not exact shares` (ledger, Experiment 01
   result, "Shares add to 100%": no), with `unattributed` between device and split (PROPOSED,
-  `ROADMAP.md` 1). Then two lists side by side: Windows GPU users by engine percent with `Local Usage`
-  memory, holders first (PROPOSED, `ROADMAP.md` 1 and `contracts/ui.md` open questions: today the list is
-  by engine percent only); WSL `/dev/dxg` holders, `no usage measured`, which already lists holders first
-  (`src/ui/render.cpp`, the WSL process list's head).
-- **History:** the selected Windows process's GPU percent, or for a WSL holder, `no usage measured`.
+  `ROADMAP.md` 1). Then two lists side by side. Windows, selectable (slice 2): every process with
+  an engine above 0 at some sample in the range on screen, and every process holding GPU `Local Usage` memory,
+  by GPU % now, then most recent use, with `Local Usage`. WSL: `/dev/dxg` holders, `no usage measured`, a
+  reference list, not selectable; panel 2 has no `tab`.
+- **History:** the selected Windows process's GPU %, busiest engine, always one series, 0 to 100: the busiest
+  engine does not add across processes, so there is no whole to draw it against.
 - **Caveats on the panel:** `dxg_denied` processes could not be checked (ledger, WSL collector checked);
   `Dedicated Usage` is not VRAM in use and is never shown as if it were (ledger, GPU device and memory
   collectors checked).
@@ -101,7 +104,9 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
   lanes, `lost` (inferred, its formula on the panel), then the Windows and WSL process lists by cores,
   each selectable, scrolling and ending in `N of M` (slice 1, ac703b5).
 - **History:** the selected process's cores, one history full width following focus, from the per-process
-  ring. A guest process's cores are the guest's own count (ledger, "Memory and process collectors checked",
+  ring. A Windows process is drawn as its part of all Windows processes' cores (`process_totals`, never PDH busy),
+  with `now N% of all`; a guest process as one series, since the guest has no whole (ledger, "Guest process walk
+  checked"; slice 2). A guest process's cores are the guest's own count (ledger, "Memory and process collectors checked",
   bindings only); no `?`. A first reading reads `n/a`.
 - **Moved out:** RAM, to panel 4 (slice 1).
 - **Not here:** which Windows LP ran a vCPU, and so which LP ran a guest thread. No counter read says
@@ -121,7 +126,8 @@ As in machtop. Where winwsltop's screen differs today, the line says so.
   working set on Windows. The one reading near it (ledger, WSL collector checked, "Guest memory vs
   host") has guest used plus cache close to `vmmemWSL`, but read minutes apart, so the fit may be
   coincidence. It needs a row with the two read in one sample before the panel states it.
-- **History:** the selected process's memory, zoomed, one history following focus.
+- **History:** the selected process's memory from 0, one history following focus. A Windows process is drawn as
+  its part of `Σ working sets, all Windows processes`, never called used; a guest process as one series (slice 2).
 - **Marked `?`:** Windows cache (ledger, "Memory and process collectors checked": Unresolved) and guest swap
   (`Not checked`, it read 0). Experiment 06 cleared Windows available, used, commit and per-process working
   set. Guest per-process memory is labelled `stat rss`, what it reads, since it reads below `VmRSS` (same
@@ -182,7 +188,7 @@ is the shared one (Shared grammar).
 | today | proposed |
 |---|---|
 | `1` Overall | 1 Overview, cards and the verdict line |
-| `2` GPU | 2 GPU, with selection; Windows holders first is PROPOSED (`ROADMAP.md` 1), WSL's already are |
+| `2` GPU | 2 GPU, the Windows list selectable with the GPU history, Windows holders listed: built, slice 2 |
 | `3` CPU and RAM | 3 CPU, and RAM moves to 4 Memory: built, slice 1 |
 | `t` span 60 s, 5 min, 15 min | `←`/`→` 1, 5, 10 minutes, every panel with a graph: built, slice 1 |
 | none | 4 Memory: built, slice 1. 5 to 8, each built only once its ledger rows exist; until then a page says so |

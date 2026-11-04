@@ -77,12 +77,12 @@ The binary isn't code-signed, so Windows SmartScreen may warn you the first time
 | key | does |
 |---|---|
 | `1` | Overview: the GPU and its split, Windows CPU, memory, disk and network, WSL CPU, memory and pressure, the VM, then both process lists |
-| `2` | GPU: graphs of device, WSL VM, Windows, memory and power, then Windows GPU users and WSL `/dev/dxg` holders |
+| `2` | GPU: graphs of device, WSL VM, Windows, memory and power, then Windows GPU users and holders, WSL `/dev/dxg` holders, and the selected Windows process's GPU history |
 | `3` | CPU: what each side says and what the VM costs, in words, then a timeline of every thread on both sides, then both process lists and the selected process's history. Needs a window 100 wide and 29 tall at 20 threads, or it shows a simpler panel |
 | `4` | Memory: each side's used and cache, the VM's working set on its own row, both sides over time, then both process lists by memory and the selected process's history |
 | `5`-`8` | Disk, network, processes and VM cost: not built yet; each page says where its figures are today |
 | `←` `→` | On a panel with a graph: show the last 1, 5 or 10 minutes. History is kept in memory from launch, so a new run starts empty |
-| `↑` `↓` | On panels 3 and 4: select a process. A long list scrolls with it, and the history below shows it |
+| `↑` `↓` | On panels 2, 3 and 4: select a process. A long list scrolls with it, and the history below shows it. A Windows process's CPU and memory history shows it against all Windows processes |
 | `tab` | On panels 3 and 4: move the selection between the Windows list and the WSL list |
 | `esc` | Back to panel 1. Each panel keeps its selection |
 | `q` | Quit. `ㅂ` with Korean input on, Alt+Q and Ctrl+C work too |
