@@ -86,6 +86,7 @@ snapshot busy() {
             {"vEthernet (WSL (Hyper-V firewall))", 42000, 1800, 10000000000, false},
             {"한글이아주아주아주아주아주아주아주아주긴인터페이스이름", 0, 0, 0, false}};
   s.gpu_engines = {{11736, "3D", 52}, {9002, "3D", 36}, {9002, "Copy", 4}, {5120, "3D", 1}};
+  s.gpu_engines_known = true;
   s.gpu_device = {true, "NVIDIA GeForce RTX 4070", true, true, true, true, true, 91, 187, 200, 71, 2730, 9 * kG, 12 * kG};
   s.gpu_memory = {{11736, 4509715660, 100000, 4509715660}, {9002, 1503238553, 200000, 1503238553}};
   s.gpu_split = {true, 52, 36, 4509715660, 1503238553};
@@ -1224,8 +1225,8 @@ void check_panels() {
   for (const line& l : frame) {
     const std::string t = as_text({l});
     ++n;
-    if (has(t, "vmwp.exe")) vmwp = n;
-    if (has(t, "Game.Shipping")) game = n;
+    if (has(t, "vmwp.exe") && !vmwp) vmwp = n;  // The list's row, not the history's title under it
+    if (has(t, "Game.Shipping") && !game) game = n;
     if (has(t, "한글추론기") || has(t, "python3")) {
       const size_t bar = t.find(" │ ");
       check(bar != std::string::npos && t.find(has(t, "python3") ? "python3" : "한글추론기") > bar, "holders right of the divider");
@@ -1240,7 +1241,7 @@ void check_panels() {
   check(rs.find("Game.Shipping") < rs.find("vmwp.exe"), "the GPU list follows GPU%, not cores");
   check(!has(as_text(render(full, 131, 50, kNow, &demo, state_for(2))), "svchost.exe"), "no process without GPU use in that list");
   const std::string stacked = as_text(render(full, 60, 66, kNow, &demo, state_for(2)));
-  check(stacked.rfind("vmwp.exe") < stacked.find("한글추론기", stacked.find("PROCESSES")), "stacked GPU lists do not interleave");
+  check(stacked.rfind("vmwp.exe", stacked.find("Windows · vmwp.exe")) < stacked.find("한글추론기", stacked.find("PROCESSES")), "stacked GPU lists do not interleave");
 
   // The CPU panel's small layout, which is every window under 100 columns.
   for (const int w : {80, 90, 99}) {
@@ -1364,13 +1365,18 @@ void check_panels() {
   }
 
   // More GPU users than rows: a cut Windows list is marked, and stacked lists split the rows.
+  const auto shown_of = [](const std::string& t, const char* tail) {  // The Windows list's own `N of M` line
+    const size_t end = t.find(tail);
+    return end == std::string::npos ? -1 : atoi(t.c_str() + t.rfind('\n', end) + 1);
+  };
   snapshot users = with_holders(full, 22);
   users.gpu_engines.clear();
   for (uint32_t i = 0; i < 15; ++i) users.gpu_engines.push_back({10000 + i * 4, "3D", 50.0 - i});
   snapshot few_holders = users;
   few_holders.wsl_json = full.wsl_json;
   const auto cut_users = render(few_holders, 131, 50, kNow, &demo, state_for(2));
-  check(has(as_text(cut_users), "of 15 by GPU%") && has(as_text(cut_users), "top 2 of 2") && marks_hidden(cut_users), "a cut Windows list is marked");
+  // 15 using an engine and the two holding local memory, which the list now holds too (Q4).
+  check(shown_of(as_text(cut_users), " of 17 ") > 0 && shown_of(as_text(cut_users), " of 17 ") < 17 && has(as_text(cut_users), "top 2 of 2"), "a cut Windows list says N of 17 under it");
   const auto top_of = [](const std::string& t, const char* tail) {
     const size_t end = t.find(tail);
     return end == std::string::npos ? -1 : atoi(t.c_str() + t.rfind("top ", end) + 4);
@@ -1378,7 +1384,7 @@ void check_panels() {
   int odd = 0;
   for (int rows = 1; rows <= 66; ++rows) {
     const std::string t = as_text(render(users, 60, rows, kNow, &demo, state_for(2)));
-    const int windows = top_of(t, " of 15 by GPU%"), holders = top_of(t, " of 22");
+    const int windows = shown_of(t, " of 17\n"), holders = top_of(t, " of 22");
     if (windows < 0 || holders < 0) continue;
     check(windows - holders == 0 || windows - holders == 1, "stacked lists split the rows evenly at 60x" + std::to_string(rows) + ": " + std::to_string(windows) + "," + std::to_string(holders));
     odd += windows - holders;
@@ -1389,7 +1395,7 @@ void check_panels() {
   snapshot zero = busy();
   zero.gpu_engines.push_back({4, "3D", 0});
   const auto zf = render(zero, 131, 50, kNow, &demo, state_for(2));
-  check(has(as_text(zf), "top 3 of 3 by GPU%") && !has(as_text(zf), "System"), "an engine at 0% is not a GPU user");
+  check(has(as_text(zf), "\n2 of 2 ") && !has(as_text(zf), "System"), "an engine at 0% is not a GPU user; pid 5120, in no process row or slot, is not listed");
 
   // Without a limit the watts stand alone and the title says why the graph is blank.
   snapshot limitless = busy();
@@ -3301,9 +3307,10 @@ void check_view_keys() {
       // Panel 3 offers ↑↓ and tab with its lists; the keys go together, so they need 19 + 3 + 37 columns there.
       // 19 for the panels' numbers, 3, 37 for the keys; panel 4 stacked under 80 columns leaves rows out at 40
       // high, and the footer's leading … takes 2 more.
+      // Panel 2 offers ↑↓ but not tab: its one list (design/panel-grammar-slice2.md section 5), 19 + 3 + 27 columns.
       const bool lists = p == 3 || p == 4;
-      const int keys_from = p == 4 ? 61 : lists ? 59 : 38;
-      check(has(t, "↑↓") == (lists && w >= keys_from) && has(t, "tab list") == (lists && w >= keys_from), "↑↓ and tab only on panels 3 and 4, which draw their lists" + at);
+      const int keys_from = p == 4 ? 61 : lists ? 59 : p == 2 ? 49 : 38;
+      check(has(t, "↑↓") == ((lists || p == 2) && w >= keys_from) && has(t, "tab list") == (lists && w >= keys_from), "↑↓ on panels 2, 3 and 4, which draw their lists, tab only on 3 and 4" + at);
       check(has(t, "←→") == (panel_has_range(p) && w >= keys_from), "←→ only on panels 2, 3 and 4, where it fits beside the panels' numbers" + at);
       for (const span& q : foot) {
         if (q.text.empty() || q.text[0] < '1' || q.text[0] > '8' || (q.text.size() > 1 && q.text[1] != ' ')) continue;
@@ -4316,6 +4323,271 @@ void check_part_of_whole() {
   check(vt_frame(large(cs, ch, 131, 40), 40).size() < 48 * 1024, "two-tone histories stay under the frame budget");
 }
 
+// A minute of busy() on panel 2, each second changed by `at` (age in seconds, 0 the newest), pushed with what the
+// view keeps selected.
+struct gpu_fixture {
+  snapshot s;
+  history h;
+};
+
+gpu_fixture gpu_minute(int seconds, const std::function<void(snapshot&, int)>& at, const view_state& v = state_for(2), int64_t end = kNow) {
+  gpu_fixture f;
+  for (int age = seconds; age >= 0; --age) {
+    snapshot s = busy();
+    for (process_row& p : s.processes) p.create_time = 1000 + p.pid;
+    s.unix_ms = end - age * 1000;
+    at(s, age);
+    s.process_totals = process_totals_of(s);
+    f.h.push(s, selected_processes(s, v));
+    f.s = s;
+  }
+  return f;
+}
+
+std::string marked_row(const std::vector<line>& f) { return line_with(f, "▶"); }
+
+// design/panel-grammar-slice2.md section 5: panel 2's Windows list selectable, its rows from the range on screen and
+// the local holders, the WSL list a reference list, and the GPU history below.
+void check_gpu_panel() {
+  const key_event down{key::down}, up{key::up}, tab{key::tab};
+  // The panel at three sizes: one ▶, in the Windows list; ↑↓ and no tab; no top N of M on the Windows list.
+  {
+    const gpu_fixture g = gpu_minute(60, [](snapshot&, int) {});
+    for (const auto& [w, rows] : {std::pair{80, 24}, std::pair{100, 34}, std::pair{131, 40}}) {
+      const std::vector<line> f = render(g.s, w, rows, g.s.unix_ms, &g.h, state_for(2));
+      const std::string t = as_text(f), n = " at " + std::to_string(w) + "x" + std::to_string(rows);
+      check(frame_fits(f, w, rows), "panel 2 fits" + n);
+      if (!has(t, "PROCESSES")) continue;
+      check(count_of(t, "▶") == 1 && marked_row(f).find("▶") < marked_row(f).find("vmwp.exe"), "one ▶, on the Windows list" + n);
+      check(has(as_text({f.back()}), "↑↓ select") && !has(as_text({f.back()}), "tab"), "↑↓ offered, tab not" + n);
+      check(!has(line_with(f, "by GPU %, busiest engine"), "top ") && has(t, "\n2 of 2") , "the Windows heading drops top N of M; N of M under it" + n);
+      bool wsl_bg = false;
+      for (const line& l : f) {
+        const std::string r = as_text({l});
+        if (!has(r, "python3") && !has(r, "한글추론기")) continue;
+        for (const span& p : l) wsl_bg = wsl_bg || (p.bg256 == kSelectBg && (has(p.text, "python3") || has(p.text, "한글추론기")));
+      }
+      check(!wsl_bg, "the WSL holders have no selection background" + n);
+    }
+    view_state v = state_for(2);
+    check(apply_key(v, tab, g.s, g.h, g.s.unix_ms) && v.panels[2].focus == 0, "tab changes nothing on panel 2");
+    const std::string hist = line_with(render(g.s, 131, 40, g.s.unix_ms, &g.h, state_for(2)), "Windows · vmwp.exe 11736 · GPU %, busiest engine");
+    check(!hist.empty() && has(hist, "last 1 min") && !has(hist, "scale") && !has(hist, "all Windows processes") && !has(hist, "*"), "the history: GPU %, busiest engine, last 1 min, no scale, no whole: " + hist);
+    check(!has(as_text(render(g.s, 131, 40, g.s.unix_ms, &g.h, state_for(2))), "all other"), "and no legend");
+  }
+
+  // Membership and order over the range: 9001 used an engine until 30 s ago.
+  {
+    const auto used_until_30s = [](snapshot& s, int age) {
+      if (age >= 30 && age <= 40) s.gpu_engines.push_back({9001, "3D", 20});
+    };
+    gpu_fixture g = gpu_minute(60, used_until_30s);
+    std::vector<gpu_row> rows = gpu_rows(g.s, &g.h, axis_end(g.h, g.s.unix_ms), 60000);
+    check(rows.size() == 3 && rows[0].key.pid == 11736 && rows[1].key.pid == 9002 && rows[2].key.pid == 9001, "by GPU % now, then the one used 30 s ago");
+    view_state v = state_for(2);
+    apply_key(v, down, g.s, g.h, g.s.unix_ms);
+    apply_key(v, down, g.s, g.h, g.s.unix_ms);
+    check(v.panels[2].rows[0].pid == 9001 && v.panels[2].rows[0].start == 1000 + 9001, "↓↓ selects it, with its start");
+    check(has(marked_row(render(g.s, 131, 40, g.s.unix_ms, &g.h, v)), "9001"), "it is drawn selected");
+    // Seconds later: listed while its last use is inside the minute, gone the sample it leaves, the selection to the first row.
+    for (int k = 1; k <= 30; ++k) {
+      snapshot s = g.s;
+      s.unix_ms = kNow + k * 1000;
+      g.h.push(s, selected_processes(s, v));
+      g.s = s;
+      const std::vector<line> f = render(s, 131, 40, s.unix_ms, &g.h, v);
+      const std::vector<std::vector<row_key>> keys = selectable_lists(s, 2, &g.h, s.unix_ms, 60000);
+      rows = gpu_rows(s, &g.h, axis_end(g.h, s.unix_ms), 60000);
+      bool same = keys[0].size() == rows.size();
+      for (size_t i = 0; same && i < rows.size(); ++i) same = keys[0][i].pid == rows[i].key.pid;
+      check(same, "the keys move through the rows drawn, " + std::to_string(k) + " s on");
+      if (k == 29) check(rows.size() == 3 && has(marked_row(f), "9001"), "29 s on: still listed and selected");
+      if (k == 30) {
+        check(rows.size() == 2 && has(marked_row(f), "11736"), "30 s on, its use out of the range: gone, the selection on the first row");
+        view_state moved = v;
+        apply_key(moved, down, s, g.h, s.unix_ms);
+        check(moved.panels[2].rows[0].pid == rows[1].key.pid && has(marked_row(render(s, 131, 40, s.unix_ms, &g.h, moved)), std::to_string(rows[1].key.pid)), "↓ then moves to the second row drawn");
+      }
+    }
+    // At 10 minutes it is back: its use lies inside that range.
+    view_state ten = v;
+    ten.range = 2;
+    check(gpu_rows(g.s, &g.h, axis_end(g.h, g.s.unix_ms), 600000).size() == 3 && has(marked_row(render(g.s, 131, 40, g.s.unix_ms, &g.h, ten)), "9001"), "on 10 minutes it is listed and selected again");
+  }
+  // Order: GPU % now, then most recent use, then holders by local memory; a local holder without use is listed.
+  {
+    const gpu_fixture g = gpu_minute(20, [](snapshot& s, int age) {
+      s.gpu_engines = {{11736, "3D", 10}, {9002, "3D", 10}};
+      if (age == 10) s.gpu_engines.push_back({9001, "3D", 5});
+      if (age == 15) s.gpu_engines.push_back({4, "Copy", 5});
+      s.gpu_memory = {{10000, 0, 0, 2ull << 30}, {10004, 0, 0, 3ull << 30}, {11736, 0, 0, 1}};
+    });
+    const std::vector<gpu_row> r = gpu_rows(g.s, &g.h, axis_end(g.h, g.s.unix_ms), 60000);
+    std::string order;
+    for (const gpu_row& x : r) order += std::to_string(x.key.pid) + " ";
+    check(order == "9002 11736 9001 4 10004 10000 ", "GPU % now (a tie by pid), then most recent use, then holders by local: " + order);
+    check(has(as_text(render(g.s, 131, 50, g.s.unix_ms, &g.h, state_for(2))), "10004 svchost.exe"), "a local holder with no engine use is listed");
+  }
+  // The history: 112 drawn at the ceiling, printed as measured in watch, no *; a gap where the engines were not read;
+  // ⣀ where they were and the process had no row.
+  {
+    const gpu_fixture g = gpu_minute(60, [](snapshot& s, int age) {
+      if (age == 42) s.gpu_engines = {{11736, "3D", 112}};
+      if (age >= 15 && age <= 25) s.gpu_engines_known = false;
+      s.gpu_memory.push_back({10000, 0, 0, 1ull << 30});  // svchost 10000 holds memory and never uses an engine
+    });
+    const std::vector<line> f = render(g.s, 131, 40, g.s.unix_ms, &g.h, state_for(2));
+    const int at = row_at(f, 0, "Windows · vmwp.exe");
+    bool watch = false;
+    for (const span& p : f[static_cast<size_t>(at)]) watch = watch || (has(p.text, "max 112%") && p.color == tone::watch);
+    check(at > 0 && watch && !has(as_text({f[static_cast<size_t>(at)]}), "*"), "112 is printed as measured, in watch, with no *");
+    const int top_lit = count_braille(as_text({f[static_cast<size_t>(at) + 1]}));
+    check(top_lit >= 1 && top_lit <= 4, "drawn at the ceiling: only the 112's cells reach the top row, " + std::to_string(top_lit));
+    view_state v = state_for(2);
+    for (int i = 0; i < 2; ++i) apply_key(v, down, g.s, g.h, g.s.unix_ms);
+    const std::vector<line> hf = render(g.s, 200, 40, g.s.unix_ms, &g.h, v);
+    const int ha = row_at(hf, 0, "Windows · svchost.exe 10000");
+    check(ha > 0, "the holder's history is shown");
+    if (ha > 0) {
+      size_t last = static_cast<size_t>(ha) + 1;
+      while (last + 2 < hf.size() && !as_text({hf[last + 1]}).empty() && as_text({hf[last + 1]})[0] != '1') ++last;
+      const std::string bottom = as_text({hf[last]});
+      check(count_of(bottom, "⣀") > 50 && has(bottom, "⣀          "), "a holder with no engine row draws ⣀, with a gap where the engines were not read: " + bottom);
+    }
+  }
+  // A gpu series made late: 0 where the process was there and the engines read, NaN before it was there.
+  {
+    const gpu_fixture g = gpu_minute(30, [](snapshot& s, int age) {
+      if (age > 20) s.processes.erase(std::remove_if(s.processes.begin(), s.processes.end(), [](const process_row& p) { return p.pid == 9001; }), s.processes.end());
+      if (age >= 14 && age <= 16) s.gpu_engines_known = false;
+      if (age <= 5) s.gpu_engines.push_back({9001, "3D", 30});
+    });
+    const int slot = g.h.slot_of({0, 9001, 1000 + 9001, "카카오톡.exe"});
+    const sample_range all = g.h.samples();
+    const auto at_age = [&](int age) { return g.h.gpu_at(slot, g.h.position(all[all.size() - 1 - static_cast<size_t>(age)])); };
+    check(slot >= 0 && at_age(0) == 30 && at_age(10) == 0 && std::isnan(at_age(15)) && std::isnan(at_age(25)), "made late: 0 when there and read, NaN when unread or not yet there");
+  }
+  // A pid reused under the same name does not keep the selection.
+  {
+    gpu_fixture g = gpu_minute(10, [](snapshot&, int) {});
+    view_state v = state_for(2);
+    apply_key(v, down, g.s, g.h, g.s.unix_ms);
+    check(v.panels[2].rows[0].pid == 9002, "9002 selected");
+    snapshot reused = g.s;
+    for (process_row& p : reused.processes) {
+      if (p.pid == 9002) p.create_time = 777;
+    }
+    // The old 9002 used an engine inside the range, so it stays listed from its slot, n/a now, and keeps the
+    // selection; the new 9002 is another row.
+    const std::vector<line> rf = render(reused, 131, 40, reused.unix_ms, &g.h, v);
+    check(count_of(as_text(rf), " 9002 Game.Shipping") == 2 && has(marked_row(rf), "9002") && has(marked_row(rf), "n/a"), "the same pid and name with another start is another row: the selection stays with the old one");
+    // A holder that never used an engine is not kept by the ring: its pid reused, the selection falls to the first row.
+    gpu_fixture hold = gpu_minute(10, [](snapshot& t, int) { t.gpu_memory.push_back({10000, 0, 0, 1ull << 30}); });
+    view_state hv = state_for(2);
+    for (int i = 0; i < 2; ++i) apply_key(hv, down, hold.s, hold.h, hold.s.unix_ms);
+    check(hv.panels[2].rows[0].pid == 10000, "the holder 10000 selected");
+    snapshot hreused = hold.s;
+    for (process_row& p : hreused.processes) {
+      if (p.pid == 10000) p.create_time = 777;
+    }
+    check(has(marked_row(render(hreused, 131, 40, hreused.unix_ms, &hold.h, hv)), "11736"), "its pid reused under the same name: the selection falls to the first row");
+    check(selected_processes(g.s, v).size() == 1 && selected_processes(g.s, v)[0].pid == 9002 && selected_processes(g.s, v)[0].start == 1000 + 9002, "selected_processes names panel 2's selection");
+  }
+  // At the cap: a process that used an engine and exited is listed under its own name, its key carries its slot's
+  // start, and selecting it keeps its slot while 50 new processes arrive each second.
+  {
+    constexpr int64_t T0 = 1793000000000LL;
+    const auto win = [](uint32_t pid, const std::string& name, uint64_t start) {
+      process_row p;
+      p.pid = pid; p.name = name; p.create_time = start; p.cores = 0.1; p.cores_known = true; p.working_set = 1 << 20;
+      return p;
+    };
+    std::vector<process_row> base;
+    for (uint32_t i = 1; i <= 390; ++i) base.push_back(win(i, "p", i));
+    history h;
+    view_state v = state_for(2);
+    snapshot s;
+    int64_t t = T0;
+    for (int i = 0; i < 5; ++i, t += 1000) {
+      s = snapshot{};
+      s.unix_ms = t;
+      s.interval_s = 1;
+      s.processes = base;
+      s.processes.push_back(win(5000, "x.exe", 42));
+      s.gpu_engines_known = true;
+      s.gpu_engines = {{5000, "3D", 70}};
+      if (i == 4) apply_key(v, up, s, h, t);  // Moved to: the key is set
+      h.push(s, selected_processes(s, v));
+    }
+    uint32_t next = 100000;
+    for (int i = 0; i < 30; ++i, t += 1000) {
+      s = snapshot{};
+      s.unix_ms = t;
+      s.interval_s = 1;
+      s.processes = base;
+      for (int k = 0; k < 50; ++k, ++next) s.processes.push_back(win(next, "cc", next));
+      s.gpu_engines_known = true;
+      h.push(s, selected_processes(s, v));
+    }
+    const std::vector<gpu_row> r = gpu_rows(s, &h, axis_end(h, s.unix_ms), 60000);
+    check(v.panels[2].rows[0].pid == 5000 && v.panels[2].rows[0].start == 42, "the key carries the start");
+    check(r.size() == 1 && r[0].key.pid == 5000 && r[0].key.name == "x.exe" && r[0].key.start == 42 && std::isnan(r[0].now), "an exited process that used an engine 30 s ago is listed under its own name and start, n/a now");
+    check(h.slot_of({0, 5000, 42, "x.exe"}) >= 0 && h.slots_allocated() <= 1024, "its slot survives the cap");
+    const std::vector<line> f = render(s, 131, 40, s.unix_ms, &h, v);
+    check(has(marked_row(f), "x.exe") && has(as_text(f), "Windows · x.exe 5000 · GPU %, busiest engine"), "and it is drawn selected, with its history");
+  }
+  // A reused slot carries nothing of its last occupant's GPU; a clock step back moves gpu_seen_ms with the samples.
+  {
+    constexpr int64_t T0 = 1793000000000LL;
+    const auto one = [](int64_t t, uint32_t pid, uint64_t start, double gpu) {
+      snapshot s;
+      s.unix_ms = t;
+      s.interval_s = 1;
+      process_row p;
+      p.pid = pid; p.name = "g.exe"; p.create_time = start; p.working_set = 1 << 20;
+      s.processes = {p};
+      s.gpu_engines_known = true;
+      if (gpu > 0) s.gpu_engines = {{pid, "3D", gpu}};
+      return s;
+    };
+    history h;
+    h.push(one(T0, 7, 1, 80));
+    const int first = h.slot_of({0, 7, 1, "g.exe"});
+    h.push(one(T0 + 601000, 8, 2, 0));  // 7 gone for what is kept: let go
+    h.push(one(T0 + 602000, 9, 3, 0));  // 9 takes the slot let go
+    const int reused = h.slot_of({0, 9, 3, "g.exe"});
+    check(first >= 0 && reused == first && h.gpu_seen_ms(reused) == 0 && h.gpu_at(reused, h.position(h.samples().back())) == 0, "a reused slot has no gpu series and no gpu_seen_ms of the last occupant");
+    history step;
+    step.push(one(T0, 7, 1, 80));
+    step.push(one(T0 + 1000, 7, 1, 80));
+    step.push(one(T0 - 3600000, 7, 1, 0));  // The wall clock stepped back an hour
+    const int sl = step.slot_of({0, 7, 1, "g.exe"});
+    const int64_t end = step.samples().back().unix_ms;
+    check(sl >= 0 && step.gpu_seen_ms(sl) == end - 1000 && end - step.gpu_seen_ms(sl) < 60000, "after a clock step back gpu_seen_ms lies in the range it did before");
+  }
+  // Every size, three fixtures, and the frame budget.
+  {
+    const gpu_fixture g = gpu_minute(60, [](snapshot&, int) {});
+    snapshot hostile = g.s;
+    hostile.processes.push_back(hostile.processes[5]);
+    hostile.processes.back().pid = 31337;
+    hostile.processes.back().name = "\x1b]0;x\x07\x1b[2Jgpu.exe";
+    hostile.gpu_engines.push_back({31337, "3D", 99});
+    const snapshot b = bare();
+    const history bh = demo_minute(b);
+    for (int w = 1; w <= 300; w += 3) {
+      for (int rows = 1; rows <= 66; rows += 5) {
+        const std::string n = " " + std::to_string(w) + "x" + std::to_string(rows);
+        check(frame_fits(render(g.s, w, rows, g.s.unix_ms, &g.h, state_for(2)), w, rows), "panel 2 fits" + n);
+        check(frame_fits(render(hostile, w, rows, g.s.unix_ms, &g.h, state_for(2)), w, rows), "panel 2 with a hostile name fits" + n);
+        check(frame_fits(render(b, w, rows, kNow, &bh, state_for(2)), w, rows), "bare panel 2 fits" + n);
+      }
+    }
+    check(vt_clean(vt_frame(render(hostile, 131, 40, g.s.unix_ms, &g.h, state_for(2)), 40)), "a hostile name on panel 2, list and history, stays safe");
+    check(vt_frame(render(g.s, 131, 40, g.s.unix_ms, &g.h, state_for(2)), 40).size() < 48 * 1024, "panel 2 under the frame budget");
+  }
+}
+
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
 void check_keys() {
   const auto is = [](const key_event& e, key k, int panel = 0, bool esc_first = false) { return e.k == k && e.panel == panel && e.esc_first == esc_first; };
@@ -4749,6 +5021,7 @@ int main(int argc, char** argv) {
   check_two_columns();
   check_history_heading();
   check_part_of_whole();
+  check_gpu_panel();
   if (!quick) {
     check_denied_note();
     check_holder_wording();

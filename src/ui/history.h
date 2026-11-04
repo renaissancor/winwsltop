@@ -3,8 +3,10 @@
 // nothing that includes this header sees the parser; wsl_view itself is core's.
 #pragma once
 #include "core/snapshot.h"
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <string>
 #include <tuple>
@@ -39,6 +41,7 @@ struct history_sample {
   // working sets in GiB. NaN where it was not known. Windows only: the guest has no whole (design/panel-grammar-
   // slice2.md section 2, dropped on experiment 07).
   float windows_cores_all = 0, windows_ws_all = 0;
+  bool gpu_engines_known = false;  // The engine counters read: a process with no engine row then measured 0
   uint16_t windows_threads = 0, wsl_threads = 0;        // How many of the values below this sample read
   float windows_core[kHistoryThreads] = {}, wsl_core[kHistoryThreads] = {};
 };
@@ -100,6 +103,32 @@ class history {
   float memory_at(int slot, size_t position) const { return slots_[static_cast<size_t>(slot)].memory[position]; }
   size_t position(const history_sample& p) const { return static_cast<size_t>(&p - ring_.data()); }
   size_t slots_used() const { return index_.size(); }
+
+  // Panel 2: a Windows process's GPU %, busiest engine, at a position, as the list shows it. The series is made
+  // only when the process first reads above 0; before that, and for a slot without one, it reads 0 where the
+  // process was present (its memory measured) and the engines were read, NaN elsewhere
+  // (design/panel-grammar-slice2.md section 5).
+  float gpu_at(int slot, size_t position) const {
+    const auto& sl = slots_[static_cast<size_t>(slot)];
+    if (!sl.gpu.empty()) return sl.gpu[position];
+    return !std::isnan(sl.memory[position]) && ring_[position].gpu_engines_known ? 0.0f : std::numeric_limits<float>::quiet_NaN();
+  }
+  // The newest sample in which the slot's process had an engine above 0, or 0 for none.
+  int64_t gpu_seen_ms(int slot) const { return slots_[static_cast<size_t>(slot)].gpu_seen_ms; }
+  struct gpu_slot {
+    int slot;
+    proc_id id;
+    int64_t seen_ms;
+  };
+  // The slots in use whose process has used an engine, with what identifies them, for the list's rows that have
+  // left the snapshot.
+  std::vector<gpu_slot> gpu_slots() const {
+    std::vector<gpu_slot> out;
+    for (size_t i = 0; i < slots_.size(); ++i) {
+      if (slots_[i].used && slots_[i].gpu_seen_ms != 0) out.push_back({static_cast<int>(i), slots_[i].id, slots_[i].gpu_seen_ms});
+    }
+    return out;
+  }
   size_t slots_allocated() const { return slots_.size(); }
 
   // When watching began, on the samples' clock, and meaningful only once there is a sample. A graph
@@ -121,6 +150,8 @@ class history {
     bool used = false;
     int64_t seen_ms = 0;              // The newest sample it was in
     std::vector<float> cores, memory;  // kCapacity each, by ring position
+    std::vector<float> gpu;            // Empty until the process first reads above 0 on an engine, then kCapacity
+    int64_t gpu_seen_ms = 0;           // The newest sample with an engine above 0, or 0
   };
   using slot_key = std::tuple<uint8_t, uint32_t, uint64_t>;
   int take_slot(const proc_id& id, int64_t t, size_t cap, const std::vector<proc_id>& keep);

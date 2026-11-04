@@ -1335,6 +1335,13 @@ int64_t graph_end(const history& h, int64_t now_ms) {  // A clock behind the new
   return h.samples().empty() ? 0 : std::max(now_ms, h.samples().back().unix_ms);
 }
 
+// The newest sample is the right edge unless it is late: a redraw between samples must not open an empty
+// bucket at now, because blank means not measured.
+int64_t axis_end(const history& h, int64_t now_ms) {
+  const int64_t last_sample = h.samples().empty() ? 0 : h.samples().back().unix_ms;
+  return !h.samples().empty() && static_cast<double>(now_ms - last_sample) <= kGapMs ? last_sample : graph_end(h, now_ms);
+}
+
 // ---- The panels ----------------------------------------------------------------------------------
 
 struct panel_frame {
@@ -1360,188 +1367,6 @@ bool star_drawn(const std::vector<grid_row>& rows, const history& h, int64_t end
   }
   return false;
 }
-
-std::vector<line> gpu_users_list(const snapshot& s, int col, int rows, bool& cut) {
-  std::vector<line> out;
-  std::vector<std::pair<uint32_t, double>> list;
-  for (const auto& e : busiest_engine(s)) {
-    if (e.second > 0) list.push_back(e);
-  }
-  std::stable_sort(list.begin(), list.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
-  row head;
-  head.add("Windows", tone::title, true);
-  if (list.empty()) {
-    out.push_back(head);
-    out.push_back(message("", s.gpu_engines_known ? "no process with GPU use" : "unavailable: no GPU engine data", tone::watch, 0));
-    return out;
-  }
-  std::map<uint32_t, const process_row*> by_pid;
-  for (const process_row& p : s.processes) by_pid[p.pid] = &p;
-  std::map<uint32_t, uint64_t> vram;
-  for (const gpu_memory_row& m : s.gpu_memory) vram[m.pid] = m.local;
-
-  const size_t shown = std::min(list.size(), static_cast<size_t>(std::max(0, rows)));
-  cut = cut || shown < list.size();
-  head.add(fmt("  top %d of %d by GPU%%, busiest engine", static_cast<int>(shown), static_cast<int>(list.size())), tone::dim);
-  out.push_back(head);
-
-  const bool pids = col >= 36;
-  const int name_w = std::clamp(col - (pids ? 27 : 19), 4, 40);
-  row cols;
-  cols.add(pad_left("GPU%", 5), tone::dim).add(" ");
-  if (pids) cols.add(pad_left("pid", 7), tone::dim).add(" ");
-  cols.add(pad("name", name_w), tone::dim).add(pad_left("LOCAL", 6), tone::dim);
-  out.push_back(cols);
-
-  for (size_t i = 0; i < shown; ++i) {
-    const uint32_t pid = list[i].first;
-    const auto p = by_pid.find(pid);
-    const auto v = vram.find(pid);
-    const bool is_vm = pid == s.vm.vmmem_pid || pid == s.vm.vmwp_pid;
-    row r;
-    r.add(pad_left(number(list[i].second, "%.0f"), 5)).add(" ");
-    if (pids) r.add(pad_left(fmt("%u", pid), 7), tone::dim).add(" ");
-    r.add(pad(p == by_pid.end() ? "-" : std::string_view(p->second->name), name_w), is_vm ? tone::title : tone::text);
-    r.add(pad_left(v == vram.end() ? "-" : fmt("%.1f", gib(v->second)), 6));
-    if (is_vm) r.add(" WSL VM", tone::dim);
-    out.push_back(r);
-  }
-  return out;
-}
-
-// The warning goes with the list: a list with no warning reads as complete.
-int denied_rows(const wsl_view& w) { return w.ok && w.dxg_denied > 0 ? 1 : 0; }
-
-// Names only. /dev/dxg says who holds the GPU; nothing here says how much each one uses.
-// rows is for names: the head, the columns and the dxg_denied warning come on top of it.
-std::vector<line> dxg_holder_list(const wsl_view& w, int col, int rows, bool& cut) {
-  std::vector<line> out;
-  row head;
-  head.add("WSL", tone::title, true).add(col >= 39 ? " /dev/dxg holders, no usage measured" : " holders, no usage measured", tone::dim);
-  out.push_back(head);
-  if (!w.ok) {
-    out.push_back(message("", "unavailable: no WSL data", tone::watch, 0));
-    return out;
-  }
-  if (w.dxg_pids.empty()) {
-    out.push_back(message("", "no holder seen", tone::dim, 0));
-  } else {
-    const size_t shown = std::min(w.dxg_pids.size(), static_cast<size_t>(std::max(0, rows)));
-    cut = cut || shown < w.dxg_pids.size();
-    row cols;
-    cols.add(pad_left("pid", 7), tone::dim).add(" ").add("name", tone::dim);
-    cols.add(fmt("  top %d of %d", static_cast<int>(shown), static_cast<int>(w.dxg_pids.size())), tone::dim);
-    out.push_back(cols);
-    for (size_t i = 0; i < shown; ++i) {
-      const uint32_t pid = w.dxg_pids[i];
-      const auto it = std::find_if(w.processes.begin(), w.processes.end(), [&](const wsl_process& p) { return p.pid == pid; });
-      row r;
-      r.add(pad_left(fmt("%u", pid), 7), tone::dim).add(" ").add(it == w.processes.end() ? std::string_view("-") : std::string_view(it->name));
-      out.push_back(r);
-    }
-  }
-  if (denied_rows(w)) {
-    out.push_back(message("", denied_note(w.dxg_denied, col), tone::watch, 0));
-  }
-  return out;
-}
-
-// avail covers everything drawn here. cut comes back true if either list left a row out.
-void gpu_lists(std::vector<line>& out, const snapshot& s, const wsl_view& w, int width, int avail, bool& cut) {
-  out.push_back(rule("PROCESSES", kTwoLists, width));
-  if (width >= kSideBySideGpu) {
-    const int col = (width - kListGap) / 2;
-    side_by_side(out, gpu_users_list(s, col, avail - 3, cut), dxg_holder_list(w, width - col - kListGap, avail - 3 - denied_rows(w), cut), col);
-    return;
-  }
-  // Stacked: rule, two heads, two column rows, the warning. The rest is shared, and what the first
-  // list leaves over goes to the second.
-  const int total = std::max(0, avail - 5 - denied_rows(w));
-  const int holders = w.ok ? static_cast<int>(std::min<size_t>(w.dxg_pids.size(), static_cast<size_t>(total))) : 0;
-  const std::vector<line> top = gpu_users_list(s, width, total - std::min(total / 2, holders), cut);
-  const std::vector<line> bottom = dxg_holder_list(w, width, avail - 3 - denied_rows(w) - static_cast<int>(top.size()), cut);
-  out.insert(out.end(), top.begin(), top.end());
-  out.insert(out.end(), bottom.begin(), bottom.end());
-}
-
-panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms) {
-  const gpu_device_view& g = s.gpu_device;
-  const gpu_split_view& split = s.gpu_split;
-  // The split is engine time grouped by side and can pass 100: docs/measurable.md, Experiment 01 result,
-  // "Shares add to 100%". A window that did says so beside the caption that explains it.
-  const int64_t end = graph_end(h, now_ms);
-  // The caption's * goes with a label that carries one, and only when that label is drawn (part 5). Where the
-  // starred caption costs the plot its rows, both go: the label still prints the number, in watch.
-  const auto make_top = [&](bool star) {
-    std::vector<panel> top = {
-        pct_panel({"device · NVML"}, g.present && g.has_util, g.util_pct, &history_sample::gpu_util),
-        pct_panel({"WSL VM ·", "engine counters,", star ? "VM level, not exact shares*" : "VM level, not exact shares"}, split.valid, split.vm_pct, &history_sample::vm_pct),
-        pct_panel({"Windows · engine counters"}, split.valid, split.windows_pct, &history_sample::windows_pct)};
-    top[1].star = top[2].star = star;  // The label's * and the caption's go together, or neither
-    return top;
-  };
-
-  panel memory{{"GPU memory · NVML,", "used of total"}, "n/a", tone::dim, &history_sample::gpu_mem_pct, &history_sample::gpu_mem_gib, "%.1f", " GiB"};
-  if (g.present && g.has_mem && g.mem_total > 0) {
-    memory.value = fmt("%.1f/%.1f GiB", gib(g.mem_used), gib(g.mem_total));
-    memory.color = tone::text;
-  }
-  panel power{{"power · NVML,", "of limit"}, "n/a", tone::dim, &history_sample::gpu_power_pct, &history_sample::gpu_power_w, "%.0f", " W"};
-  if (g.present && g.has_power && std::isfinite(g.power_w)) {
-    power.value = number(g.power_w, "%.0f");
-    if (g.power_limit_w > 0) power.value += "/" + number(g.power_limit_w, "%.0f");
-    else power.title.push_back("no limit reported, not graphed");
-    power.value += " W";
-    power.color = tone::text;
-  }
-  const std::vector<panel> second = {std::move(memory), std::move(power)};
-
-  panel_frame f;
-  f.lines.push_back(title_row(s, now_ms));
-  int room = height - 1;
-  std::vector<panel> top;
-  std::vector<grid_row> rows;
-  for (const bool star : {true, false}) {  // With the caption's *, unless no label with one is drawn
-    top = make_top(star);
-    rows.clear();
-    add_panels(rows, top, width);
-    add_panels(rows, second, width);
-    f.hidden = fit_rows(rows, room);
-    if (!star || star_drawn(rows, h, end, span_ms)) break;
-  }
-  f.graph = any_plot(rows);
-  room -= rows_height(rows);
-
-  // Lower blocks: as much of the lists as they can use, then the device line goes last of the two.
-  const bool device = room >= 1;
-  if (device) --room;
-  std::vector<line> lists;
-  // At least one row of each list, and the warning.
-  if (const int least = (width >= kSideBySideGpu ? 4 : 7) + denied_rows(w); room >= least) {
-    bool cut = false;
-    gpu_lists(lists, s, w, width, std::min(room, kMaxGpuList), cut);
-    room -= static_cast<int>(lists.size());
-    f.hidden = f.hidden || cut;
-  } else {
-    f.hidden = true;
-  }
-  if (!device) f.hidden = true;
-
-  const bool head = room >= 1;
-  if (head) {
-    // docs/measurable.md: close under load, not at idle, and the cause is unresolved.
-    f.lines.push_back(rule("GPU", width >= 100 ? "device and engine counters can differ, the difference is unexplained" : "device vs engine gap unexplained", width));
-    --room;
-  } else {
-    f.hidden = true;
-  }
-  if (room > 0) grow_rows(rows, room);
-  draw_rows(f.lines, rows, h, end, span_ms);
-  if (device) f.lines.push_back(device_row(g, width));
-  f.lines.insert(f.lines.end(), lists.begin(), lists.end());
-  return f;
-}
-
 
 // ---- Panel 3, the large layout -------------------------------------------------------------------
 //
@@ -1950,11 +1775,82 @@ std::vector<const wsl_process*> wsl_mem_order(const wsl_view& w) {
   return list;
 }
 
+// A row of panel 2's Windows list: a process using an engine at some sample inside the range on screen, or
+// holding GPU `local` memory now. Its key is pid, name and create time from the snapshot, or from its slot in the
+// ring once it has left the snapshot, never made up, so its slot is found and kept (audit finding 4).
+struct gpu_row {
+  row_key key;
+  double now = std::numeric_limits<double>::quiet_NaN();  // GPU %, busiest engine, this sample; NaN unread or gone
+  int64_t seen_ms = 0;                                     // Its latest use inside the range, or 0
+  bool used = false;                                       // An engine above 0 inside the range
+  bool has_local = false;
+  uint64_t local = 0;
+};
+
+// In the order drawn: by GPU % now, then most recent use, then pid; a holder with no use in the range last, by
+// `local` memory. end_ms is the range's right edge, axis_end, as the frame draws it.
+std::vector<gpu_row> gpu_rows(const snapshot& s, const history* h, int64_t end_ms, int64_t span_ms) {
+  const std::map<uint32_t, double> engines = busiest_engine(s);
+  std::map<uint32_t, uint64_t> local;
+  for (const gpu_memory_row& m : s.gpu_memory) local[m.pid] = m.local;
+  const auto in_range = [&](int64_t t) { return t != 0 && t <= end_ms && end_ms - t < span_ms; };
+  std::vector<gpu_row> out;
+  for (const process_row& p : s.processes) {
+    if (p.pid == 0) continue;
+    gpu_row r;
+    r.key = {true, p.pid, p.name, p.create_time};
+    if (s.gpu_engines_known) {
+      const auto e = engines.find(p.pid);
+      r.now = e == engines.end() ? 0 : e->second;
+    }
+    if (h) {
+      const int slot = h->slot_of({0, p.pid, p.create_time, p.name});
+      if (slot >= 0 && in_range(h->gpu_seen_ms(slot))) r.seen_ms = h->gpu_seen_ms(slot);
+    }
+    r.used = r.now > 0 || r.seen_ms != 0;
+    const auto l = local.find(p.pid);
+    r.has_local = l != local.end();
+    r.local = r.has_local ? l->second : 0;
+    if (r.used || r.local > 0) out.push_back(r);
+  }
+  if (h) {  // Used inside the range and gone since: from the ring, under the slot's own name and start
+    for (const history::gpu_slot& g : h->gpu_slots()) {
+      if (g.id.side != 0 || !in_range(g.seen_ms)) continue;
+      const bool listed = std::any_of(out.begin(), out.end(), [&](const gpu_row& r) { return r.key.pid == g.id.pid && r.key.name == g.id.name && r.key.start == g.id.start; });
+      if (listed) continue;
+      gpu_row r;
+      r.key = {true, g.id.pid, g.id.name, g.id.start};
+      r.seen_ms = g.seen_ms;
+      r.used = true;
+      out.push_back(r);
+    }
+  }
+  std::stable_sort(out.begin(), out.end(), [](const gpu_row& a, const gpu_row& b) {
+    if (a.used != b.used) return a.used;
+    if (a.used) {
+      const double na = std::isfinite(a.now) ? a.now : -1, nb = std::isfinite(b.now) ? b.now : -1;
+      if (na != nb) return na > nb;
+      if (a.seen_ms != b.seen_ms) return a.seen_ms > b.seen_ms;
+    } else if (a.local != b.local) {
+      return a.local > b.local;
+    }
+    return a.key.pid < b.key.pid;
+  });
+  return out;
+}
+
 // The selectable lists of a panel, each as its rows' keys in the order drawn: the Windows and WSL lists of
 // panels 3 and 4. A list with no row is not selectable, and nor is the guest's when its line is unreadable
-// or stale: design/panel-grammar.md part 3, "WSL unavailable or stale ... nothing to select".
-std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel) {
+// or stale: design/panel-grammar.md part 3, "WSL unavailable or stale ... nothing to select". Panel 2 has one,
+// its Windows list, whose rows read the ring over the range ending where the frame's does, axis_end(h, now_ms),
+// so a key moves through the rows drawn (design/panel-grammar-slice2.md section 5, audit finding 8); its WSL list
+// is a reference list. Without a history panel 2's list is this sample's alone.
+std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel, const history* h = nullptr, int64_t now_ms = 0, int64_t span_ms = kSpansMs[0]) {
   std::vector<std::vector<row_key>> lists(2);
+  if (panel == 2) {
+    for (const gpu_row& r : gpu_rows(s, h, h ? axis_end(*h, now_ms) : s.unix_ms, span_ms)) lists[0].push_back(r.key);
+    return lists;
+  }
   if (panel != 3 && panel != 4) return {};
   for (const process_row* p : panel == 3 ? windows_cpu_order(s) : windows_mem_order(s)) lists[0].push_back({true, p->pid, p->name, p->create_time});
   if (s.wsl_age_s < kStaleS) {
@@ -2090,9 +1986,9 @@ struct selection_view {
   size_t row[2] = {0, 0};
 };
 
-selection_view selection_of(const snapshot& s, const view_state& v, int panel = 3) {
+selection_view selection_of(const snapshot& s, const view_state& v, int panel, const history* h, int64_t now_ms) {
   selection_view sv;
-  sv.lists = selectable_lists(s, panel);
+  sv.lists = selectable_lists(s, panel, h, now_ms, kSpansMs[std::clamp(v.range, 0, 2)]);
   const view_state::panel_view& pv = v.panels[panel];
   sv.focus = focused_list(pv.focus, sv.lists);
   for (size_t i = 0; i < 2; ++i) sv.row[i] = selected_row(sv.lists[i], pv.rows[i]);
@@ -2343,6 +2239,228 @@ std::vector<line> process_history(const history& h, const proc_id* id, int width
   return out;
 }
 
+// ---- Panel 2, GPU: its lists and history
+
+// ---- Panel 2's Windows list (design/panel-grammar-slice2.md section 5, Q4)
+
+std::vector<line> gpu_users_list(const snapshot& s, const std::vector<gpu_row>& list, int col, const list_view& v) {
+  row head;
+  head.add("Windows", list_head_tone(v.focused), v.focused);
+  if (list.empty()) return {head, message("", s.gpu_engines_known ? "no process with GPU use" : "unavailable: no GPU engine data", tone::watch, 0)};
+  head.add("  by GPU %, busiest engine", tone::dim);
+  std::vector<line> out = {head};
+
+  const bool pids = col >= 38;
+  const int name_w = std::clamp(col - (pids ? 29 : 21), 4, 40);
+  row cols;
+  cols.add("  ").add(pad_left("GPU%", 5), tone::dim).add(" ");
+  if (pids) cols.add(pad_left("pid", 7), tone::dim).add(" ");
+  cols.add(pad("name", name_w), tone::dim).add(pad_left("LOCAL", 6), tone::dim);
+  out.push_back(cols);
+
+  const size_t first = first_drawn(v.selected, v.rows), end = std::min(list.size(), first + static_cast<size_t>(std::max(0, v.rows)));
+  for (size_t i = first; i < end; ++i) {
+    const gpu_row& g = list[i];
+    const bool is_vm = g.key.pid == s.vm.vmmem_pid || g.key.pid == s.vm.vmwp_pid, marked = v.focused && i == v.selected;
+    row r;
+    list_lead(r, marked);
+    r.add(pad_left(std::isfinite(g.now) ? number(g.now, "%.0f") : "n/a", 5)).add(" ");
+    if (pids) r.add(pad_left(fmt("%u", g.key.pid), 7), tone::dim).add(" ");
+    r.add(pad(g.key.name, name_w), is_vm ? tone::title : tone::text);
+    r.add(pad_left(g.has_local ? fmt("%.1f", gib(g.local)) : "-", 6));
+    if (is_vm) r.add(" WSL VM", tone::dim);
+    out.push_back(list_row(r, marked));
+  }
+  out.push_back({{fmt("%d of %d", static_cast<int>(end - first), static_cast<int>(list.size())), tone::dim}});
+  return out;
+}
+
+// The warning goes with the list: a list with no warning reads as complete.
+int denied_rows(const wsl_view& w) { return w.ok && w.dxg_denied > 0 ? 1 : 0; }
+
+// Names only. /dev/dxg says who holds the GPU; nothing here says how much each one uses.
+// rows is for names: the head, the columns and the dxg_denied warning come on top of it.
+std::vector<line> dxg_holder_list(const wsl_view& w, int col, int rows, bool& cut) {
+  std::vector<line> out;
+  row head;
+  head.add("WSL", tone::title, true).add(col >= 39 ? " /dev/dxg holders, no usage measured" : " holders, no usage measured", tone::dim);
+  out.push_back(head);
+  if (!w.ok) {
+    out.push_back(message("", "unavailable: no WSL data", tone::watch, 0));
+    return out;
+  }
+  if (w.dxg_pids.empty()) {
+    out.push_back(message("", "no holder seen", tone::dim, 0));
+  } else {
+    const size_t shown = std::min(w.dxg_pids.size(), static_cast<size_t>(std::max(0, rows)));
+    cut = cut || shown < w.dxg_pids.size();
+    row cols;
+    cols.add(pad_left("pid", 7), tone::dim).add(" ").add("name", tone::dim);
+    cols.add(fmt("  top %d of %d", static_cast<int>(shown), static_cast<int>(w.dxg_pids.size())), tone::dim);
+    out.push_back(cols);
+    for (size_t i = 0; i < shown; ++i) {
+      const uint32_t pid = w.dxg_pids[i];
+      const auto it = std::find_if(w.processes.begin(), w.processes.end(), [&](const wsl_process& p) { return p.pid == pid; });
+      row r;
+      r.add(pad_left(fmt("%u", pid), 7), tone::dim).add(" ").add(it == w.processes.end() ? std::string_view("-") : std::string_view(it->name));
+      out.push_back(r);
+    }
+  }
+  if (denied_rows(w)) {
+    out.push_back(message("", denied_note(w.dxg_denied, col), tone::watch, 0));
+  }
+  return out;
+}
+
+// avail covers everything drawn here. cut comes back true if the holder list left a row out; the Windows list
+// scrolls and says N of M.
+void gpu_lists(std::vector<line>& out, const snapshot& s, const wsl_view& w, const std::vector<gpu_row>& rows, const list_view& v, int width, int avail, bool& cut) {
+  out.push_back(rule("PROCESSES", kTwoLists, width));
+  list_view lv = v;
+  if (width >= kSideBySideGpu) {
+    const int col = (width - kListGap) / 2;
+    lv.rows = avail - 4;  // The rule, its head, its columns and N of M
+    side_by_side(out, gpu_users_list(s, rows, col, lv), dxg_holder_list(w, width - col - kListGap, avail - 3 - denied_rows(w), cut), col);
+    return;
+  }
+  // Stacked: rule, two heads, two column rows, N of M, the warning. The rest is shared, and what the first
+  // list leaves over goes to the second.
+  const int total = std::max(0, avail - 6 - denied_rows(w));
+  const int holders = w.ok ? static_cast<int>(std::min<size_t>(w.dxg_pids.size(), static_cast<size_t>(total))) : 0;
+  lv.rows = total - std::min(total / 2, holders);
+  const std::vector<line> top = gpu_users_list(s, rows, width, lv);
+  const std::vector<line> bottom = dxg_holder_list(w, width, avail - 3 - denied_rows(w) - static_cast<int>(top.size()), cut);
+  out.insert(out.end(), top.begin(), top.end());
+  out.insert(out.end(), bottom.begin(), bottom.end());
+}
+
+// The selected Windows process's GPU %, busiest engine, the figure the list shows: one series always, since a
+// process's busiest engine does not add across processes. 0 to 100; over 100 drawn at the ceiling and its max
+// printed as measured, in watch (rule 5). No `*`: that points at the split's caption. A sample whose engines were
+// not read is a gap; a process there with no engine row measured 0.
+std::vector<line> gpu_history(const history& h, const proc_id* id, int width, int rows, int64_t end_ms, int64_t span_ms) {
+  std::vector<line> out;
+  row title;
+  if (!id) {
+    out.push_back(title.add("history", tone::dim).add("  nothing to select", tone::dim));
+    out.resize(static_cast<size_t>(rows) + 1);
+    return out;
+  }
+  title.add("Windows", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim).add(" · GPU %, busiest engine", tone::dim);
+  const int slot = h.slot_of(*id);
+  const time_axis axis = make_axis(h, end_ms, span_ms, width, 2);
+  const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.gpu_at(slot, h.position(p))); };
+  const window_stats st = bucket_stats(axis, value);
+  std::vector<heading_part> parts;
+  if (!std::isnan(st.avg)) parts = {{"avg " + number(st.avg, "%.0f") + "%"}, {"max " + number(st.max, "%.0f") + "%", "  ", st.max > 100 ? tone::watch : tone::dim}};
+  history_heading(title, from_left(parts), span_ms, width);
+  out.push_back(title);
+  const std::vector<line> plot = plot_block(bucket_cells(axis, value), rows, "", "", unwatched_cells(h, axis), st, 100, false);
+  out.insert(out.end(), plot.begin(), plot.end());
+  return out;
+}
+
+panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, int width, int height, int64_t now_ms, int64_t span_ms, const view_state& v) {
+  const gpu_device_view& g = s.gpu_device;
+  const gpu_split_view& split = s.gpu_split;
+  // The split is engine time grouped by side and can pass 100: docs/measurable.md, Experiment 01 result,
+  // "Shares add to 100%". A window that did says so beside the caption that explains it.
+  const int64_t end = graph_end(h, now_ms);
+  // The caption's * goes with a label that carries one, and only when that label is drawn (part 5). Where the
+  // starred caption costs the plot its rows, both go: the label still prints the number, in watch.
+  const auto make_top = [&](bool star) {
+    std::vector<panel> top = {
+        pct_panel({"device · NVML"}, g.present && g.has_util, g.util_pct, &history_sample::gpu_util),
+        pct_panel({"WSL VM ·", "engine counters,", star ? "VM level, not exact shares*" : "VM level, not exact shares"}, split.valid, split.vm_pct, &history_sample::vm_pct),
+        pct_panel({"Windows · engine counters"}, split.valid, split.windows_pct, &history_sample::windows_pct)};
+    top[1].star = top[2].star = star;  // The label's * and the caption's go together, or neither
+    return top;
+  };
+
+  panel memory{{"GPU memory · NVML,", "used of total"}, "n/a", tone::dim, &history_sample::gpu_mem_pct, &history_sample::gpu_mem_gib, "%.1f", " GiB"};
+  if (g.present && g.has_mem && g.mem_total > 0) {
+    memory.value = fmt("%.1f/%.1f GiB", gib(g.mem_used), gib(g.mem_total));
+    memory.color = tone::text;
+  }
+  panel power{{"power · NVML,", "of limit"}, "n/a", tone::dim, &history_sample::gpu_power_pct, &history_sample::gpu_power_w, "%.0f", " W"};
+  if (g.present && g.has_power && std::isfinite(g.power_w)) {
+    power.value = number(g.power_w, "%.0f");
+    if (g.power_limit_w > 0) power.value += "/" + number(g.power_limit_w, "%.0f");
+    else power.title.push_back("no limit reported, not graphed");
+    power.value += " W";
+    power.color = tone::text;
+  }
+  const std::vector<panel> second = {std::move(memory), std::move(power)};
+
+  panel_frame f;
+  f.lines.push_back(title_row(s, now_ms));
+  int room = height - 1;
+  std::vector<panel> top;
+  std::vector<grid_row> rows;
+  for (const bool star : {true, false}) {  // With the caption's *, unless no label with one is drawn
+    top = make_top(star);
+    rows.clear();
+    add_panels(rows, top, width);
+    add_panels(rows, second, width);
+    f.hidden = fit_rows(rows, room);
+    if (!star || star_drawn(rows, h, end, span_ms)) break;
+  }
+  f.graph = any_plot(rows);
+  room -= rows_height(rows);
+
+  // Lower blocks: as much of the lists as they can use, then the history, then the device line goes last of the
+  // three. The history (a title and kHistoryRows) takes rows from the lists only while the Windows list keeps
+  // kLeastListRows; the rule line under the title is kept for after them, as before.
+  const bool device = room >= 1;
+  if (device) --room;
+  const std::vector<gpu_row> rows_drawn = gpu_rows(s, &h, axis_end(h, now_ms), span_ms);
+  const selection_view sv = selection_of(s, v, 2, &h, now_ms);
+  const bool side = width >= kSideBySideGpu;
+  const int history_least = 1 + kHistoryRows + 1;  // Its title and rows, and the rule line after
+  std::vector<line> lists;
+  // At least one row of each list, N of M, and the warning.
+  if (const int least = (side ? 5 : 8) + denied_rows(w); room >= least) {
+    int list_room = std::min(room, kMaxGpuList);
+    if (const int keep = (side ? 4 : 7) + kLeastListRows + denied_rows(w); room - list_room < history_least && room - history_least >= keep) list_room = room - history_least;
+    bool cut = false;
+    gpu_lists(lists, s, w, rows_drawn, list_for(sv, 0, 0), width, list_room, cut);
+    room -= static_cast<int>(lists.size());
+    f.hidden = f.hidden || cut;
+    f.selectable = rows_drawn.empty() ? 0 : 1;
+  } else {
+    f.hidden = true;
+  }
+  if (!device) f.hidden = true;
+  int history_rows = 0;
+  if (!lists.empty() && room >= history_least) {
+    history_rows = std::clamp((room - 2) / 2, kHistoryRows, kMostHistoryRows);
+    room -= history_rows + 1;
+  } else {
+    f.hidden = true;
+  }
+
+  const bool head = room >= 1;
+  if (head) {
+    // docs/measurable.md: close under load, not at idle, and the cause is unresolved.
+    f.lines.push_back(rule("GPU", width >= 100 ? "device and engine counters can differ, the difference is unexplained" : "device vs engine gap unexplained", width));
+    --room;
+  } else {
+    f.hidden = true;
+  }
+  if (room > 0) grow_rows(rows, room);
+  draw_rows(f.lines, rows, h, end, span_ms);
+  if (device) f.lines.push_back(device_row(g, width));
+  f.lines.insert(f.lines.end(), lists.begin(), lists.end());
+  if (history_rows > 0) {
+    proc_id id;
+    const bool any = selected_process(sv, id);
+    const std::vector<line> hist = gpu_history(h, any ? &id : nullptr, width, history_rows, axis_end(h, now_ms), span_ms);
+    f.lines.insert(f.lines.end(), hist.begin(), hist.end());
+  }
+  return f;
+}
+
+
 // ---- The frame
 
 // Thread counts follow the newest sample. With no live figure, the last one seen keeps the rows in place.
@@ -2380,13 +2498,6 @@ bool plan_large_cpu(const snapshot& s, const wsl_view& w, const history& h, int 
   return plan_cpu_rows(static_cast<int>(std::max(left.groups.size(), right.groups.size())), height, plan);
 }
 
-// height here leaves out the footer, as in the other panels.
-// The newest sample is the right edge unless it is late: a redraw between samples must not open an empty
-// bucket at now, because blank means not measured.
-int64_t axis_end(const history& h, int64_t now_ms) {
-  const int64_t last_sample = h.samples().empty() ? 0 : h.samples().back().unix_ms;
-  return !h.samples().empty() && static_cast<double>(now_ms - last_sample) <= kGapMs ? last_sample : graph_end(h, now_ms);
-}
 
 int selectable_drawn(const selection_view& sv) { return selectable_count(sv.lists); }
 
@@ -2428,7 +2539,7 @@ panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history&
 
   const bool head = room >= 1;
   if (head) --room;
-  const selection_view sv = selection_of(s, v);
+  const selection_view sv = selection_of(s, v, 3, &h, now_ms);
   const auto lists = [&](int n) {
     std::vector<line> out = cpu_windows_list(s, width, list_for(sv, 0, n));
     const std::vector<line> guest_list = cpu_wsl_list(w, width, list_for(sv, 1, n));
@@ -2504,7 +2615,7 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   left.push_back(axis_row(axis, span_ms, left_busy));
   right.push_back(axis_row(axis, span_ms, right_busy));
 
-  const selection_view sv = selection_of(s, v);
+  const selection_view sv = selection_of(s, v, 3, &h, now_ms);
   append(left, cpu_windows_list(s, col, list_for(sv, 0, plan.lists)));
   append(right, cpu_wsl_list(w, right_col, list_for(sv, 1, plan.lists)));
 
@@ -2771,7 +2882,7 @@ panel_frame memory_frame(const snapshot& s, const wsl_view& w, const history& h,
   const int col = wide ? (width - kListGap) / 2 : width, right_col = wide ? width - col - kListGap : width;
   const int64_t end = axis_end(h, now_ms);
   const time_axis axis = make_axis(h, end, span_ms, std::max(1, col - kCpuGutter), 2);
-  const selection_view sv = selection_of(s, v, 4);
+  const selection_view sv = selection_of(s, v, 4, &h, now_ms);
 
   panel_frame f;
   f.graph = plan.plots || plan.history > 0;
@@ -2954,6 +3065,8 @@ int history::take_slot(const proc_id& id, int64_t t, size_t cap, const std::vect
   sl.seen_ms = t;
   std::fill(sl.cores.begin(), sl.cores.end(), std::numeric_limits<float>::quiet_NaN());  // Nothing of the last occupant
   std::fill(sl.memory.begin(), sl.memory.end(), std::numeric_limits<float>::quiet_NaN());
+  sl.gpu.clear();  // Made again on its own first use: nothing of the last occupant's GPU
+  sl.gpu_seen_ms = 0;
   index_[k] = pick;
   return pick;
 }
@@ -2966,7 +3079,9 @@ int history::take_slot(const proc_id& id, int64_t t, size_t cap, const std::vect
 void history::write_processes(const snapshot& s, const wsl_view& w, size_t position, bool guest, const std::vector<proc_id>& keep) {
   const float gap = std::numeric_limits<float>::quiet_NaN();
   for (slot& sl : slots_) {
-    if (sl.used) sl.cores[position] = sl.memory[position] = gap;
+    if (!sl.used) continue;
+    sl.cores[position] = sl.memory[position] = gap;
+    if (!sl.gpu.empty()) sl.gpu[position] = gap;
   }
   const int64_t t = s.unix_ms;
   // Marked first, and each row's slot remembered, so placing looks nothing up twice.
@@ -2987,12 +3102,26 @@ void history::write_processes(const snapshot& s, const wsl_view& w, size_t posit
   const size_t rows = s.processes.size() + (guest ? w.processes.size() : 0);
   const size_t cap = std::max(kLeastSlots, 2 * rows);
   size_t n = 0;
+  // Panel 2's GPU %, busiest engine, Windows only: 0 for a process with no engine row while the engines read.
+  static const std::map<uint32_t, double> kNoEngines;
+  const std::map<uint32_t, double> engines = s.gpu_engines_known ? busiest_engine(s) : kNoEngines;
   for (const process_row& p : s.processes) {
     if (p.pid == 0) continue;  // The idle process: its cores are idle time
     const int known = found_[n++];
     slot& sl = slots_[static_cast<size_t>(known >= 0 ? known : take_slot({0, p.pid, p.create_time, p.name}, t, cap, keep))];
     sl.cores[position] = windows_cores_known(s, p) ? to_float(p.cores) : gap;
     sl.memory[position] = to_float(gib(p.working_set));
+    const auto e = engines.find(p.pid);
+    const float g = !s.gpu_engines_known ? gap : e == engines.end() ? 0.0f : to_float(e->second);
+    if (g > 0 && sl.gpu.empty()) {  // First use: what came before is 0 where the process was there and the engines read
+      sl.gpu.assign(kCapacity, gap);
+      for (size_t i = 0; i < count_; ++i) {
+        const size_t at_i = (first_ + i) % kCapacity;
+        if (!std::isnan(sl.memory[at_i]) && ring_[at_i].gpu_engines_known) sl.gpu[at_i] = 0;
+      }
+    }
+    if (!sl.gpu.empty()) sl.gpu[position] = g;
+    if (g > 0) sl.gpu_seen_ms = t;
   }
   if (guest) {
     for (const wsl_process& p : w.processes) {
@@ -3034,7 +3163,10 @@ void history::push(const snapshot& s, const std::vector<proc_id>& keep) {
     if (t <= last || (s.interval_s > 0 && shift > kStepMs)) {
       for (size_t i = 0; i < count_; ++i) at(i).unix_ms -= shift;
       watched_from_ms_ -= shift;
-      for (slot& sl : slots_) sl.seen_ms -= shift;  // When a process was last seen moves with its samples
+      for (slot& sl : slots_) {  // When a process was last seen, and last used the GPU, move with its samples
+        sl.seen_ms -= shift;
+        if (sl.gpu_seen_ms != 0) sl.gpu_seen_ms -= shift;
+      }
     }
   }
 
@@ -3079,6 +3211,7 @@ void history::push(const snapshot& s, const std::vector<proc_id>& keep) {
   n.wsl_cache = guest && w.mem_total > 0 ? to_float(gib(w.mem_cached)) : gap;
   n.windows_cores_all = s.process_totals.known ? to_float(s.process_totals.cores) : gap;
   n.windows_ws_all = s.process_totals.known ? to_float(gib(s.process_totals.working_set)) : gap;
+  n.gpu_engines_known = s.gpu_engines_known;
   n.windows_threads = put_cores(s.cpu.core_pct, n.windows_core);
   static const std::vector<double> kNone;
   n.wsl_threads = put_cores(guest ? w.core_pct : kNone, n.wsl_core);
@@ -3103,7 +3236,7 @@ namespace {
 panel_frame panel_body(const snapshot& s, const wsl_view& w, const history& h, int panel, int width, int body, int64_t now_ms, int64_t span_ms, const view_state& v) {
   panel_frame f;
   if (panel == 1) f.lines = overall_frame(s, w, width, body, now_ms);
-  else if (panel == 2) f = gpu_frame(s, w, h, width, body, now_ms, span_ms);
+  else if (panel == 2) f = gpu_frame(s, w, h, width, body, now_ms, span_ms, v);
   else if (panel == 3) f = cpu_frame(s, w, h, width, body, now_ms, span_ms, v);
   else if (panel == 4) f = memory_frame(s, w, h, width, body, now_ms, span_ms, v);
   else f.lines = unbuilt_frame(s, panel, width, now_ms);
@@ -3124,8 +3257,8 @@ std::vector<line> with_footer(const panel_frame& f, int width, int body, const l
 // what needs keeping. A list never moved in shows its first row, which is in the sample and so never taken.
 std::vector<proc_id> selected_processes(const snapshot&, const view_state& v) {
   std::vector<proc_id> out;
-  for (const int panel : {3, 4}) {
-    for (int list = 0; list < 2; ++list) {
+  for (const int panel : {2, 3, 4}) {
+    for (int list = 0; list < (panel == 2 ? 1 : 2); ++list) {
       const row_key& k = v.panels[panel].rows[list];
       if (k.set) out.push_back({static_cast<uint8_t>(list), k.pid, k.start, k.name});
     }
@@ -3133,9 +3266,11 @@ std::vector<proc_id> selected_processes(const snapshot&, const view_state& v) {
   return out;
 }
 
-bool apply_key(view_state& v, key_event e, const snapshot& s) {
+namespace {
+
+bool apply_key_to(view_state& v, key_event e, const snapshot& s, const history* h, int64_t now_ms) {
   if (e.esc_first) {
-    apply_key(v, key_event{key::esc}, s);
+    apply_key_to(v, key_event{key::esc}, s, h, now_ms);
     e.esc_first = false;
   }
   v.panel = std::clamp(v.panel, 1, kPanels);
@@ -3154,14 +3289,14 @@ bool apply_key(view_state& v, key_event e, const snapshot& s) {
       if (panel_has_range(v.panel)) v.range = std::max(v.range - 1, 0);
       break;
     case key::tab: {
-      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel);
+      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel, h, now_ms, kSpansMs[v.range]);
       pv.focus = focused_list(pv.focus, lists);  // An empty list never keeps focus
       if (selectable_count(lists) > 1) pv.focus = (pv.focus + 1) % static_cast<int>(lists.size());
       break;
     }
     case key::up:
     case key::down: {
-      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel);
+      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel, h, now_ms, kSpansMs[v.range]);
       const int focus = focused_list(pv.focus, lists);
       if (static_cast<size_t>(focus) >= lists.size() || lists[static_cast<size_t>(focus)].empty()) break;
       pv.focus = focus;
@@ -3176,6 +3311,12 @@ bool apply_key(view_state& v, key_event e, const snapshot& s) {
   }
   return true;
 }
+
+}  // namespace
+
+bool apply_key(view_state& v, key_event e, const snapshot& s, const history& h, int64_t now_ms) { return apply_key_to(v, e, s, &h, now_ms); }
+
+bool apply_key(view_state& v, key_event e, const snapshot& s) { return apply_key_to(v, e, s, nullptr, 0); }
 
 std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, const view_state& v) {
   if (width <= 0 || height <= 0) return {};
