@@ -354,8 +354,11 @@ full width, titled with the Windows list, as panels 3 and 4. When rows run short
 **The Windows list** (`gpu_users_list`) becomes selectable: the selection, `▶`, the selection background, its
 heading lit, scrolling and `N of M` as on panel 3. Which rows it holds (Q4, decided by machtop 2026-11-04):
 
-- every Windows process with any engine above 0 at some sample inside the range on screen, not only this second,
-  so a selected process that idles for a moment stays listed and selected;
+- every Windows process with any engine above 0 at some sample the history below draws, not only this second, so
+  a selected process that idles for a moment stays listed and selected. As built (2c2ee2b, audit finding 5) a use
+  counts from the history's first column, `history_from_ms`, the left edge of its two-column axis at the screen's
+  width, which lies up to one cell inside the range: counting from the range's start listed a process for up to a
+  cell (about 4 s at 10 minutes and 131 columns) whose history drew nothing;
 - and every process holding GPU `local` memory now (`snapshot.gpu_memory`, ledger "The memory collector reads
   what `Get-Counter` reads"), which is ROADMAP 1's Windows holders;
 - ordered by GPU % now, then by most recent use (the latest sample inside the range with an engine above 0),
@@ -393,24 +396,27 @@ order read the ring, not only the newest snapshot:
   `bool gpu_engines_known` for that. `history::gpu_at(slot, position)` reads 0 or NaN by the same rule for a slot
   with no `gpu` series. `write_processes` writes it from `busiest_engine(s)`, Windows side only.
 - The slot also keeps `gpu_seen_ms`, the newest sample with an engine above 0, so the list need not scan 601
-  positions per row each frame; a row is in the list while `gpu_seen_ms` lies inside the range on screen.
+  positions per row each frame; a row is in the list while a use lies at or after the history's first column and
+  inside the range (`gpu_rows`).
 - `take_slot` clears the `gpu` series (empties it, so it is allocated again on first use) and `gpu_seen_ms` when
   it reuses a slot, as it clears `cores` and `memory`; `push`'s clock-step shift moves `gpu_seen_ms` with
   `seen_ms` (audit finding 5).
 - Because the list now depends on the history, `selectable_lists` and `apply_key` take `const history&` beside
-  the snapshot, the range from `view_state`, and `now_ms`. They place the range's end with
-  `axis_end(h, now_ms)`, as the frame does, so the list a key moves through is the list drawn (audit finding 8).
-  `apply_key` is declared in `src/ui/render.h` and called from `src/main.cpp`, so the call site's change, passing
-  the history and the same `now_ms` the next `render` gets, is core's. As built it landed separately: ui's
-  4f9e546 kept the three-argument overload, and core's d9a699f moved `main.cpp` to the new one, so between the
-  two the keys moved through this sample's list alone.
+  the snapshot, the range from `view_state`, `now_ms` and, since 2c2ee2b, the screen's `width`. They place the
+  range's end with `axis_end(h, now_ms)` and the first counted column with `history_from_ms` at that width, as the
+  frame does, so the list a key moves through is the list drawn (audit findings 8 and 5). `apply_key` is declared
+  in `src/ui/render.h` and called from `src/main.cpp`, so the call site's change, passing the history and the same
+  `now_ms` and width the next `render` gets, is core's. As built it landed in steps: ui's 4f9e546 kept the
+  three-argument overload, core's d9a699f moved `main.cpp` to the history and `now_ms`, so between the two the keys
+  moved through this sample's list alone; ui's 2c2ee2b added `width`, default 0, the range's start, and core's
+  64b395b passes the screen's width, read once for the keys and the redraw after them.
 
 **Files and functions.** `src/ui/render.cpp`: `gpu_frame`, `gpu_lists`, `gpu_users_list` (membership, order,
 selection), `dxg_holder_list` (unchanged but for the footer's `tab`), `selectable_lists` (panel 2's one list),
 `selected_processes` (panel 2's Windows selection added to 3 and 4), `apply_key`, the footer's `↑↓` for panel 2,
 a new `gpu_history`; `history::push`, `write_processes`. `src/ui/render.h`: `apply_key`'s signature.
 `src/ui/history.h`: the slot's `gpu` and `gpu_seen_ms`, `gpu_at`, `history_sample::gpu_engines_known`.
-`src/main.cpp` (core): the `apply_key` call, with the history and `now_ms`.
+`src/main.cpp` (core): the `apply_key` call, with the history, `now_ms` and the width.
 
 **Protocol.** None. **Ledger.** Cites Experiment 01 result (per-process `3D` engine time, the load process
 71-97%, `vmwp.exe` for WSL's work), "The memory collector reads what `Get-Counter` reads" and the core decision
@@ -437,8 +443,8 @@ rule 2).
   slot's start, and selecting it keeps its slot at the cap.
 - A slot reused by another process has no `gpu` series and no `gpu_seen_ms` from the last occupant; after a clock
   step back, a process's `gpu_seen_ms` still lies in the range it did before.
-- `apply_key` with `now_ms` moves through exactly the rows `render` draws for the same `now_ms`, including at the
-  moment a row's last use leaves the range.
+- `apply_key` with `now_ms` and width moves through exactly the rows `render` draws for the same `now_ms` and
+  width, including at the moment a row's last use passes the history's first column.
 - Sizes 1 to 300 by 1 to 66 on panel 2 for `busy`, `bare` and hostile names; frame bytes under budget.
 
 ## 6. The range in the heading; gutter and axis
@@ -516,7 +522,7 @@ Written as requests; this design changes no other file.
 | `docs/contracts/evidence.md` | core, for evidence | experiment 07 as a request |
 | `docs/contracts/ui.md` | at C, then core at H | at step C: rule 8's histories with no gutter or axis, their labels and `last` in the heading, memory's history from 0 (the coordinator asked ui to make this change in step C; `docs/contracts/` is core's row in `ARCHITECTURE.md`). At H: two-layer histories in rule 8; decisions; panel 2's Windows list selectable, its membership and order; Q7's answer |
 | `docs/panels.md` | core, at H | the selection by pid and start with the name backstop, the name to go once pid reuse is in the ledger; panel 2 as built, the WSL holder list a reference list, replacing "A holder can be selected"; part-of-whole's wholes per side |
-| `src/main.cpp` | core, in step G's commit | the `apply_key` call passes the history and `now_ms` |
+| `src/main.cpp` | core, d9a699f and 64b395b | the `apply_key` call passes the history, `now_ms` and the width |
 | `docs/ROADMAP.md` | core, at H | section 1: Windows holders listed on panel 2 |
 | `docs/design/panel-grammar.md` | core, at H | notes at part 3 "Identity" and part 4 "One history" that this file supersedes them |
 | `docs/ROADMAP.md` | core, at H | section 2: per-process GPU history built |
