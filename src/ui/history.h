@@ -35,6 +35,10 @@ struct history_sample {
   // Panel 4, GiB, each side's own figure and never one across them: Windows used (total less available) and
   // cache, vmmemWSL's working set, the guest's used and cache under the large layout's repeat rule.
   float windows_used = 0, windows_cache = 0, vm_working_set = 0, wsl_used = 0, wsl_cache = 0;
+  // The Windows whole each process row is part of, snapshot.process_totals as derived by src/analysis: cores, and
+  // working sets in GiB. NaN where it was not known. Windows only: the guest has no whole (design/panel-grammar-
+  // slice2.md section 2, dropped on experiment 07).
+  float windows_cores_all = 0, windows_ws_all = 0;
   uint16_t windows_threads = 0, wsl_threads = 0;        // How many of the values below this sample read
   float windows_core[kHistoryThreads] = {}, wsl_core[kHistoryThreads] = {};
 };

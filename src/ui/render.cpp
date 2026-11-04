@@ -1582,6 +1582,8 @@ bool plan_cpu_rows(int natural, int height, cpu_rows& p) {
     left -= extra;
   };
   take(p.lists, kGoodListRows);  // The lists are guaranteed before anything graphs more
+  // A part-of-whole history wants one row more than its least, for its legend (design/panel-grammar-slice2.md Q6).
+  if (p.history > 0) take(p.history, kHistoryRows + 1);
   take(p.heat, std::min(natural, kMostHeatRows));
   take(p.busy, kMostBusyRows);
   if (p.history > 0) take(p.history, kMostHistoryRows);
@@ -2111,30 +2113,167 @@ bool selected_process(const selection_view& sv, proc_id& id) {
   return true;
 }
 
-constexpr double kCoresFloor = 0.05;  // machtop's per-app CPU: the least a process's cores graph spans
+constexpr double kCoresFloor = 0.05;              // machtop's per-app CPU: the least a process's cores graph spans
+constexpr double kProcessFloorGiB = 4.0 / 1024;   // machtop's per-app memory
 
-// A history's heading (design/panel-grammar-slice2.md section 6, machtop's form): the left side, already in
-// title, names the list, the process and the measure; the right side is the window's figures, then `last N min`.
-// Short of room the figures go from the left; `last N min` stays while the left side leaves room for it, and is
-// never cut.
-void history_heading(row& title, const std::vector<std::string>& parts, int64_t span_ms, int width) {
+// One part of a history heading's right side and what follows it: two spaces between figures, ` · ` between
+// layers, three before the scale and the range.
+struct heading_part {
+  std::string text;
+  std::string after = "  ";
+  tone color = tone::dim;
+};
+
+// A history's heading (design/panel-grammar-slice2.md sections 3 and 6, machtop's form): the left side, already in
+// title, names the list, the process and the measure; the right side is the first of the candidates that fits, then
+// `last N min`, which stays while the left side leaves room for it and is never cut.
+void history_heading(row& title, const std::vector<std::vector<heading_part>>& candidates, int64_t span_ms, int width) {
   const std::string last = fmt("last %d min", static_cast<int>(span_ms / 60000));
-  for (size_t from = 0; from <= parts.size(); ++from) {
-    std::string right;
-    for (size_t i = from; i < parts.size(); ++i) right += parts[i] + (i + 1 < parts.size() ? "  " : "   ");
-    right += last;
-    if (title.cols() + 3 + display_width(right) <= width) {
-      title.to(width - display_width(right)).add(right, tone::dim);
-      return;
-    }
+  std::vector<std::vector<heading_part>> tries = candidates;
+  tries.push_back({});
+  for (const std::vector<heading_part>& parts : tries) {
+    int need = display_width(last);
+    for (size_t i = 0; i < parts.size(); ++i) need += display_width(parts[i].text) + (i + 1 < parts.size() ? display_width(parts[i].after) : 3);
+    if (title.cols() + 3 + need > width) continue;
+    title.to(width - need);
+    for (size_t i = 0; i < parts.size(); ++i) title.add(parts[i].text, parts[i].color).add(i + 1 < parts.size() ? parts[i].after : "   ", tone::dim);
+    title.add(last, tone::dim);
+    return;
   }
 }
 
-// One history, full width, under both lists: the focused list's selected process, its cores over the range, 0
-// to the window's maximum rounded up (scale_top). Never one per list: two would invite comparing rows that
-// rule 3 keeps apart. A guest's figure is what the guest counted, not what the VM got. No gutter and no time
-// axis: avg, max, scale and the range are in the heading.
-std::vector<line> process_history(const history& h, const proc_id* id, int width, int rows, int64_t end_ms, int64_t span_ms) {
+// Short of room the figures go from the left.
+std::vector<std::vector<heading_part>> from_left(const std::vector<heading_part>& parts) {
+  std::vector<std::vector<heading_part>> out;
+  for (size_t from = 0; from < parts.size(); ++from) out.emplace_back(parts.begin() + static_cast<std::ptrdiff_t>(from), parts.end());
+  return out;
+}
+
+// What a history is drawn to and printed in: 0 to top, printed times per in unit.
+struct history_scale {
+  double top = 1, per = 1;
+  const char* unit = "";
+  const char* format = "%.2f";
+};
+
+history_scale cores_scale(double max) { return {scale_top(max, kCoresFloor), 1, "", "%.2f"}; }
+
+// A process's memory: 0 to its maximum rounded up (scale_top), never under 4 MiB, in MiB while that top is under
+// 1 GiB, else in GiB. Values are GiB.
+history_scale memory_scale_of(double max_gib) {
+  const double mib = scale_top(std::isfinite(max_gib) ? max_gib * 1024 : 0, kProcessFloorGiB * 1024);
+  if (mib < 1024) return {mib / 1024, 1024, " MiB", "%.1f"};
+  return {scale_top(max_gib, kProcessFloorGiB), 1, " GiB", "%.2f"};
+}
+
+std::string scaled(double v, const history_scale& sc) { return number(v * sc.per, sc.format); }
+
+// Which measure a process history shows, and the Windows whole it is part of.
+struct history_measure {
+  const char* windows_name;  // After the pid in the title
+  const char* wsl_name;
+  float (history::*at)(int, size_t) const;
+  float history_sample::*whole;  // Windows only
+  history_scale (*scale)(double);
+  const char* whole_name;  // In the heading
+  const char* rest_name;   // In the legend
+};
+
+const history_measure kCoresHistory = {" · cores", " · cores, guest's count", &history::cores_at, &history_sample::windows_cores_all, cores_scale,
+                                       "all Windows processes", "all other Windows processes"};
+const history_measure kMemoryHistory = {" · working set", " · stat rss", &history::memory_at, &history_sample::windows_ws_all, memory_scale_of,
+                                        "Σ working sets, all Windows processes", "all other Windows processes' working sets"};
+
+// machtop's part_equals_whole: one series when, at every sample on the axis where both are known, the part is the
+// whole within 1e-6 relative, or no sample has both (design/panel-grammar-slice2.md section 3, "When it draws as one
+// series"). A second row appearing inside the window makes it two layers again.
+template <class Part, class Whole> bool part_is_whole(const time_axis& a, Part part, Whole whole) {
+  for (size_t i = 0; i < a.samples.size(); ++i) {
+    if (a.cell[i] < 0) continue;
+    const double p = part(*a.samples[i]), w = whole(*a.samples[i]);
+    if (std::isfinite(p) && std::isfinite(w) && std::fabs(p - w) > 1e-6 * std::max(std::fabs(w), 1e-12)) return false;
+  }
+  return true;
+}
+
+// machtop's share_text: the part over the whole at the latest sample on the axis where both are known; blank when
+// the whole there is 0 or there is none; `<1%` under half a percent. A ratio of two held values for the selected
+// row: display, not derivation (contracts/ui.md rule 9).
+template <class Part, class Whole> std::string share_text(const time_axis& a, Part part, Whole whole) {
+  for (size_t i = a.samples.size(); i-- > 0;) {
+    if (a.cell[i] < 0) continue;
+    const double p = part(*a.samples[i]), w = whole(*a.samples[i]);
+    if (!std::isfinite(p) || !std::isfinite(w)) continue;
+    if (!(w > 0)) return "";
+    const double pct = 100 * p / w;
+    return pct < 0.5 ? "<1%" : fmt("%ld%%", std::lround(pct));
+  }
+  return "";
+}
+
+// machtop's draw_part_of_whole on columns, two to a braille cell: the whole in the track tone, the part in the bar
+// tone, on one scale from 0. A braille cell takes one colour: the part's where either column has a part dot in that
+// row, else the rest's. A whole that measured 0 is ⣀ in the bar tone; a part that measured 0 holds no cell. Each
+// layer's maximum gets its own dot by its own samples, the part's compared with its own mean before it is held
+// inside the whole. Gaps are blank; unwatched cells a faint · as plot_line draws them.
+std::vector<line> plot_part_block(const std::vector<double>& whole, const std::vector<double>& part, const std::vector<double>& part_raw, const window_stats& whole_st,
+                                  const window_stats& part_st, int rows, double top, int unwatched) {
+  const auto high = [&](double v) { return std::max(1, static_cast<int>(std::lround(std::clamp(v, 0.0, top) / top * 4 * rows))); };
+  const int whole_mark = max_mark(whole_st), part_mark = max_mark(part_st);
+  const auto mark_height = [&](int mark, const std::vector<double>& cols, double max) {
+    if (mark < 0 || mark >= static_cast<int>(cols.size()) || std::isnan(cols[static_cast<size_t>(mark)]) || !std::isfinite(max)) return 0;
+    const int h = high(max);
+    return h > high(cols[static_cast<size_t>(mark)]) ? h : 0;
+  };
+  const int whole_h = mark_height(whole_mark, whole, whole_st.max), part_h = mark_height(part_mark, part_raw, part_st.max);
+  const int cells = static_cast<int>(whole.size()) / 2;
+  std::vector<line> out;
+  for (int y = 0; y < rows; ++y) {
+    const int below = (rows - 1 - y) * 4;
+    line l;
+    const auto put = [&](const std::string& text, tone t) {
+      if (!l.empty() && l.back().color == t) l.back().text += text;
+      else l.push_back({text, t});
+    };
+    for (int c = 0; c < cells; ++c) {
+      unsigned bits = 0;
+      bool part_here = false, known = false, all_zero = true;
+      for (int side = 0; side < 2; ++side) {
+        const int at = 2 * c + side;
+        const double w = whole[static_cast<size_t>(at)], pv = part[static_cast<size_t>(at)];
+        if (std::isnan(w)) continue;
+        known = true;
+        all_zero = all_zero && w <= 0;
+        const unsigned* dot = side == 0 ? kDotLeft : kDotRight;
+        for (int k = 0; k < std::clamp(high(w) - below, 0, 4); ++k) bits |= dot[k];
+        if (std::isfinite(pv) && pv > 0 && high(pv) > below) part_here = true;
+        if (at == whole_mark && whole_h > below && whole_h <= below + 4) bits |= dot[whole_h - below - 1];
+        if (at == part_mark && part_h > below && part_h <= below + 4) {
+          bits |= dot[part_h - below - 1];
+          part_here = true;
+        }
+      }
+      if (bits) {
+        std::string g;
+        put_cp(g, static_cast<char32_t>(0x2800 + bits));
+        put(g, part_here || (y == rows - 1 && known && all_zero) ? tone::bar : tone::track);
+      } else if (y == rows - 1 && c < unwatched / 2) {
+        put(c % 2 == 0 ? "·" : " ", tone::faint);
+      } else {
+        put(" ", tone::bar);
+      }
+    }
+    out.push_back(l);
+  }
+  return out;
+}
+
+// One history, full width, under both lists: the focused list's selected process, its measure over the range, 0
+// to the window's maximum rounded up. Never one per list: two would invite comparing rows that rule 3 keeps apart.
+// A guest's figure is what the guest counted, not what the VM got. No gutter and no time axis: the figures and the
+// range are in the heading. A Windows process is drawn as part of all Windows processes, the whole in grey under
+// it, with a legend (design/panel-grammar-slice2.md section 3); the guest has no whole and is one series.
+std::vector<line> process_history(const history& h, const proc_id* id, int width, int rows, int64_t end_ms, int64_t span_ms, const history_measure& m = kCoresHistory) {
   std::vector<line> out;
   row title;
   if (!id) {
@@ -2144,17 +2283,62 @@ std::vector<line> process_history(const history& h, const proc_id* id, int width
     return out;
   }
   title.add(id->side == 0 ? "Windows" : "WSL", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim);
-  title.add(id->side == 0 ? " · cores" : " · cores, guest's count", tone::dim);
+  title.add(id->side == 0 ? m.windows_name : m.wsl_name, tone::dim);
   const int slot = h.slot_of(*id);
   const time_axis axis = make_axis(h, end_ms, span_ms, width, 2);
-  const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.cores_at(slot, h.position(p))); };
-  const window_stats st = bucket_stats(axis, value);
-  const double top = scale_top(st.max, kCoresFloor);
-  std::vector<std::string> parts;
-  if (!std::isnan(st.avg)) parts = {"avg " + number(st.avg, "%.2f"), "max " + number(st.max, "%.2f"), "scale " + number(top, "%g")};
-  history_heading(title, parts, span_ms, width);
+  const double kNone = std::numeric_limits<double>::quiet_NaN();
+  const auto part = [&](const history_sample& p) { return slot < 0 ? kNone : static_cast<double>((h.*m.at)(slot, h.position(p))); };
+  const auto whole = [&](const history_sample& p) { return id->side == 0 ? static_cast<double>(p.*m.whole) : kNone; };
+  const int unwatched = unwatched_cells(h, axis);
+
+  if (id->side != 0 || slot < 0 || part_is_whole(axis, part, whole)) {  // One series
+    const window_stats st = bucket_stats(axis, part);
+    const history_scale sc = m.scale(st.max);
+    std::vector<heading_part> parts;
+    if (!std::isnan(st.avg)) parts = {{"avg " + scaled(st.avg, sc)}, {"max " + scaled(st.max, sc)}, {"scale " + number(sc.top * sc.per, "%g") + sc.unit}};
+    history_heading(title, from_left(parts), span_ms, width);
+    out.push_back(title);
+    const std::vector<line> plot = plot_block(bucket_cells(axis, part, sc.top), rows, "", "", unwatched, st, sc.top, false);
+    out.insert(out.end(), plot.begin(), plot.end());
+    return out;
+  }
+
+  // Part of the whole: the part only where both are known, held at or under the whole in each column.
+  const auto both = [&](const history_sample& p) {
+    const double a = part(p), b = whole(p);
+    return std::isfinite(a) && std::isfinite(b) ? a : kNone;
+  };
+  const window_stats whole_st = bucket_stats(axis, whole), part_st = bucket_stats(axis, both);
+  const history_scale sc = m.scale(whole_st.max);
+  const std::vector<double> whole_cols = bucket_cells(axis, whole, sc.top), part_raw = bucket_cells(axis, both, sc.top);
+  std::vector<double> part_cols(part_raw.size(), kNone);
+  for (size_t i = 0; i < part_raw.size(); ++i) {
+    if (!std::isnan(whole_cols[i]) && !std::isnan(part_raw[i])) part_cols[i] = std::min(part_raw[i], whole_cols[i]);
+  }
+  // Short of room: the process's figures go, then the whole's, then `now`; the whole's name goes last, since with
+  // no legend it is what names the grey.
+  const heading_part scale_part{"scale " + number(sc.top * sc.per, "%g") + sc.unit};
+  const std::string share = share_text(axis, both, whole);
+  const auto right = [&](bool process, bool whole_figures, bool now, bool whole_name) {
+    std::vector<heading_part> p;
+    if (process && !std::isnan(part_st.avg)) p.push_back({"process avg " + scaled(part_st.avg, sc) + "  max " + scaled(part_st.max, sc), " · "});
+    if (whole_name) p.push_back({std::string(m.whole_name) + (whole_figures && !std::isnan(whole_st.avg) ? " avg " + scaled(whole_st.avg, sc) + "  max " + scaled(whole_st.max, sc) : ""), " · "});
+    if (now && !share.empty()) p.push_back({"now " + share + " of all"});
+    if (!p.empty()) p.back().after = "   ";
+    p.push_back(scale_part);
+    return p;
+  };
+  history_heading(title, {right(true, true, true, true), right(false, true, true, true), right(false, false, true, true), right(false, false, false, true), {scale_part}}, span_ms, width);
   out.push_back(title);
-  const std::vector<line> plot = plot_block(bucket_cells(axis, value, top), rows, "", "", unwatched_cells(h, axis), st, top, false);
+  // design/panel-grammar-slice2.md Q6: the legend takes one of the history's rows while the plot keeps 2, and goes
+  // only when it would not; the heading's whole then names the grey.
+  const bool legend = rows >= 3;
+  if (legend) {
+    row l;
+    l.add("█", tone::bar).add(" " + fit(id->name, 40) + "  ", tone::dim).add("█", tone::track).add(" ").add(m.rest_name, tone::dim);
+    out.push_back(l);
+  }
+  const std::vector<line> plot = plot_part_block(whole_cols, part_cols, part_raw, whole_st, part_st, legend ? rows - 1 : rows, sc.top, unwatched);
   out.insert(out.end(), plot.begin(), plot.end());
   return out;
 }
@@ -2347,7 +2531,6 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
 // "Memory and process collectors checked"), so the VM has a row of its own.
 
 constexpr double kMachineFloorGiB = 64.0 / 1024;  // A whole machine's figures move by tens of MiB
-constexpr double kProcessFloorGiB = 4.0 / 1024;   // machtop's per-app memory
 
 // A zoomed graph's bottom and top: machtop's sample_series (src/render.cpp at 246c2cb), the spread of the
 // window's samples or the floor if more, from a tenth of it under the minimum to a fifth over the maximum.
@@ -2547,47 +2730,10 @@ std::vector<line> wsl_memory_list(const wsl_view& w, int col, const list_view& v
   return out;
 }
 
-// A process's memory history from 0 to its window's maximum rounded up (scale_top), never under 4 MiB: in MiB
-// while that top is under 1 GiB, else in GiB, and the figures in the heading in the same unit.
-struct memory_scale {
-  double top_gib = 0, per_gib = 1;
-  const char* unit = " GiB";
-  const char* format = "%.2f";
-};
-
-memory_scale memory_scale_of(double max_gib) {
-  const double mib = scale_top(std::isfinite(max_gib) ? max_gib * 1024 : 0, kProcessFloorGiB * 1024);
-  if (mib < 1024) return {mib / 1024, 1024, " MiB", "%.1f"};
-  return {scale_top(max_gib, kProcessFloorGiB), 1, " GiB", "%.2f"};
-}
-
-// The one history: the focused list's selected process, its working set or stat rss, from 0 (design/panel-grammar-
-// slice2.md section 6, Q3: a history does not zoom; panel 4's used and cache plots do). No gutter and no time
-// axis: avg, max, scale and the range are in the heading.
+// The one history of panel 4: the focused list's selected process, its working set or stat rss, from 0 (design/
+// panel-grammar-slice2.md section 6, Q3: a history does not zoom; panel 4's used and cache plots do).
 std::vector<line> memory_history(const history& h, const proc_id* id, int width, int rows, int64_t end_ms, int64_t span_ms) {
-  std::vector<line> out;
-  row title;
-  if (!id) {
-    out.push_back(title.add("history", tone::dim).add("  nothing to select", tone::dim));
-    out.resize(static_cast<size_t>(rows) + 1);
-    return out;
-  }
-  title.add(id->side == 0 ? "Windows" : "WSL", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim);
-  title.add(id->side == 0 ? " · working set" : " · stat rss", tone::dim);
-  const int slot = h.slot_of(*id);
-  const time_axis axis = make_axis(h, end_ms, span_ms, width, 2);
-  const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.memory_at(slot, h.position(p))); };
-  const window_stats st = bucket_stats(axis, value);
-  const memory_scale m = memory_scale_of(st.max);
-  std::vector<std::string> parts;
-  if (!std::isnan(st.avg)) {
-    parts = {"avg " + number(st.avg * m.per_gib, m.format), "max " + number(st.max * m.per_gib, m.format), "scale " + number(m.top_gib * m.per_gib, "%g") + m.unit};
-  }
-  history_heading(title, parts, span_ms, width);
-  out.push_back(title);
-  const std::vector<line> plot = plot_block(bucket_cells(axis, value, m.top_gib), rows, "", "", unwatched_cells(h, axis), st, m.top_gib, false);
-  out.insert(out.end(), plot.begin(), plot.end());
-  return out;
+  return process_history(h, id, width, rows, end_ms, span_ms, kMemoryHistory);
 }
 
 // Rows, height including the footer (part 4, "Rows"): 17 fixed; the history clamp((height - 16) / 3, 2, 12)
@@ -2931,6 +3077,8 @@ void history::push(const snapshot& s, const std::vector<proc_id>& keep) {
   n.vm_working_set = s.vm.vmmem_pid != 0 ? to_float(gib(s.vm.vmmem_working_set)) : gap;
   n.wsl_used = guest && w.mem_total > 0 ? to_float(gib(w.mem_total - std::min(w.mem_total, w.mem_available))) : gap;
   n.wsl_cache = guest && w.mem_total > 0 ? to_float(gib(w.mem_cached)) : gap;
+  n.windows_cores_all = s.process_totals.known ? to_float(s.process_totals.cores) : gap;
+  n.windows_ws_all = s.process_totals.known ? to_float(gib(s.process_totals.working_set)) : gap;
   n.windows_threads = put_cores(s.cpu.core_pct, n.windows_core);
   static const std::vector<double> kNone;
   n.wsl_threads = put_cores(guest ? w.core_pct : kNone, n.wsl_core);

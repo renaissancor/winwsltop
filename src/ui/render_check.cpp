@@ -12,6 +12,7 @@
 #include "ui/history.h"
 #include "ui/keys.h"
 #include "core/wsl_view.cpp"
+#include "analysis/process_totals.h"
 #ifdef _WIN32
 #include "ui/console.cpp"
 #endif
@@ -20,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <limits>
 
@@ -90,6 +92,7 @@ snapshot busy() {
   s.wsl_json = busy_json();
   s.wsl_age_s = 0.17;
   s.wsl_clock_known = false;
+  s.process_totals = process_totals_of(s);  // As main.cpp fills it, from the rows
   return s;
 }
 
@@ -105,6 +108,7 @@ snapshot bare() {
   s.processes.push_back(p);
   s.disks = {{"0 C:", 0, 4096, 1}};
   s.nets = {{"이더넷", 0, 0, 1000000000, true}};
+  s.process_totals = process_totals_of(s);
   return s;
 }
 
@@ -1684,6 +1688,7 @@ snapshot contended(int threads = 20, int vcpus = 0) {
   for (uint32_t i = 0; i < 40; ++i) proc(20000 + i * 4, "svchost.exe", 0.01, 8, 0.01);
   s.wsl_json = guest_line(std::vector<double>(static_cast<size_t>(vcpus), 100.0), {});
   s.wsl_age_s = 0.2;
+  s.process_totals = process_totals_of(s);
   return s;
 }
 
@@ -1713,6 +1718,7 @@ void quiet_moment(snapshot& s, int seq) {
     if (p.name == "cpu_burn.exe") p.cores = 0;
     if (p.pid == s.vm.vmmem_pid) p.cores = s.vm.vmmem_cores;
   }
+  s.process_totals = process_totals_of(s);
   std::string quiet = kCpuProcesses;
   const std::string busy_burner = "\"cores\":19.72";
   if (const size_t at = quiet.find(busy_burner); at != std::string::npos) quiet.replace(at, busy_burner.size(), "\"cores\":0");
@@ -1922,7 +1928,7 @@ void check_large_mockup() {
   row_is(27, "    0.31   11736 vmwp.exe       40    0.1 WSL VM │     0.03    2001 sshd    1          0.0  S");
   row_is(28, "    0.22    9001 카카오톡.exe   60    0.4        │     0.02    2002 syst…   1          0.0  S");
   row_is(29, "5 of 46                                          │ 5 of 6 · guest count? 64");
-  row_is(30, "Windows · cpu_burn.exe 31000 · cores                      avg 7.73  max 13.25  scale 20   last 1 min");
+  row_is(30, "Windows · cpu_burn.exe 31000 · cores                   all Windows processes   scale 50   last 1 min");
   check(!has(as_text({f[31], f[32]}), "│") && count_braille(as_text({f[32]})) > 0 && count_braille(columns(as_text({f[32]}), 0, 1)) == 1,
         "the history is 2 rows, full width from column 0, no gutter");
   row_is(33, "1 2 3 cpu 4 5 6 7 8                                            ↑↓ select  tab list  ←→ 1 min  q quit");
@@ -1968,12 +1974,13 @@ void check_large_mockup() {
 
 void check_large_allocation() {
   // design/panel-grammar.md part 3, "Rows": the history goes before a list falls under 3 rows; then lists to 6,
-  // the heat block, the busy plots to 12, the history to 6, and the lists take the rest.
+  // the history to 3 for its legend (design/panel-grammar-slice2.md Q6), the heat block, the busy plots to 12, the
+  // history to 6, and the lists take the rest.
   struct want { int height, heat, busy, lists, history; };
   for (const want& e : std::initializer_list<want>{{28, 0, 0, 0, 0},  // Below the floor
                                                    {29, 10, 3, 3, 0}, {30, 10, 3, 4, 0}, {31, 10, 3, 5, 0}, {32, 10, 3, 3, 2},
-                                                   {34, 10, 3, 5, 2}, {35, 10, 3, 6, 2}, {36, 10, 4, 6, 2}, {40, 10, 8, 6, 2},
-                                                   {44, 10, 12, 6, 2}, {45, 10, 12, 6, 3}, {48, 10, 12, 6, 6}, {49, 10, 12, 7, 6}, {66, 10, 12, 24, 6}}) {
+                                                   {34, 10, 3, 5, 2}, {35, 10, 3, 6, 2}, {36, 10, 3, 6, 3}, {40, 10, 7, 6, 3},
+                                                   {44, 10, 11, 6, 3}, {45, 10, 12, 6, 3}, {48, 10, 12, 6, 6}, {49, 10, 12, 7, 6}, {66, 10, 12, 24, 6}}) {
     cpu_rows p;
     const bool fits = plan_cpu_rows(10, e.height, p);
     const std::string at = " at " + std::to_string(e.height);
@@ -1984,8 +1991,8 @@ void check_large_allocation() {
   cpu_rows p;
   check(plan_cpu_rows(20, 29, p) && p.heat == 10 && p.history == 0, "20 natural rows have the same floor");
   check(plan_cpu_rows(20, 34, p) && p.heat == 10 && p.lists == 5, "and the same 34: 5 list rows");
-  check(plan_cpu_rows(20, 40, p) && p.heat == 15 && p.busy == 3 && p.lists == 6, "the heat block takes the next rows");
-  check(plan_cpu_rows(20, 45, p) && p.heat == 20 && p.busy == 3, "up to 20 rows");
+  check(plan_cpu_rows(20, 40, p) && p.heat == 14 && p.busy == 3 && p.lists == 6 && p.history == 3, "the heat block takes the next rows, after the history's third");
+  check(plan_cpu_rows(20, 46, p) && p.heat == 20 && p.busy == 3, "up to 20 rows");
   check(plan_cpu_rows(32, 66, p) && p.heat == 20 && p.busy == 12 && p.history == 6, "never more");
   check(plan_cpu_rows(2, 21, p) && p.heat == 2 && !plan_cpu_rows(2, 20, p), "4 threads have a floor of 21");
   check(plan_cpu_rows(0, 19, p) && p.heat == 0, "no rows to draw leaves the fixed rows");
@@ -2003,7 +2010,7 @@ void check_large_allocation() {
     check(!has(as_text(f), "RAM"), "nothing on panel 3 says RAM" + at);
   }
   const auto at40 = large(s, h, 131, 40);
-  check(row_at(at40, 0, "kern") - row_at(at40, 0, "100 │") == 8, "at 40 the busy graph is 8 rows");
+  check(row_at(at40, 0, "kern") - row_at(at40, 0, "100 │") == 7, "at 40 the busy graph is 7 rows, the history 3");
   check(has(as_text(large(s, h, 100, 34)), "5 of 46") && has(as_text(large(s, h, 131, 40)), "6 of 46"), "5 list rows at 34, 6 at 40");
 }
 
@@ -2627,7 +2634,15 @@ void check_no_sums() {
   const history h = idle_history(s);
   for (const int w : {100, 131}) {
     const std::string t = as_text(large(s, h, w, 40));
-    for (const char* sum : {"78", "61", "17.0", "71.2", "9.60"}) check(!has(t, sum), std::string("no sum of the two sides: ") + sum);
+    // As whole numbers: a Windows-only figure such as the whole of all Windows processes may hold the digits.
+    std::vector<std::string> numbers;
+    std::string token;
+    for (const char c : t + " ") {
+      if ((c >= '0' && c <= '9') || c == '.') { token += c; continue; }
+      if (!token.empty()) numbers.push_back(token);
+      token.clear();
+    }
+    for (const char* sum : {"78", "61", "17.0", "71.2", "9.60"}) check(std::find(numbers.begin(), numbers.end(), sum) == numbers.end(), std::string("no sum of the two sides: ") + sum);
   }
 }
 
@@ -3675,7 +3690,9 @@ void check_memory_panel() {
   check(has(line_with(f, "▶"), std::to_string(order[16]->pid)) && order[16]->pid == 10048, "the 17th row is selected: pid 10048");
   check(has(text, "11 of 46") && has(line_with(f, "11 of 46", -1), "▶"), "drawn from row 7 with the 17th last, 11 of 46 under it");
   check(has(line_with(f, "Windows   "), std::to_string(order[6]->pid)) || has(text, std::to_string(order[6]->pid) + " "), "row 7 is the first drawn");
-  check(has(text, "Windows · svchost.exe 10048 · working set") && has(line_with(f, "10048 · working set"), "MiB"), "the history names pid 10048, in MiB");
+  check(has(text, "Windows · svchost.exe 10048 · working set") && has(line_with(f, "10048 · working set"), "GiB") &&
+            has(line_with(f, "10048 · working set", 1), "all other Windows processes' working sets"),
+        "the history names pid 10048, on the scale of all working sets, in GiB, the legend naming the grey");
   // tab: the guest's list, its history.
   apply_key(v, key_event{key::tab}, s);
   text = as_text(mem(100, 34, v));
@@ -4073,12 +4090,12 @@ void check_history_heading() {
   {
     row t;
     t.add("Windows · x 1 · cores");
-    history_heading(t, {"avg 1.00", "max 2.00", "scale 2"}, 60000, 21 + 3 + display_width("scale 2   last 1 min"));
+    history_heading(t, from_left({{"avg 1.00"}, {"max 2.00"}, {"scale 2"}}), 60000, 21 + 3 + display_width("scale 2   last 1 min"));
     const std::string text = rtrim(as_text({t}));
     check(ends(text, "scale 2   last 1 min") && !has(text, "avg") && !has(text, "max"), "short of room, avg and max go before scale and the range");
     row u;
     u.add("Windows · x 1 · cores");
-    history_heading(u, {"avg 1.00", "max 2.00", "scale 2"}, 60000, 21 + 2 + display_width("last 1 min"));
+    history_heading(u, from_left({{"avg 1.00"}, {"max 2.00"}, {"scale 2"}}), 60000, 21 + 2 + display_width("last 1 min"));
     check(rtrim(as_text({u})) == "Windows · x 1 · cores", "with no room for the range, the heading is the left side alone, not cut");
   }
   // Panel 4's history, one series: from 0 to a scale, never a range; its used and cache plots keep theirs.
@@ -4089,14 +4106,214 @@ void check_history_heading() {
   check(mh > 0 && count_braille(as_text({m[static_cast<size_t>(mh + plan_memory_rows(40).history)]})) > 0, "and its bottom row is drawn where a sample exists");
   check(has(as_text(m), "used avg 24.7 max 24.7 · range"), "panel 4's used and cache plots still zoom and print range");
   // A process at a few MiB: MiB, and never under 4 MiB.
-  check(memory_scale_of(0.001).top_gib * 1024 >= 4 && std::string(memory_scale_of(0.001).unit) == " MiB", "a process's memory scale is at least 4 MiB, in MiB");
-  check(std::string(memory_scale_of(10.15).unit) == " GiB" && memory_scale_of(10.15).top_gib == 20, "10.15 GiB is drawn to 20 GiB");
-  check(std::string(memory_scale_of(900.0 / 1024).unit) == " MiB" && memory_scale_of(900.0 / 1024).top_gib * 1024 == 1000, "900 MiB is drawn to 1000 MiB");
+  check(memory_scale_of(0.001).top * 1024 >= 4 && std::string(memory_scale_of(0.001).unit) == " MiB", "a process's memory scale is at least 4 MiB, in MiB");
+  check(std::string(memory_scale_of(10.15).unit) == " GiB" && memory_scale_of(10.15).top == 20, "10.15 GiB is drawn to 20 GiB");
+  check(std::string(memory_scale_of(900.0 / 1024).unit) == " MiB" && memory_scale_of(900.0 / 1024).top * 1024 == 1000, "900 MiB is drawn to 1000 MiB");
   // Panel 2's device graphs and panel 3's busy plots keep their gutter and axis.
   const std::string p2 = as_text(render(s, 131, 40, kNow, &demo, state_for(2)));
   check(has(p2, "100│") && has(p2, "  0│") && has(p2, "-60s") && has(p2, " now"), "panel 2's device graphs keep the gutter and the axis");
   const std::string p3 = as_text(render(s, 131, 40, kNow, &demo, state_for(3)));
   check(has(p3, "100 │") && has(p3, "  0 │") && has(p3, "-60s") && has(p3, " now"), "panel 3's busy plots keep the gutter and the axis");
+}
+
+// Each column of a row: its glyph and tone.
+std::vector<std::pair<std::string, tone>> toned(const line& l) {
+  std::vector<std::pair<std::string, tone>> out;
+  for (const span& p : l) {
+    for (size_t i = 0; i < p.text.size();) {
+      std::string g;
+      put_cp(g, next_cp(p.text, i));
+      out.push_back({g, p.color});
+    }
+  }
+  return out;
+}
+
+bool is_braille(const std::string& g) {
+  size_t i = 0;
+  const char32_t c = g.empty() ? 0 : next_cp(g, i);
+  return c > 0x2800 && c <= 0x28FF;
+}
+
+// A Windows process history over `n` samples, the selected row's cores and the whole's given per second.
+struct pow_fixture {
+  snapshot s;
+  history h;
+};
+
+pow_fixture part_of_whole(int n, const std::function<void(snapshot&, int)>& at) {
+  pow_fixture f;
+  for (int i = n - 1; i >= 0; --i) {
+    snapshot s = contended();
+    s.unix_ms = kNow - i * 1000;
+    at(s, i);
+    f.h.push(s);
+    f.s = s;
+  }
+  return f;
+}
+
+// design/panel-grammar-slice2.md section 3: part of the whole on the Windows process histories of panels 3 and 4.
+void check_part_of_whole() {
+  // push copies the whole, NaN when it is not known.
+  {
+    history h;
+    snapshot s = contended();
+    h.push(s);
+    check(std::fabs(h.samples().back().windows_cores_all - static_cast<float>(s.process_totals.cores)) < 1e-4 &&
+              std::fabs(h.samples().back().windows_ws_all - static_cast<float>(gib(s.process_totals.working_set))) < 1e-4,
+          "push copies process_totals: cores, and working sets in GiB");
+    s.unix_ms += 1000;
+    s.process_totals = {};
+    h.push(s);
+    check(std::isnan(h.samples().back().windows_cores_all) && std::isnan(h.samples().back().windows_ws_all), "a whole not known is NaN, never 0");
+  }
+
+  // contended at 131 by 40: two layers, every lit cell bar or track, no track at or below the part's top.
+  const snapshot cs = contended();
+  const history ch = contended_history(cs);
+  std::vector<line> f = large(cs, ch, 131, 40);
+  const int at = row_at(f, 0, "Windows · cpu_burn.exe");
+  const std::string head = as_text({f[static_cast<size_t>(at)]});
+  check(at > 0 && has(head, "all Windows processes avg") && has(head, "now ") && has(head, "% of all") && has(head, "scale 50   last 1 min"), "the heading names the whole, now and the whole's scale: " + head);
+  check(has(as_text({f[static_cast<size_t>(at) + 1]}), "cpu_burn.exe") && has(as_text({f[static_cast<size_t>(at) + 1]}), "all other Windows processes"), "the legend names both layers");
+  bool swatches = false;
+  for (const span& p : f[static_cast<size_t>(at) + 1]) swatches = swatches || (p.text == "█" && p.color == tone::track);
+  check(swatches && f[static_cast<size_t>(at) + 1][0].text == "█" && f[static_cast<size_t>(at) + 1][0].color == tone::bar, "its swatches in bar and track");
+  const int plot_rows_n = 2;
+  std::vector<std::vector<std::pair<std::string, tone>>> grid;
+  for (int y = 0; y < plot_rows_n; ++y) grid.push_back(toned(f[static_cast<size_t>(at + 2 + y)]));
+  bool lit_ok = true, order_ok = true, any_track = false, any_bar = false;
+  for (size_t c = 0; c < grid[0].size(); ++c) {
+    bool part_seen = false;
+    for (int y = 0; y < plot_rows_n; ++y) {
+      const auto& [g, t] = grid[static_cast<size_t>(y)][c];
+      if (!is_braille(g)) continue;
+      lit_ok = lit_ok && (t == tone::bar || t == tone::track);
+      any_track = any_track || t == tone::track;
+      any_bar = any_bar || t == tone::bar;
+      if (t == tone::bar) part_seen = true;
+      else if (part_seen) order_ok = false;  // A track cell under a part cell
+    }
+  }
+  check(lit_ok && any_track && any_bar, "every lit cell of the history is bar or track, and both are drawn");
+  check(order_ok, "no track cell lies at or below the part's top in its column");
+
+  // The part is held at or under the whole: a whole that drops under the part's figure draws the whole's height.
+  {
+    pow_fixture p = part_of_whole(40, [](snapshot& s, int i) {
+      for (process_row& r : s.processes) {
+        if (r.name == "cpu_burn.exe") r.cores = i < 20 ? 10 : 1;
+      }
+      s.process_totals = process_totals_of(s);
+      if (i < 20) s.process_totals.cores = 5;  // The part read 10 against a whole of 5: the whole is the most it draws
+      else s.process_totals.cores = 20;
+    });
+    const std::vector<line> hist = process_history(p.h, nullptr, 0, 0, 0, 60000);  // nothing selected: a title and blank rows
+    check(hist.size() == 1, "no process: the title alone");
+    const proc_id id{0, 31000, 0, "cpu_burn.exe"};
+    const std::vector<line> g = process_history(p.h, &id, 80, 4, kNow, 60000);  // heading, legend, 3 plot rows
+    const auto top_row = toned(g[2]), mid_row = toned(g[3]);
+    // Scale 20, 3 rows of 4 dots: the whole at 5 is 3 dots, the bottom row; the part held at 5 too, never 10 (6 dots).
+    const size_t last = top_row.size() - 1;
+    check(!is_braille(top_row[last].first) && !is_braille(mid_row[last].first), "the part is drawn no higher than the whole: nothing above its row");
+    check(has(as_text({g[0]}), "scale 20"), "the scale is the whole's maximum rounded up");
+  }
+
+  // One Windows process: one series, no legend, no now, and the plot has the legend's row.
+  {
+    snapshot one = contended();
+    one.processes.resize(2);  // Idle and cpu_burn.exe
+    one.process_totals = process_totals_of(one);
+    history h;
+    for (int i = 30; i >= 0; --i) {
+      snapshot t = one;
+      t.unix_ms = kNow - i * 1000;
+      h.push(t);
+    }
+    const proc_id id{0, 31000, 0, "cpu_burn.exe"};
+    const std::vector<line> g = process_history(h, &id, 120, 4, kNow, 60000);
+    const std::string t = as_text(g);
+    check(g.size() == 5 && !has(t, "all other") && !has(t, "now ") && !has(t, "all Windows processes") && count_braille(as_text({g[4]})) > 0 && has(t, "avg 13.25"),
+          "one Windows process: one series, its plot 4 rows, no legend, no share");
+  }
+  // A part equal to the whole for the first half and below it after: part of the whole.
+  {
+    pow_fixture p = part_of_whole(40, [](snapshot& s, int i) {
+      if (i >= 20) s.processes.resize(2);
+      s.process_totals = process_totals_of(s);
+    });
+    const proc_id id{0, 31000, 0, "cpu_burn.exe"};
+    check(has(as_text(process_history(p.h, &id, 160, 4, kNow, 60000)), "all other Windows processes"), "a second row appearing inside the window makes two layers");
+  }
+  // WSL, panels 3 and 4: one series always.
+  for (const int panel : {3, 4}) {
+    view_state v = state_for(panel);
+    apply_key(v, key_event{key::tab}, cs);
+    const std::string t = as_text(render(cs, 160, 40, kNow, &ch, v));
+    const std::string w = line_with(render(cs, 160, 40, kNow, &ch, v), "WSL · ");
+    check(!w.empty() && !has(t, "all other") && !has(w, "now ") && !has(t, "all WSL processes") && (panel == 4 || has(w, "guest's count")), "the guest's history is one series on panel " + std::to_string(panel) + ": " + w);
+  }
+  // Panel 4: from 0, Σ working sets, never `used` or `range` in the history.
+  {
+    const snapshot b = busy();
+    const history demo = demo_minute(b);
+    const std::vector<line> m = render(b, 200, 40, kNow, &demo, state_for(4));
+    const std::string mh = line_with(m, "Windows · vmmemWSL 7120 · working set");
+    check(has(mh, "Σ working sets, all Windows processes avg") && !has(mh, "used") && !has(mh, "range"), "panel 4's heading names its whole for its sum: " + mh);
+    check(has(line_with(m, "Windows · vmmemWSL 7120 · working set", 1), "all other Windows processes' working sets"), "and its legend");
+    const int r = row_at(m, 0, "Windows · vmmemWSL");
+    check(r > 0 && count_braille(as_text({m[static_cast<size_t>(r + plan_memory_rows(40).history)]})) > 0, "and its plot starts at 0");
+  }
+  // Giving way (Q6): 3 rows, the legend and 2 plot rows; 2 rows, no legend, and the heading still names the whole.
+  {
+    const proc_id id{0, 31000, 0, "cpu_burn.exe"};
+    const std::vector<line> three = process_history(ch, &id, 160, 3, axis_end(ch, kNow), 60000), two = process_history(ch, &id, 160, 2, axis_end(ch, kNow), 60000);
+    check(three.size() == 4 && has(as_text({three[1]}), "all other Windows processes"), "3 rows: heading, legend and 2 plot rows");
+    check(two.size() == 3 && !has(as_text(two), "all other") && has(as_text({two[0]}), "all Windows processes"), "2 rows: no legend, 2 plot rows, the heading names the whole");
+    const std::vector<line> narrow = process_history(ch, &id, 100, 2, axis_end(ch, kNow), 60000);
+    check(has(as_text({narrow[0]}), "all Windows processes") && has(as_text({narrow[0]}), "last 1 min"), "narrow, the whole keeps its name before its figures and now");
+  }
+  // now: the latest sample where both are known; blank on a whole of 0 or NaN; <1% under half a percent.
+  {
+    const time_axis a = make_axis(ch, axis_end(ch, kNow), 60000, 30, 2);
+    const auto part = [](double v) { return [v](const history_sample&) { return v; }; };
+    check(share_text(a, part(1), part(0)).empty(), "now is blank when the whole is 0");
+    check(share_text(a, part(1), part(kNaN)).empty(), "and when it is not known");
+    check(share_text(a, part(0.004), part(1)) == "<1%" && share_text(a, part(0.005), part(1)) == "1%" && share_text(a, part(0.86), part(1)) == "86%", "<1% under half a percent, else whole percents");
+  }
+  // The max dots: the whole's in track, the part's in bar; a part's dot at or under its own mean is not drawn.
+  {
+    std::vector<double> whole(4, 20), part(4, 5), raw(4, 5);
+    window_stats ws, ps;
+    ws.max = 90; ws.max_at = 0; ws.max_count = 3;
+    ps.max = 60; ps.max_at = 3; ps.max_count = 3;
+    const std::vector<line> b = plot_part_block(whole, part, raw, ws, ps, 1, 100, 0);
+    const auto cells = toned(b[0]);
+    size_t i0 = 0, i1 = 0;
+    const unsigned c0 = static_cast<unsigned>(next_cp(cells[0].first, i0) - 0x2800), c1 = static_cast<unsigned>(next_cp(cells[1].first, i1) - 0x2800);
+    check((c0 & kDotLeft[3]) && cells[0].second == tone::bar, "the whole's dot in its column; that cell holds the part, so it is the part's colour");
+    check((c1 & kDotRight[1]) && cells[1].second == tone::bar, "the part's dot in its column, at 60 of 100 the second dot, in bar");
+    ps.max = 5;
+    const auto none = toned(plot_part_block(whole, part, raw, ws, ps, 1, 100, 0)[0]);
+    size_t i2 = 0;
+    check(!(static_cast<unsigned>(next_cp(none[1].first, i2) - 0x2800) & kDotRight[1]), "a part's dot at its own mean's level is not drawn");
+    std::vector<double> zero_part(4, 0);
+    const auto rest = toned(plot_part_block(whole, zero_part, zero_part, ws, window_stats{}, 1, 100, 0)[0]);
+    check(rest[1].second == tone::track, "a cell with no part is the rest's, in track");
+    std::vector<double> zero(4, 0);
+    const auto zeros = toned(plot_part_block(zero, zero, zero, window_stats{}, window_stats{}, 1, 100, 0)[0]);
+    check(zeros[0].first == "⣀" && zeros[0].second == tone::bar, "a whole that measured 0 is ⣀ in bar");
+  }
+  // The heading at every width: never wider than the screen, `last` present while the left side fits.
+  for (int w = 40; w <= 300; ++w) {
+    const proc_id id{0, 31000, 0, "cpu_burn.exe"};
+    const std::vector<line> g = process_history(ch, &id, w, 3, axis_end(ch, kNow), 60000);
+    const std::string t = as_text({g[0]});
+    check(width_of(g[0]) <= w, "the heading fits at " + std::to_string(w));
+    if (w >= 37 + 3 + 10) check(has(t, "last 1 min"), "and keeps `last 1 min` at " + std::to_string(w));
+  }
+  check(vt_frame(large(cs, ch, 131, 40), 40).size() < 48 * 1024, "two-tone histories stay under the frame budget");
 }
 
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
@@ -4531,6 +4748,7 @@ int main(int argc, char** argv) {
   check_selection_identity();
   check_two_columns();
   check_history_heading();
+  check_part_of_whole();
   if (!quick) {
     check_denied_note();
     check_holder_wording();
