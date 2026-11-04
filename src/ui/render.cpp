@@ -2022,11 +2022,12 @@ struct heading_part {
 
 // A history's heading (design/panel-grammar-slice2.md sections 3 and 6, machtop's form): the left side, already in
 // title, names the list, the process and the measure; the right side is the first of the candidates that fits, then
-// `last N min`, which stays while the left side leaves room for it and is never cut.
-void history_heading(row& title, const std::vector<std::vector<heading_part>>& candidates, int64_t span_ms, int width) {
+// `last N min`, which stays while the left side leaves room for it and is never cut. bare, if given, is tried last,
+// alone and without `last N min`: what must survive when nothing else fits.
+void history_heading(row& title, const std::vector<std::vector<heading_part>>& candidates, int64_t span_ms, int width, const std::string& bare = "") {
   const std::string last = fmt("last %d min", static_cast<int>(span_ms / 60000));
   std::vector<std::vector<heading_part>> tries = candidates;
-  tries.push_back({});
+  if (bare.empty()) tries.push_back({});  // `last N min` alone, after bare when there is one
   for (const std::vector<heading_part>& parts : tries) {
     int need = display_width(last);
     for (size_t i = 0; i < parts.size(); ++i) need += display_width(parts[i].text) + (i + 1 < parts.size() ? display_width(parts[i].after) : 3);
@@ -2036,6 +2037,9 @@ void history_heading(row& title, const std::vector<std::vector<heading_part>>& c
     title.add(last, tone::dim);
     return;
   }
+  if (bare.empty()) return;
+  if (title.cols() + 3 + display_width(bare) <= width) title.to(width - display_width(bare)).add(bare, tone::dim);
+  else history_heading(title, {}, span_ms, width);
 }
 
 // Short of room the figures go from the left.
@@ -2073,12 +2077,13 @@ struct history_measure {
   history_scale (*scale)(double);
   const char* whole_name;  // In the heading
   const char* rest_name;   // In the legend
+  const char* short_name;  // In the heading when narrow and no legend names the grey
 };
 
 const history_measure kCoresHistory = {" · cores", " · cores, guest's count", &history::cores_at, &history_sample::windows_cores_all, cores_scale,
-                                       "all Windows processes", "all other Windows processes"};
+                                       "all Windows processes", "all other Windows processes", "all Windows"};
 const history_measure kMemoryHistory = {" · working set", " · stat rss", &history::memory_at, &history_sample::windows_ws_all, memory_scale_of,
-                                        "Σ working sets, all Windows processes", "all other Windows processes' working sets"};
+                                        "Σ working sets, all Windows processes", "all other Windows processes' working sets", "Σ all Windows"};
 
 // machtop's part_equals_whole: one series when, at every sample on the axis where both are known, the part is the
 // whole within 1e-6 relative, or no sample has both (design/panel-grammar-slice2.md section 3, "When it draws as one
@@ -2225,11 +2230,19 @@ std::vector<line> process_history(const history& h, const proc_id* id, int width
     p.push_back(scale_part);
     return p;
   };
-  history_heading(title, {right(true, true, true, true), right(false, true, true, true), right(false, false, true, true), right(false, false, false, true), {scale_part}}, span_ms, width);
-  out.push_back(title);
   // design/panel-grammar-slice2.md Q6: the legend takes one of the history's rows while the plot keeps 2, and goes
-  // only when it would not; the heading's whole then names the grey.
+  // only when it would not; the heading's whole then names the grey, so with no legend it outlasts the tail: the
+  // name shortened first, keeping machtop's tail, then `scale`, then `last N min` go before it.
   const bool legend = rows >= 3;
+  std::vector<std::vector<heading_part>> tries = {right(true, true, true, true), right(false, true, true, true), right(false, false, true, true), right(false, false, false, true)};
+  if (legend) {
+    tries.push_back({scale_part});
+  } else {
+    tries.push_back({{m.short_name, "   "}, scale_part});
+    tries.push_back({{m.short_name}});
+  }
+  history_heading(title, tries, span_ms, width, legend ? "" : m.short_name);
+  out.push_back(title);
   if (legend) {
     row l;
     l.add("█", tone::bar).add(" " + fit(id->name, 40) + "  ", tone::dim).add("█", tone::track).add(" ").add(m.rest_name, tone::dim);

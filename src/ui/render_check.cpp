@@ -4322,6 +4322,17 @@ void check_part_of_whole() {
     check(width_of(g[0]) <= w, "the heading fits at " + std::to_string(w));
     if (w >= 37 + 3 + 10) check(has(t, "last 1 min"), "and keeps `last 1 min` at " + std::to_string(w));
   }
+  // With no legend (2 rows) the whole's name outlasts scale and last: shortened, then alone (audit finding 10).
+  for (int w = 40; w <= 300; ++w) {
+    const proc_id id{0, 31000, 0, "cpu_burn.exe"};
+    const std::vector<line> g = process_history(ch, &id, w, 2, axis_end(ch, kNow), 60000);
+    const std::string t = as_text({g[0]}), n = " at " + std::to_string(w);
+    check(width_of(g[0]) <= w, "the heading with no legend fits" + n);
+    const int left = display_width("Windows · cpu_burn.exe 31000 · cores");
+    if (w >= left + 3 + display_width("all Windows")) check(has(t, "all Windows"), "with no legend the heading names the whole" + n + ": " + t);
+    check(!has(t, "scale") || has(t, "all Windows"), "never scale without the whole's name" + n);
+    if (w >= left + 3 + display_width("all Windows   last 1 min")) check(has(t, "last 1 min"), "and keeps last while the short name and it fit" + n);
+  }
   check(vt_frame(large(cs, ch, 131, 40), 40).size() < 48 * 1024, "two-tone histories stay under the frame budget");
 }
 
