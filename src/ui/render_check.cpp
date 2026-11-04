@@ -1922,8 +1922,9 @@ void check_large_mockup() {
   row_is(27, "    0.31   11736 vmwp.exe       40    0.1 WSL VM │     0.03    2001 sshd    1          0.0  S");
   row_is(28, "    0.22    9001 카카오톡.exe   60    0.4        │     0.02    2002 syst…   1          0.0  S");
   row_is(29, "5 of 46                                          │ 5 of 6 · guest count? 64");
-  row_is(30, "Windows · cpu_burn.exe 31000 · cores                                   avg 7.73  max 13.25  scale 20");
-  check(columns(as_text({f[31]}), 0, 5) == " 20 │" && columns(as_text({f[32]}), 0, 5) == "  0 │", "the history is 2 rows, 0 to its scale");
+  row_is(30, "Windows · cpu_burn.exe 31000 · cores                      avg 7.73  max 13.25  scale 20   last 1 min");
+  check(!has(as_text({f[31], f[32]}), "│") && count_braille(as_text({f[32]})) > 0 && count_braille(columns(as_text({f[32]}), 0, 1)) == 1,
+        "the history is 2 rows, full width from column 0, no gutter");
   row_is(33, "1 2 3 cpu 4 5 6 7 8                                            ↑↓ select  tab list  ←→ 1 min  q quit");
   // The focused list is lit, the other dim; ▶ and the selection background only on the focused list's row.
   check(f[22][0].color == tone::title && f[22][0].bold, "the focused list's heading is lit");
@@ -3066,12 +3067,15 @@ void check_graph_rule_buckets() {
             "the unwatched part ends at the first sample's bucket" + n);
       check(alternate(win, first) && alternate(wsl, lead(wsl)) && lead(wsl) == first, "a faint · in every other cell, both columns alike" + n);
       int dots = 0, bottom_dots = 0, busy_dots = 0;
+      const size_t history_bottom = f.size() - 2;  // The history has no gutter: its bottom row is the one above the footer
       for (size_t i = 0; i < f.size(); ++i) {
         const std::string t = as_text({f[i]});
         dots += faint_dots(f[i]);
         if (t.rfind("  0 │", 0) == 0) {
           bottom_dots += faint_dots(f[i]);
-          if (busy_dots == 0) busy_dots = faint_dots(f[i]);  // The busy plots' row comes first; the history's is its own
+          if (busy_dots == 0) busy_dots = faint_dots(f[i]);  // The busy plots' row comes first
+        } else if (i == history_bottom) {
+          bottom_dots += faint_dots(f[i]);
         }
       }
       check(dots == bottom_dots && busy_dots == 2 * ((first + 1) / 2), "dots only on the plots' bottom rows, not the heat block or the lanes" + n);
@@ -3699,7 +3703,6 @@ void check_memory_panel() {
   check(u.decimals == 1 && std::string(u.name) == " MiB", "2 MiB across: MiB with 1 decimal, not 10.2–10.2 GiB");
   u = unit_of({0.02, 0.03});
   check(u.decimals == 0 && std::string(u.name) == " MiB", "under 1 GiB: MiB, 10 MiB across needs no decimal");
-  check(gutter_number("0.05") == "0.05" && gutter_number("20") == " 20" && gutter_number("10.150").empty(), "a gutter's number is whole in 4 columns, or not there");
   // A flat series draws one line, not blank, and the label prints its range.
   const std::string plots = as_text(mem(131, 40));
   check(has(plots, "used avg 24.7 max 24.7 · range") && has(plots, "cache avg 7.0 max 7.0 · range"), "each plot's title has avg, max and range");
@@ -3853,28 +3856,27 @@ void check_final_audit() {
       h.push(s);
     }
     const std::vector<line> f = render(s, 131, 40, T0 + 59500, &h, state_for(4));
+    // Since slice 2 step C the history draws from 0 to its scale, printed in the heading (Q3), not zoomed.
     const std::string title = line_with(f, "Windows · idle.exe 10 · working set");
-    const size_t r = title.find("range ");
-    const double bottom = r == std::string::npos ? kNaN : atof(title.c_str() + r + 6);
-    const size_t dash = title.find("–", r);
-    const double top = dash == std::string::npos ? kNaN : atof(title.c_str() + dash + 3);
+    const size_t sc = title.find("scale ");
+    const double top = sc == std::string::npos ? kNaN : atof(title.c_str() + sc + 6);
     const double scale = has(title, " MiB") ? 1024 : 1;
     const double v = 10898438144.0 / kG * scale;
     const int first = row_at(f, 0, "Windows · idle.exe");
-    int rows = 0, drawn = -1;
-    for (size_t i = static_cast<size_t>(first) + 1; i + 1 < f.size(); ++i, ++rows) {
-      const std::string t = as_text({f[i]});
-      if (t.find("│") == std::string::npos || t.find("│") > 6) break;
-      if (count_braille(t) > 0) drawn = rows;
+    const int rows = plan_memory_rows(40).history;
+    int drawn = -1;
+    for (int i = 0; i < rows && drawn < 0; ++i) {
+      if (count_braille(as_text({f[static_cast<size_t>(first + 1 + i)]})) > 0) drawn = i;
     }
-    const int dots = std::max(1, static_cast<int>(std::lround((v - bottom) / (top - bottom) * 4 * rows)));
+    const int dots = std::max(1, static_cast<int>(std::lround(v / top * 4 * rows)));
     const int expected = rows - 1 - (dots - 1) / 4;
-    check(std::isfinite(bottom) && std::isfinite(top) && top > bottom && rows >= 2 && std::abs(drawn - expected) <= 1,
-          "the line sits where its range says: row " + std::to_string(drawn) + ", the range puts it at " + std::to_string(expected) + ": " + title);
-    check(bottom <= v && v <= top, "and the value is inside the printed range");
+    check(std::isfinite(top) && top > 0 && rows >= 2 && drawn == expected && !has(title, "range"),
+          "the history's top sits where its scale says: row " + std::to_string(drawn) + ", the scale puts it at " + std::to_string(expected) + ": " + title);
+    check(v <= top && has(title, "scale 20 GiB"), "and the value is under the printed scale, 20 GiB");
+    check(rows >= 2 && count_braille(as_text({f[static_cast<size_t>(first + rows)]})) > 0, "and the bottom row is drawn: from 0");
     const std::vector<line> c = render(s, 131, 40, T0 + 59500, &h, state_for(3));
     const int hist = row_at(c, 0, "Windows · idle.exe");
-    check(hist > 0 && columns(as_text({c[static_cast<size_t>(hist) + 1]}), 0, 5) == "0.05│" && has(line_with(c, "Windows · idle.exe"), "scale 0.05"), "the 0.05 cores scale is printed whole in the gutter");
+    check(hist > 0 && !has(as_text({c[static_cast<size_t>(hist) + 1]}), "│") && has(line_with(c, "Windows · idle.exe"), "scale 0.05   last 1 min"), "the 0.05 cores scale is printed whole in the heading");
   }
 }
 
@@ -4025,6 +4027,76 @@ void check_two_columns() {
   };
   check(dotted(5) == "·         " && dotted(4) == dotted(5), "5 unwatched columns: 2 cells, the third half-watched has no dot");
   check(dotted(6) == "· ·       ", "6 columns are 3 cells, and · goes in every other one");
+}
+
+// design/panel-grammar-slice2.md section 6: a history has no gutter and no time axis; avg, max, scale and
+// `last N min` are in its heading, and memory's history draws from 0.
+void check_history_heading() {
+  const snapshot s = busy();
+  const history demo = demo_minute(s);
+  const auto rtrim = [](std::string t) {
+    while (!t.empty() && (t.back() == ' ' || t.back() == '\n')) t.pop_back();
+    return t;
+  };
+  const auto ends = [](const std::string& t, const std::string& tail) { return t.size() >= tail.size() && t.compare(t.size() - tail.size(), tail.size(), tail) == 0; };
+  for (const int panel : {3, 4}) {
+    for (const int range : {0, 1, 2}) {
+      const std::string last = fmt("last %d min", static_cast<int>(kSpansMs[range] / 60000));
+      view_state v = state_for(panel);
+      v.range = range;
+      for (int w = 1; w <= 300; ++w) {
+        const std::vector<line> f = render(s, w, 40, kNow, &demo, v);
+        const int at = row_at(f, 0, "Windows · ");
+        const std::string n = " panel " + std::to_string(panel) + ", " + last + ", at " + std::to_string(w);
+        if (w >= (panel == 4 ? kMemoryWide : 60)) check(at > 0, "the history is drawn" + n);
+        if (at < 0) continue;
+        const std::string t = rtrim(as_text({f[static_cast<size_t>(at)]}));
+        bool cut = false;
+        for (size_t k = 1; k < last.size(); ++k) cut = cut || ends(t, " " + last.substr(0, k));
+        check(!cut && (ends(t, last) || !has(t, "last")), "the heading is never cut inside `" + last + "`" + n);
+        if (w >= 70) check(ends(t, last), "the heading ends with `" + last + "`" + n);
+        // The plot below: no gutter, no axis row.
+        for (size_t i = static_cast<size_t>(at) + 1; i + 1 < f.size(); ++i) {
+          const std::string r = as_text({f[i]});
+          check(!has(r, "│") && !has(r, "-60s") && !has(r, "-5m") && !has(r, "-10m") && !has(r, " now"), "no gutter and no axis row under the history" + n);
+        }
+      }
+    }
+  }
+  // ← and → change the heading's range.
+  view_state v = state_for(3);
+  for (const auto& [key, want] : {std::pair{key::left, "last 5 min"}, std::pair{key::left, "last 10 min"}, std::pair{key::right, "last 5 min"}}) {
+    apply_key(v, key_event{key}, s);
+    check(ends(rtrim(line_with(render(s, 131, 40, kNow, &demo, v), "Windows · ")), want), std::string("after ←/→ the heading reads ") + want);
+  }
+  // The figures go from the left, the range stays.
+  {
+    row t;
+    t.add("Windows · x 1 · cores");
+    history_heading(t, {"avg 1.00", "max 2.00", "scale 2"}, 60000, 21 + 3 + display_width("scale 2   last 1 min"));
+    const std::string text = rtrim(as_text({t}));
+    check(ends(text, "scale 2   last 1 min") && !has(text, "avg") && !has(text, "max"), "short of room, avg and max go before scale and the range");
+    row u;
+    u.add("Windows · x 1 · cores");
+    history_heading(u, {"avg 1.00", "max 2.00", "scale 2"}, 60000, 21 + 2 + display_width("last 1 min"));
+    check(rtrim(as_text({u})) == "Windows · x 1 · cores", "with no room for the range, the heading is the left side alone, not cut");
+  }
+  // Panel 4's history, one series: from 0 to a scale, never a range; its used and cache plots keep theirs.
+  const std::vector<line> m = render(s, 131, 40, kNow, &demo, state_for(4));
+  const std::string mt = line_with(m, "Windows · vmmemWSL 7120 · working set");
+  check(has(mt, "scale ") && has(mt, " GiB   last 1 min") && !has(mt, "range"), "panel 4's history prints scale, not range: " + mt);
+  const int mh = row_at(m, 0, "Windows · vmmemWSL");
+  check(mh > 0 && count_braille(as_text({m[static_cast<size_t>(mh + plan_memory_rows(40).history)]})) > 0, "and its bottom row is drawn where a sample exists");
+  check(has(as_text(m), "used avg 24.7 max 24.7 · range"), "panel 4's used and cache plots still zoom and print range");
+  // A process at a few MiB: MiB, and never under 4 MiB.
+  check(memory_scale_of(0.001).top_gib * 1024 >= 4 && std::string(memory_scale_of(0.001).unit) == " MiB", "a process's memory scale is at least 4 MiB, in MiB");
+  check(std::string(memory_scale_of(10.15).unit) == " GiB" && memory_scale_of(10.15).top_gib == 20, "10.15 GiB is drawn to 20 GiB");
+  check(std::string(memory_scale_of(900.0 / 1024).unit) == " MiB" && memory_scale_of(900.0 / 1024).top_gib * 1024 == 1000, "900 MiB is drawn to 1000 MiB");
+  // Panel 2's device graphs and panel 3's busy plots keep their gutter and axis.
+  const std::string p2 = as_text(render(s, 131, 40, kNow, &demo, state_for(2)));
+  check(has(p2, "100│") && has(p2, "  0│") && has(p2, "-60s") && has(p2, " now"), "panel 2's device graphs keep the gutter and the axis");
+  const std::string p3 = as_text(render(s, 131, 40, kNow, &demo, state_for(3)));
+  check(has(p3, "100 │") && has(p3, "  0 │") && has(p3, "-60s") && has(p3, " now"), "panel 3's busy plots keep the gutter and the axis");
 }
 
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
@@ -4458,6 +4530,7 @@ int main(int argc, char** argv) {
   check_final_audit();
   check_selection_identity();
   check_two_columns();
+  check_history_heading();
   if (!quick) {
     check_denied_note();
     check_holder_wording();

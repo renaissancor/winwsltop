@@ -1718,12 +1718,14 @@ void gutter(row& r, std::string_view label, std::string_view bar = "│", tone c
 // A plot over an axis of two columns a cell (design/panel-grammar-slice2.md section 4): each dot column of a
 // braille cell is its own column of the axis, and the maximum's dot is in the column that holds it, left or
 // right. unwatched counts columns; the faint dot goes only in a cell both of whose columns are unwatched.
-std::vector<line> plot_block(const std::vector<double>& columns, int rows, std::string_view top, std::string_view bottom, int unwatched, const window_stats& st, double ceiling = 100) {
+// With no gutter, a history's form (design/panel-grammar-slice2.md section 6): the plot is the full width and its
+// figures are in the heading.
+std::vector<line> plot_block(const std::vector<double>& columns, int rows, std::string_view top, std::string_view bottom, int unwatched, const window_stats& st, double ceiling = 100, bool with_gutter = true) {
   const std::vector<std::string> plot = plot_rows(columns, rows, max_mark(st), st.max, ceiling);
   std::vector<line> out;
   for (int y = 0; y < rows; ++y) {
     row r;
-    gutter(r, y == 0 ? top : y == rows - 1 ? bottom : std::string_view());
+    if (with_gutter) gutter(r, y == 0 ? top : y == rows - 1 ? bottom : std::string_view());
     for (const span& c : plot_line(plot[static_cast<size_t>(y)], y == rows - 1 ? unwatched / 2 : 0)) r.add(c.text, c.color);
     out.push_back(r);
   }
@@ -2109,17 +2111,29 @@ bool selected_process(const selection_view& sv, proc_id& id) {
   return true;
 }
 
-// A gutter's number, at most 4 columns, padded to 3, or nothing when it would not fit whole.
-std::string gutter_number(const std::string& t) {
-  const int w = display_width(t);
-  return w > 4 ? std::string() : w >= 3 ? t : std::string(static_cast<size_t>(3 - w), ' ') + t;
-}
-
 constexpr double kCoresFloor = 0.05;  // machtop's per-app CPU: the least a process's cores graph spans
+
+// A history's heading (design/panel-grammar-slice2.md section 6, machtop's form): the left side, already in
+// title, names the list, the process and the measure; the right side is the window's figures, then `last N min`.
+// Short of room the figures go from the left; `last N min` stays while the left side leaves room for it, and is
+// never cut.
+void history_heading(row& title, const std::vector<std::string>& parts, int64_t span_ms, int width) {
+  const std::string last = fmt("last %d min", static_cast<int>(span_ms / 60000));
+  for (size_t from = 0; from <= parts.size(); ++from) {
+    std::string right;
+    for (size_t i = from; i < parts.size(); ++i) right += parts[i] + (i + 1 < parts.size() ? "  " : "   ");
+    right += last;
+    if (title.cols() + 3 + display_width(right) <= width) {
+      title.to(width - display_width(right)).add(right, tone::dim);
+      return;
+    }
+  }
+}
 
 // One history, full width, under both lists: the focused list's selected process, its cores over the range, 0
 // to the window's maximum rounded up (scale_top). Never one per list: two would invite comparing rows that
-// rule 3 keeps apart. A guest's figure is what the guest counted, not what the VM got.
+// rule 3 keeps apart. A guest's figure is what the guest counted, not what the VM got. No gutter and no time
+// axis: avg, max, scale and the range are in the heading.
 std::vector<line> process_history(const history& h, const proc_id* id, int width, int rows, int64_t end_ms, int64_t span_ms) {
   std::vector<line> out;
   row title;
@@ -2132,16 +2146,15 @@ std::vector<line> process_history(const history& h, const proc_id* id, int width
   title.add(id->side == 0 ? "Windows" : "WSL", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim);
   title.add(id->side == 0 ? " · cores" : " · cores, guest's count", tone::dim);
   const int slot = h.slot_of(*id);
-  const time_axis axis = make_axis(h, end_ms, span_ms, width - kCpuGutter, 2);
+  const time_axis axis = make_axis(h, end_ms, span_ms, width, 2);
   const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.cores_at(slot, h.position(p))); };
   const window_stats st = bucket_stats(axis, value);
   const double top = scale_top(st.max, kCoresFloor);
-  if (!std::isnan(st.avg)) {
-    const std::string right = "avg " + number(st.avg, "%.2f") + "  max " + number(st.max, "%.2f") + "  scale " + number(top, "%g");
-    if (title.cols() + 3 + display_width(right) <= width) title.to(width - display_width(right)).add(right, tone::dim);
-  }
+  std::vector<std::string> parts;
+  if (!std::isnan(st.avg)) parts = {"avg " + number(st.avg, "%.2f"), "max " + number(st.max, "%.2f"), "scale " + number(top, "%g")};
+  history_heading(title, parts, span_ms, width);
   out.push_back(title);
-  const std::vector<line> plot = plot_block(bucket_cells(axis, value, top), rows, gutter_number(number(top, "%g")), "  0", unwatched_cells(h, axis), st, top);
+  const std::vector<line> plot = plot_block(bucket_cells(axis, value, top), rows, "", "", unwatched_cells(h, axis), st, top, false);
   out.insert(out.end(), plot.begin(), plot.end());
   return out;
 }
@@ -2391,20 +2404,13 @@ std::string zoom_label(const window_stats& st, const zoom& z, const char* sep) {
 }
 
 // A zoomed plot over an axis: the cells are the samples' place between bottom and top, as a percent.
-template <class Value> std::vector<line> zoom_plot(const time_axis& a, const history& h, Value gib_value, double floor, int rows, bool gutter_labels, window_stats& raw, zoom& z) {
+template <class Value> std::vector<line> zoom_plot(const time_axis& a, const history& h, Value gib_value, double floor, int rows, window_stats& raw, zoom& z) {
   raw = bucket_stats(a, gib_value);
   z = zoom_of(raw, floor);
   const zoom zz = z;
   const auto place = [&](const history_sample& p) { return (gib_value(p) - zz.bottom) / (zz.top - zz.bottom) * 100; };
   const window_stats placed = bucket_stats(a, place);
-  std::string top, bottom;
-  if (gutter_labels) {  // In the title's unit and decimals, or not at all: a rounder label would misplace the line
-    const zoom_unit u = unit_of(z);
-    top = gutter_number(range_end(z.top, u, true));
-    bottom = gutter_number(range_end(z.bottom, u, false));
-    if (top.empty() || bottom.empty()) top = bottom = "";
-  }
-  return plot_block(bucket_cells(a, place), rows, top, bottom, unwatched_cells(h, a), placed);
+  return plot_block(bucket_cells(a, place), rows, "", "", unwatched_cells(h, a), placed);
 }
 
 std::string gib_of(uint64_t b) { return fmt("%.1f", gib(b)); }
@@ -2479,7 +2485,7 @@ std::vector<line> memory_plots(const time_axis& a, const history& h, const char*
     const auto value = [series = series](const history_sample& p) { return static_cast<double>(p.*series); };
     window_stats st;
     zoom z;
-    const std::vector<line> plot = zoom_plot(a, h, value, kMachineFloorGiB, 2, false, st, z);
+    const std::vector<line> plot = zoom_plot(a, h, value, kMachineFloorGiB, 2, st, z);
     row title;
     title.add(name);
     const std::string label = zoom_label(st, z, " ");
@@ -2541,8 +2547,23 @@ std::vector<line> wsl_memory_list(const wsl_view& w, int col, const list_view& v
   return out;
 }
 
-// The one history: the focused list's selected process, its working set or stat rss, zoomed, never under
-// 4 MiB across.
+// A process's memory history from 0 to its window's maximum rounded up (scale_top), never under 4 MiB: in MiB
+// while that top is under 1 GiB, else in GiB, and the figures in the heading in the same unit.
+struct memory_scale {
+  double top_gib = 0, per_gib = 1;
+  const char* unit = " GiB";
+  const char* format = "%.2f";
+};
+
+memory_scale memory_scale_of(double max_gib) {
+  const double mib = scale_top(std::isfinite(max_gib) ? max_gib * 1024 : 0, kProcessFloorGiB * 1024);
+  if (mib < 1024) return {mib / 1024, 1024, " MiB", "%.1f"};
+  return {scale_top(max_gib, kProcessFloorGiB), 1, " GiB", "%.2f"};
+}
+
+// The one history: the focused list's selected process, its working set or stat rss, from 0 (design/panel-grammar-
+// slice2.md section 6, Q3: a history does not zoom; panel 4's used and cache plots do). No gutter and no time
+// axis: avg, max, scale and the range are in the heading.
 std::vector<line> memory_history(const history& h, const proc_id* id, int width, int rows, int64_t end_ms, int64_t span_ms) {
   std::vector<line> out;
   row title;
@@ -2554,14 +2575,17 @@ std::vector<line> memory_history(const history& h, const proc_id* id, int width,
   title.add(id->side == 0 ? "Windows" : "WSL", tone::title, true).add(" · ", tone::dim).add(fit(id->name, 40)).add(fmt(" %u", id->pid), tone::dim);
   title.add(id->side == 0 ? " · working set" : " · stat rss", tone::dim);
   const int slot = h.slot_of(*id);
-  const time_axis axis = make_axis(h, end_ms, span_ms, width - kCpuGutter, 2);
+  const time_axis axis = make_axis(h, end_ms, span_ms, width, 2);
   const auto value = [&](const history_sample& p) { return slot < 0 ? std::numeric_limits<double>::quiet_NaN() : static_cast<double>(h.memory_at(slot, h.position(p))); };
-  window_stats st;
-  zoom z;
-  const std::vector<line> plot = zoom_plot(axis, h, value, kProcessFloorGiB, rows, true, st, z);
-  const std::string right = zoom_label(st, z, "  ");
-  if (!right.empty() && title.cols() + 3 + display_width(right) <= width) title.to(width - display_width(right)).add(right, tone::dim);
+  const window_stats st = bucket_stats(axis, value);
+  const memory_scale m = memory_scale_of(st.max);
+  std::vector<std::string> parts;
+  if (!std::isnan(st.avg)) {
+    parts = {"avg " + number(st.avg * m.per_gib, m.format), "max " + number(st.max * m.per_gib, m.format), "scale " + number(m.top_gib * m.per_gib, "%g") + m.unit};
+  }
+  history_heading(title, parts, span_ms, width);
   out.push_back(title);
+  const std::vector<line> plot = plot_block(bucket_cells(axis, value, m.top_gib), rows, "", "", unwatched_cells(h, axis), st, m.top_gib, false);
   out.insert(out.end(), plot.begin(), plot.end());
   return out;
 }
