@@ -1,8 +1,10 @@
 # Panel grammar, slice 2
 
-Status: PROPOSED, 2026-11-04; being built. The user approved the scope in section 0. Built on `cpu-panel`: steps A,
-B and C (422f050, 9b6b174, 002c084), E1 (8881344, 9494198) and D (afa7b2d). D's verdict is No (section 2), so steps
-E2 and F2 are dropped and the guest's histories stay one series.
+Status: built, 2026-11-04, on `cpu-panel`: steps A, B and C (422f050, 9b6b174, 002c084), E1 (8881344, 9494198),
+D (afa7b2d), F1 (a4ae1e5), G (4f9e546 and core's d9a699f) and H (c4de089, f09e170 and the commit that marks it built). D's verdict is No (section 2),
+so steps E2 and F2 are dropped and the guest's histories stay one series. Where the build departs from this file,
+`contracts/ui.md`'s decision log says so and rules. Step I, the fresh audit, is still to come. The user approved the
+scope in section 0.
 machtop answered section 10's questions the same day; machtop leads on panel design, so they are decided and
 the sections below follow them.
 Slice 1 is [`panel-grammar.md`](panel-grammar.md), built; where this file changes something there, this file

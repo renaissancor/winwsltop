@@ -240,3 +240,8 @@ documents true.
   rule 9), so step F1 shows `now N% of all`. Experiment 07 returned No (ledger, "Guest process walk checked"), so
   `cores_total` and `rss_total` are not added: the protocol and `wsl_view` stay as they are, and steps E2 and F2 are
   dropped.
+- 2026-11-04. Slice 2 step G, core's line (d9a699f): `main.cpp` passes `apply_key` the history and a `now_ms` read once
+  for a batch of keys, and the redraw after them gets that same `now_ms`, so panel 2's list that a key moves through is
+  the list drawn. `--help` names panel 2 for `up/down`. Step H brought `contracts/ui.md`, `panels.md`, `ROADMAP.md`,
+  `README.md` and slice 1's design notes to slice 2 as built. The three-argument `apply_key` overload is left for ui to
+  remove.
