@@ -47,20 +47,26 @@ of the collector's line.
    except `kStaleS`, in `snapshot.h` because `lost` stops on it too.
 8. Graphs have time on the x axis, over 1, 5 or 10 minutes. A measure with a real ceiling (a percentage of
    one core, a device or the whole machine) is drawn 0 to 100; a process's cores from 0 to the window's
-   maximum rounded up to 1, 2 or 5 times a power of ten, never below 0.05, printing `scale`; memory zooms
-   and prints `range` (decision of 2026-11-02, slice 1 commit 7). A cell is the mean of the samples in its
-   slice of the window, each clamped to the scale first. The cell holding the window's maximum, the latest if
-   several do, also marks it with one dot at its height, when that cell holds more than one sample and the
-   dot falls above the cell's mean. A value above a 0-100 graph's ceiling is drawn at the ceiling and
-   labelled as measured, in the watch tone. A measured 0 is the bottom dot row (⣀), a missing sample or a
-   stall is a blank gap, never a zero, and time from before watching began is a faint `·` in every other
-   cell of the bottom row. Each graph is labelled with the average and maximum of its raw samples over the
-   window, never the minimum. Panels are never stacked or summed, and each graph title names its source.
+   maximum rounded up to 1, 2 or 5 times a power of ten, never below 0.05, printing `scale`. A process's memory
+   history draws from 0 to its window's maximum rounded up the same way (never under 4 MiB, in MiB below 1 GiB)
+   and prints `scale`. Panel 4's used and cache plots zoom and print `range`. History graphs have no gutter or
+   time axis: `avg`, `max`, `scale` and `last N min` sit in the heading, figures dropped from the left when
+   narrow, the range kept. Device, busy, heat and lane plots keep their gutter and axis. A history or busy plot
+   has two time columns per braille cell, and every axis's cell is an even number of milliseconds, so a column
+   is exactly half a cell. A column is the mean of the samples in its slice of the window, each clamped to the
+   scale first. The column holding the window's maximum, the latest if several do, also marks it with one dot at
+   its height, when that column holds more than one sample and the dot falls above the column's mean. A value
+   above a 0-100 graph's ceiling is drawn at the ceiling and labelled as measured, in the watch tone. A measured
+   0 is the bottom dot row (⣀), a missing sample or a stall is a blank gap, never a zero, and time from before
+   watching began is a faint `·` in every other cell of the bottom row, only where both of the cell's columns are
+   unwatched. Each graph is labelled with the average and maximum of its raw samples over the window, never the
+   minimum. Panels are never stacked or summed, and each graph title names its source.
    Exception, wherever a guest figure is kept over time from the large layout's rule: the large CPU panel,
    panel 4's guest used and cache, and the per-process histories of panels 3 and 4. There a repeated guest
    line carries the previous value for one sample, and two in a row are a gap (`design/cpu-panel.md` section
    5). On the large CPU panel the `·` is placed by bucket, on the bottom row of the busy plots; the heat block
    and the lanes have no bottom dot row, so they stay blank before watching began.
+   (Slice 2 step C, `design/panel-grammar-slice2.md` sections 4 and 6; decision of 2026-11-04.)
 
 ## How to validate
 
@@ -220,6 +226,12 @@ of the collector's line.
     it is blank. The cores history's gutter prints its floor as `0.05` whole.
   - `?` marks added: the guest's `load?`, `steal?` and process count (`guest count? 64`, `top 8 of 64?`), on panels 1,
     3 and 4, and panel 3's rule line says `? not yet checked` whenever the guest's line is read.
+- 2026-11-04. Rule 8 as slice 2 steps B and C built it (9b6b174, 002c084), in the text the ui agent proposed, adopted
+  by core with its wording adjusted. It supersedes the slice 1 text's zoomed memory history and its doubled cells.
+  Two departures from `design/panel-grammar-slice2.md`, accepted:
+  - The newest cell, whose second time column has not started yet, is drawn from its first column, so the right edge
+    is not half empty for most of each bucket.
+  - A memory scale below 1 GiB is rounded up in MiB, 1, 2 or 5 times a power of ten, not as a fraction of a GiB.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.
