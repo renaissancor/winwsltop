@@ -2093,8 +2093,8 @@ template <class Part, class Whole> bool part_is_whole(const time_axis& a, Part p
 }
 
 // machtop's share_text: the part over the whole at the latest sample on the axis where both are known; blank when
-// the whole there is 0 or there is none; `<1%` under half a percent. A ratio of two held values for the selected
-// row: display, not derivation (contracts/ui.md rule 9).
+// the whole there is 0 or there is none; `<1%` above 0 and under half a percent, and `0%` for a part of 0. A
+// ratio of two held values for the selected row: display, not derivation (contracts/ui.md rule 9).
 template <class Part, class Whole> std::string share_text(const time_axis& a, Part part, Whole whole) {
   for (size_t i = a.samples.size(); i-- > 0;) {
     if (a.cell[i] < 0) continue;
@@ -2102,7 +2102,8 @@ template <class Part, class Whole> std::string share_text(const time_axis& a, Pa
     if (!std::isfinite(p) || !std::isfinite(w)) continue;
     if (!(w > 0)) return "";
     const double pct = 100 * p / w;
-    return pct < 0.5 ? "<1%" : fmt("%ld%%", std::lround(pct));
+    if (!(pct >= 0)) return "";
+    return pct > 0 && pct < 0.5 ? "<1%" : fmt("%ld%%", std::lround(pct));  // A part that measured 0 is 0%, as machtop
   }
   return "";
 }

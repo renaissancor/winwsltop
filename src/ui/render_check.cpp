@@ -4289,6 +4289,7 @@ void check_part_of_whole() {
     check(share_text(a, part(1), part(0)).empty(), "now is blank when the whole is 0");
     check(share_text(a, part(1), part(kNaN)).empty(), "and when it is not known");
     check(share_text(a, part(0.004), part(1)) == "<1%" && share_text(a, part(0.005), part(1)) == "1%" && share_text(a, part(0.86), part(1)) == "86%", "<1% under half a percent, else whole percents");
+    check(share_text(a, part(0), part(1)) == "0%", "a part of exactly 0 is 0%, not <1% (machtop share_text)");
   }
   // The max dots: the whole's in track, the part's in bar; a part's dot at or under its own mean is not drawn.
   {
