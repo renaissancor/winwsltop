@@ -81,6 +81,10 @@ documents true.
   machine has one group. Not added.
 - Should `vm.vmmem_cores` read `null` instead of 0 when `vmmem_cores_known` is false? It would match
   "unknown is null", but it changes an existing key, so it would raise `schema`. Left at 0.
+- Slice 2 (`docs/design/panel-grammar-slice2.md`, section 10) leaves six questions to the user: Q1 dropping the
+  name from process identity once the pid-reuse rows land; Q2 no gutter on histories only; Q3 whether memory's
+  one-series history zooms or starts at 0; Q4 which rows panel 2's Windows list holds; Q5 whether panel 2's WSL
+  holder list is selectable; Q6 the legend at the smallest history. Q4 and Q5 block step G.
 
 ## Decision log
 
@@ -204,3 +208,10 @@ documents true.
   would blank the whole guest side for one bad field.
 - 2026-11-02. Slice 1 commit 6, `main.cpp`: `hist.push` is given `selected_processes(s, view)`, so a selected process
   keeps its slot at the cap, and `--help` names `up/down` and `tab` again, for panels 3 and 4, now that they act.
+- 2026-11-04. Slice 2 design written, PROPOSED, `docs/design/panel-grammar-slice2.md`, under the scope the user
+  approved. Two seam calls in it are core's. The Windows whole for part-of-whole is a `derived` snapshot field,
+  `process_totals` (`cores`, `working_set`), from a header-only `src/analysis/process_totals.h`, not a sum in
+  `history::push` as machtop's gap list proposed, because `contracts/ui.md` keeps the screen from deriving a number
+  the snapshot lacks. The guest's `cores_total` and `rss_total` are additive collector keys, `schema` stays 1, and the
+  seam waits for experiment 07's ledger rows. Selection keeps the name beside pid and start until the pid-reuse rows
+  are observed.
