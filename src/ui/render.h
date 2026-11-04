@@ -35,12 +35,15 @@ constexpr int64_t kSpansMs[] = {60000, 300000, 600000};
 // The eight panels of the shared grammar (docs/panels.md), by number; 0 is not one.
 constexpr int kPanels = 8;
 
-// A row of a list, remembered by pid and name, so that it survives a reorder (design/panel-grammar.md part 3).
+// A row of a list, remembered by pid, start and name, so that it survives a reorder (design/panel-grammar.md
+// part 3, design/panel-grammar-slice2.md section 1).
 struct row_key {
   bool set = false;  // Not yet moved: the first row
   uint32_t pid = 0;
   std::string name;
-  uint64_t start = 0;  // Its create time or starttime when last seen: what the per-process ring keys it by, not what selects it
+  // Its create time or starttime when last seen, 0 when not known: what the per-process ring keys it by, and,
+  // where the row's start is known too, part of what selects it, so a reused pid is not the row selected.
+  uint64_t start = 0;
 };
 
 // What the keys have chosen, and nothing else: no offset, no size, nothing per second.

@@ -3878,6 +3878,71 @@ void check_final_audit() {
   }
 }
 
+// design/panel-grammar-slice2.md section 1: a row is its key's by pid and name and, where both starts are
+// known, by start too.
+void check_selection_identity() {
+  constexpr uint64_t kA = 133000000000000000ull, kB = kA + 777;
+  snapshot s = busy();
+  for (process_row& p : s.processes) p.create_time = p.pid == 10000 ? kA : kA + 1000 + p.pid;
+  const history h = demo_minute(s);
+  const std::vector<const process_row*> order = windows_cpu_order(s);
+  view_state v = state_for(3);
+  for (size_t i = 0; i < order.size() && !(v.panels[3].rows[0].set && v.panels[3].rows[0].pid == 10000); ++i) apply_key(v, key_event{key::down}, s);
+  const row_key k = v.panels[3].rows[0];
+  check(k.set && k.pid == 10000 && k.name == "svchost.exe" && k.start == kA, "after ↓ the key holds the row's start");
+  const std::vector<proc_id> keep = selected_processes(s, v);
+  check(keep.size() == 1 && keep[0].pid == 10000 && keep[0].start == kA, "selected_processes passes the start on");
+  check(has(line_with(large(s, h, 131, 40, v), "▶"), "10000") && has(as_text(large(s, h, 131, 40, v)), "Windows · svchost.exe 10000 · cores"), "svchost.exe 10000 is selected and its history shown");
+
+  // The same pid and name, another create time: another process, so the selection falls to the first row.
+  snapshot reused = s;
+  for (process_row& p : reused.processes) {
+    if (p.pid == 10000) p.create_time = kB;
+  }
+  std::vector<line> f = large(reused, h, 131, 40, v);
+  check(has(line_with(f, "▶"), " " + std::to_string(order[0]->pid) + " ") && !has(line_with(f, "▶"), "10000"), "a reused pid under the same name: the selection falls to the first row");
+  check(!has(as_text(f), "svchost.exe 10000 ·"), "and the history title does not name 10000");
+  // The same start: the selection stays.
+  f = large(s, h, 131, 40, v);
+  check(has(line_with(f, "▶"), "10000"), "the same pid, name and start: the selection stays");
+  // ↓ from a reused pid moves on from the first row, as from a row that left.
+  view_state moved = v;
+  apply_key(moved, key_event{key::down}, reused);
+  check(moved.panels[3].rows[0].pid == windows_cpu_order(reused)[1]->pid, "↓ from a reused pid moves on from the first row");
+
+  // A start of 0 on either side: pid and name decide.
+  const row_key known{true, 10000, "svchost.exe", kA}, unknown{true, 10000, "svchost.exe", 0};
+  const std::vector<row_key> rows_known = {{true, 4, "System", 9}, known}, rows_unknown = {{true, 4, "System", 9}, unknown};
+  check(selected_row(rows_unknown, known) == 1, "a row with no start matches a key with one by pid and name");
+  check(selected_row(rows_known, unknown) == 1, "a key with no start matches a row with one by pid and name");
+  check(selected_row(rows_known, row_key{true, 10000, "svchost.exe", kB}) == 0, "two known starts that differ do not match");
+  check(selected_row(rows_known, row_key{true, 10000, "other.exe", kA}) == 0, "the name still decides beside the start");
+  snapshot zero = s;
+  for (process_row& p : zero.processes) {
+    if (p.pid == 10000) p.create_time = 0;
+  }
+  check(has(line_with(large(zero, h, 131, 40, v), "▶"), "10000"), "a Windows row with create time 0: pid and name keep the selection");
+  // The guest: busy_json's rows carry no start, so the key holds 0; a later line with a start keeps it.
+  view_state g = state_for(3);
+  apply_key(g, key_event{key::tab}, s);
+  apply_key(g, key_event{key::down}, s);
+  const row_key gk = g.panels[3].rows[1];
+  check(gk.set && gk.start == 0, "a guest row with no start: the key's start is 0");
+  snapshot started = s;
+  const std::string at = "\"pid\":" + std::to_string(gk.pid) + ",";
+  check(started.wsl_json.find(at) != std::string::npos, "the guest's selected row is in the line");
+  started.wsl_json.replace(started.wsl_json.find(at), at.size(), at + "\"start\":4242,");
+  f = large(started, h, 131, 40, g);
+  check(has(line_with(f, "▶"), " " + std::to_string(gk.pid) + " "), "a guest row that gains a start keeps the selection made without one");
+  apply_key(g, key_event{key::up}, started);
+  apply_key(g, key_event{key::down}, started);
+  check(g.panels[3].rows[1].pid == gk.pid && g.panels[3].rows[1].start == 4242, "moved to again, the key holds the guest's start");
+  snapshot restarted = started;
+  restarted.wsl_json.replace(restarted.wsl_json.find("\"start\":4242"), 13, "\"start\":4243");
+  f = large(restarted, h, 131, 40, g);
+  check(!has(line_with(f, "▶"), " " + std::to_string(gk.pid) + " "), "a guest pid reused under the same name, another start: the selection falls");
+}
+
 // design/panel-grammar.md part 2, "Keys" and "Decoding": key_for on every row of the key table.
 void check_keys() {
   const auto is = [](const key_event& e, key k, int panel = 0, bool esc_first = false) { return e.k == k && e.panel == panel && e.esc_first == esc_first; };
@@ -4307,6 +4372,7 @@ int main(int argc, char** argv) {
   check_unchecked_marks();
   check_memory_panel();
   check_final_audit();
+  check_selection_identity();
   if (!quick) {
     check_denied_note();
     check_holder_wording();

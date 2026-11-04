@@ -1964,9 +1964,15 @@ int selectable_count(const std::vector<std::vector<row_key>>& lists) {
   return static_cast<int>(std::count_if(lists.begin(), lists.end(), [](const std::vector<row_key>& l) { return !l.empty(); }));
 }
 
+// A row is its key's when pid and name are equal and, where both starts are known (non-zero), the starts are
+// too: a reused pid under the same name is another process (design/panel-grammar-slice2.md section 1). The name
+// stays beside pid and start until the ledger has a row on pid reuse. A start of 0 on either side leaves pid
+// and name to decide.
+bool same_row(const row_key& r, const row_key& k) { return r.pid == k.pid && r.name == k.name && (r.start == 0 || k.start == 0 || r.start == k.start); }
+
 // Where a list's selection is: its key's row, or the first row when the key is unset or has left the list.
 size_t selected_row(const std::vector<row_key>& rows, const row_key& k) {
-  const auto it = std::find_if(rows.begin(), rows.end(), [&](const row_key& r) { return k.set && r.pid == k.pid && r.name == k.name; });
+  const auto it = std::find_if(rows.begin(), rows.end(), [&](const row_key& r) { return k.set && same_row(r, k); });
   return it == rows.end() ? 0 : static_cast<size_t>(it - rows.begin());
 }
 
@@ -2083,20 +2089,11 @@ list_view list_for(const selection_view& sv, int list, int rows) {
 }
 
 // The process the one history shows: the focused list's selected row, or none when no list has a row.
-bool selected_process(const snapshot& s, const wsl_view& w, const selection_view& sv, proc_id& id) {
+bool selected_process(const selection_view& sv, proc_id& id) {
   const std::vector<row_key>& rows = sv.lists[static_cast<size_t>(sv.focus)];
   if (rows.empty()) return false;
-  const row_key& k = rows[sv.row[sv.focus]];
-  id = {static_cast<uint8_t>(sv.focus), k.pid, 0, k.name};
-  if (sv.focus == 0) {
-    for (const process_row& p : s.processes) {
-      if (p.pid == k.pid && p.name == k.name) id.start = p.create_time;
-    }
-  } else {
-    for (const wsl_process& p : w.processes) {
-      if (p.pid == k.pid && p.name == k.name) id.start = p.start.value_or(0);
-    }
-  }
+  const row_key& k = rows[sv.row[sv.focus]];  // A row of this sample's list, so its start is this sample's
+  id = {static_cast<uint8_t>(sv.focus), k.pid, k.start, k.name};
   return true;
 }
 
@@ -2251,7 +2248,7 @@ panel_frame cpu_small_frame(const snapshot& s, const wsl_view& w, const history&
   }
   if (history_rows > 0) {
     proc_id id;
-    const bool any = selected_process(s, w, sv, id);
+    const bool any = selected_process(sv, id);
     const std::vector<line> hist = process_history(h, any ? &id : nullptr, width, history_rows, axis_end(h, now_ms), span_ms);
     f.lines.insert(f.lines.end(), hist.begin(), hist.end());
   }
@@ -2310,7 +2307,7 @@ panel_frame cpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   side_by_side(f.lines, left, right, col);
   if (plan.history > 0) {
     proc_id id;
-    const bool any = selected_process(s, w, sv, id);
+    const bool any = selected_process(sv, id);
     append(f.lines, process_history(h, any ? &id : nullptr, width, plan.history, end, span_ms));
   }
   f.lines.resize(static_cast<size_t>(height));  // The footer stays at the bottom however short the lists are
@@ -2618,7 +2615,7 @@ panel_frame memory_frame(const snapshot& s, const wsl_view& w, const history& h,
   }
   if (plan.history > 0) {
     proc_id id;
-    const bool any = selected_process(s, w, sv, id);
+    const bool any = selected_process(sv, id);
     const std::vector<line> hist = memory_history(h, any ? &id : nullptr, width, plan.history, end, span_ms);
     f.lines.insert(f.lines.end(), hist.begin(), hist.end());
   }
