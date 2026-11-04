@@ -91,16 +91,16 @@ of the collector's line.
   `render_check vt <fixture> W H FILE [span_s]` writes one frame's VT bytes to a file, `render_check measure`
   prints frame bytes and build time, and `render_check quick` skips the size sweeps, for mutating the renderer.
 
-## Current state (2026-11-04, slice 2 built)
+## Current state (2026-11-05, slice 2 built, after its audit)
 
 | item | value |
 |---|---|
-| source | `src/ui` 8965 lines, of which `render.cpp` 3417, `render_check.cpp` 5033, `history.h` 175, `keys.h` 89 |
-| checks | `render_check` 186293, 0 failed, and `lost_check` 154, 0 failed, under `scripts/check.sh --windows` after d9a699f. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
+| source | `src/ui` 9094 lines, of which `render.cpp` 3456, `render_check.cpp` 5126, `history.h` 175, `keys.h` 89 |
+| checks | `render_check` 187351, 0 failed, and `lost_check` 154, 0 failed, under `scripts/check.sh --windows` after 64b395b. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
 | sizes checked | widths 1 to 300, heights 1 to 66, every panel, hostile numbers at every size and the other cases at every third. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, ranges 1 and 10 minutes; 4, 8, 14, 20, 21, 40, 64 and 65 threads |
-| frame bytes, 131 by 40 | noisy 32842 after slice 2. Slice 1's other figures, not remeasured: noisy at 64 threads 41170, panel 2 13492, panel 4 10508 (7749 at 100 by 34). Budget 48 KiB |
-| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.31 to 0.69 ms at slice 1, not remeasured after slice 2. Budget 5 ms |
-| history push, MSVC | 0.032 ms with 390 processes, the per-process ring included. 2000 processes with 50 new a second: 0.161 ms mean, 0.297 ms worst, `selected_processes` included; the first push at 2000 takes 2.72 ms, once. `render_check measure`, one run each |
+| frame bytes, 131 by 40 | noisy 32842 (23764 at 100 by 34), noisy at 64 threads 38789 and at 40 threads 39905, panel 2 13004, panel 4 11754 (8363 at 100 by 34), contended 15471 (11827 at 100 by 34). Budget 48 KiB |
+| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.336 to 0.706 ms over the fixtures, ranges 1 and 10 minutes, panels 2 and 4. Budget 5 ms |
+| history push, MSVC | 0.031 ms with 390 processes, the per-process ring included. 2000 processes with 50 new a second: 0.159 ms mean, 0.315 ms worst, `selected_processes` included; the first push at 2000 takes 2.976 ms, once. `render_check measure`, one run, 2026-11-05; the audit's own run read 0.032, 0.165, 0.449 and 3.118 ms, so the worst case varies by run |
 | per-process slots | never shrink: a spike to 2000 processes leaves about 4100 slots, about 20 MB, until exit |
 | history | 10 minutes in 601 samples, five memory floats a sample for panel 4, the Windows whole and whether GPU engines were known; the per-process ring keyed by side, pid, start and name, a GPU series and last GPU use only for processes that used an engine, a first reading stored as a gap, every slot written every push, and past max(1024, twice the rows of the newest sample) the slot least recently seen reused, never a selected one; nothing is refused |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
@@ -262,6 +262,19 @@ of the collector's line.
     to name.
   - Panel 2's WSL `/dev/dxg` holder list is a reference list, not selectable (machtop, 2026-11-04), so panel 2 has
     one selectable list and no `tab`.
+- 2026-11-05. The slice 2 audit's fixes, as built.
+  - Finding 10 (d0f0b97): a part-of-whole heading with no legend keeps the grey named. Short of room it shortens the
+    whole's name to `all Windows` (`Σ all Windows` on panel 4), then drops `scale`, then `last`, so the name survives
+    while the short form fits beside the title. With a legend, which names the grey, the scale-only fallback stays.
+  - Finding 3 (af6d422): panel 2's history reserves and draws its rows only while the split `gpu_lists` makes
+    (`gpu_windows_rows`) leaves the Windows list `kLeastListRows`, or every row it has; stacked under 64 columns with two
+    or more holders it no longer leaves the Windows list 2 rows.
+  - Finding 6 (1a7faf3): a stall of what is kept clamps every slot's times: `seen_ms` to at most `t - kKeepMs`, and
+    `gpu_seen_ms` cleared, so a clock step back during a stall cannot bring a process gone before it back into panel 2's
+    list.
+  - Finding 5 (2c2ee2b, and core's 64b395b): panel 2 counts a GPU use from the history's first column, the axis's left
+    edge at the history's width, not the start of the range; `apply_key` takes the same width, which `main.cpp` passes.
+  - Finding 4 (87b1169): a share of exactly 0 prints `0%`; `<1%` only above 0 and under half a percent, as machtop's.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.
