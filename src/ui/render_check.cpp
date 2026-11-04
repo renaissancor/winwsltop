@@ -4427,6 +4427,38 @@ void check_gpu_panel() {
     ten.range = 2;
     check(gpu_rows(g.s, &g.h, axis_end(g.h, g.s.unix_ms), 600000).size() == 3 && has(marked_row(render(g.s, 131, 40, g.s.unix_ms, &g.h, ten)), "9001"), "on 10 minutes it is listed and selected again");
   }
+  // A use counts from the first column the history draws, not the span's start (audit finding 5): at 10 minutes and
+  // 131 columns the axis starts 4010 ms inside the span at kNow.
+  {
+    for (const int w : {1, 40, 131, 300}) {
+      for (const int64_t span : {60000LL, 600000LL}) {
+        const time_axis a = make_axis(history(), kNow, span, w, 2);
+        check(history_from_ms(kNow, span, w) == (a.last - a.cells + 1) * a.bucket_ms, "history_from_ms is the axis's left edge at " + std::to_string(w));
+      }
+    }
+    check(history_from_ms(kNow, 600000, 131) - (kNow - 600000) == 4010, "the sliver at 10 minutes and 131 columns is 4010 ms");
+    for (const int age : {598, 595}) {
+      const gpu_fixture g = gpu_minute(600, [age](snapshot& s, int a) {
+        if (a == age) s.gpu_engines.push_back({9001, "3D", 60});
+      });
+      const bool in131 = gpu_rows(g.s, &g.h, axis_end(g.h, g.s.unix_ms), 600000, 131).size() == 3;
+      const bool in_span = gpu_rows(g.s, &g.h, axis_end(g.h, g.s.unix_ms), 600000).size() == 3;
+      const std::string n = " (" + std::to_string(age) + " s ago)";
+      check(in_span, "inside the span" + n);
+      check(in131 == (age == 595), "listed at 131 columns only where the history draws it" + n);
+      view_state ten = state_for(2, 600);
+      for (int i = 0; i < 2; ++i) apply_key(ten, key_event{key::down}, g.s, g.h, g.s.unix_ms, 131);
+      const std::vector<line> f = render(g.s, 131, 40, g.s.unix_ms, &g.h, ten);
+      if (age == 595) {
+        const int at = row_at(f, 0, "Windows · 카카오톡.exe 9001");
+        bool drawn = false;
+        for (size_t i = static_cast<size_t>(std::max(at, 0)) + 1; at > 0 && i + 1 < f.size(); ++i) drawn = drawn || count_braille(columns(as_text({f[i]}), 0, 3)) > 0;
+        check(at > 0 && drawn, "selected at 595 s ago, its history draws the use at the left edge");
+      } else {
+        check(!has(as_text(f), "카카오톡"), "at 598 s ago it is not listed, so nothing is selected that draws nothing");
+      }
+    }
+  }
   // Order: GPU % now, then most recent use, then holders by local memory; a local holder without use is listed.
   {
     const gpu_fixture g = gpu_minute(20, [](snapshot& s, int age) {

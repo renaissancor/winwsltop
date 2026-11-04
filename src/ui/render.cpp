@@ -1787,13 +1787,26 @@ struct gpu_row {
   uint64_t local = 0;
 };
 
+// The first millisecond a history `width` columns wide draws: the left edge of make_axis(h, end_ms, span_ms, width,
+// 2), which lies up to one cell inside the span, since its cells are whole buckets of the clock. With no width, the
+// span's own start.
+int64_t history_from_ms(int64_t end_ms, int64_t span_ms, int width) {
+  if (width <= 0) return std::numeric_limits<int64_t>::min();
+  int64_t cell_ms = std::max<int64_t>(2, (span_ms + width - 1) / width);
+  cell_ms += cell_ms % 2;
+  return (floor_div(end_ms, cell_ms) - width + 1) * cell_ms;
+}
+
 // In the order drawn: by GPU % now, then most recent use, then pid; a holder with no use in the range last, by
-// `local` memory. end_ms is the range's right edge, axis_end, as the frame draws it.
-std::vector<gpu_row> gpu_rows(const snapshot& s, const history* h, int64_t end_ms, int64_t span_ms) {
+// `local` memory. end_ms is the range's right edge, axis_end, as the frame draws it, and a use counts from the
+// first column the history below draws (history_from_ms), so no row is listed whose use it cannot show (audit
+// finding 5).
+std::vector<gpu_row> gpu_rows(const snapshot& s, const history* h, int64_t end_ms, int64_t span_ms, int width = 0) {
   const std::map<uint32_t, double> engines = busiest_engine(s);
   std::map<uint32_t, uint64_t> local;
   for (const gpu_memory_row& m : s.gpu_memory) local[m.pid] = m.local;
-  const auto in_range = [&](int64_t t) { return t != 0 && t <= end_ms && end_ms - t < span_ms; };
+  const int64_t from_ms = history_from_ms(end_ms, span_ms, width);
+  const auto in_range = [&](int64_t t) { return t != 0 && t <= end_ms && end_ms - t < span_ms && t >= from_ms; };
   std::vector<gpu_row> out;
   for (const process_row& p : s.processes) {
     if (p.pid == 0) continue;
@@ -1845,10 +1858,10 @@ std::vector<gpu_row> gpu_rows(const snapshot& s, const history* h, int64_t end_m
 // its Windows list, whose rows read the ring over the range ending where the frame's does, axis_end(h, now_ms),
 // so a key moves through the rows drawn (design/panel-grammar-slice2.md section 5, audit finding 8); its WSL list
 // is a reference list. Without a history panel 2's list is this sample's alone.
-std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel, const history* h = nullptr, int64_t now_ms = 0, int64_t span_ms = kSpansMs[0]) {
+std::vector<std::vector<row_key>> selectable_lists(const snapshot& s, int panel, const history* h = nullptr, int64_t now_ms = 0, int64_t span_ms = kSpansMs[0], int width = 0) {
   std::vector<std::vector<row_key>> lists(2);
   if (panel == 2) {
-    for (const gpu_row& r : gpu_rows(s, h, h ? axis_end(*h, now_ms) : s.unix_ms, span_ms)) lists[0].push_back(r.key);
+    for (const gpu_row& r : gpu_rows(s, h, h ? axis_end(*h, now_ms) : s.unix_ms, span_ms, width)) lists[0].push_back(r.key);
     return lists;
   }
   if (panel != 3 && panel != 4) return {};
@@ -1986,9 +1999,9 @@ struct selection_view {
   size_t row[2] = {0, 0};
 };
 
-selection_view selection_of(const snapshot& s, const view_state& v, int panel, const history* h, int64_t now_ms) {
+selection_view selection_of(const snapshot& s, const view_state& v, int panel, const history* h, int64_t now_ms, int width = 0) {
   selection_view sv;
-  sv.lists = selectable_lists(s, panel, h, now_ms, kSpansMs[std::clamp(v.range, 0, 2)]);
+  sv.lists = selectable_lists(s, panel, h, now_ms, kSpansMs[std::clamp(v.range, 0, 2)], width);
   const view_state::panel_view& pv = v.panels[panel];
   sv.focus = focused_list(pv.focus, sv.lists);
   for (size_t i = 0; i < 2; ++i) sv.row[i] = selected_row(sv.lists[i], pv.rows[i]);
@@ -2427,8 +2440,8 @@ panel_frame gpu_frame(const snapshot& s, const wsl_view& w, const history& h, in
   // kLeastListRows; the rule line under the title is kept for after them, as before.
   const bool device = room >= 1;
   if (device) --room;
-  const std::vector<gpu_row> rows_drawn = gpu_rows(s, &h, axis_end(h, now_ms), span_ms);
-  const selection_view sv = selection_of(s, v, 2, &h, now_ms);
+  const std::vector<gpu_row> rows_drawn = gpu_rows(s, &h, axis_end(h, now_ms), span_ms, width);  // The history is width wide
+  const selection_view sv = selection_of(s, v, 2, &h, now_ms, width);
   const bool side = width >= kSideBySideGpu;
   const int history_least = 1 + kHistoryRows + 1;  // Its title and rows, and the rule line after
   std::vector<line> lists;
@@ -3282,9 +3295,9 @@ std::vector<proc_id> selected_processes(const snapshot&, const view_state& v) {
 
 namespace {
 
-bool apply_key_to(view_state& v, key_event e, const snapshot& s, const history* h, int64_t now_ms) {
+bool apply_key_to(view_state& v, key_event e, const snapshot& s, const history* h, int64_t now_ms, int width) {
   if (e.esc_first) {
-    apply_key_to(v, key_event{key::esc}, s, h, now_ms);
+    apply_key_to(v, key_event{key::esc}, s, h, now_ms, width);
     e.esc_first = false;
   }
   v.panel = std::clamp(v.panel, 1, kPanels);
@@ -3303,14 +3316,14 @@ bool apply_key_to(view_state& v, key_event e, const snapshot& s, const history* 
       if (panel_has_range(v.panel)) v.range = std::max(v.range - 1, 0);
       break;
     case key::tab: {
-      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel, h, now_ms, kSpansMs[v.range]);
+      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel, h, now_ms, kSpansMs[v.range], width);
       pv.focus = focused_list(pv.focus, lists);  // An empty list never keeps focus
       if (selectable_count(lists) > 1) pv.focus = (pv.focus + 1) % static_cast<int>(lists.size());
       break;
     }
     case key::up:
     case key::down: {
-      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel, h, now_ms, kSpansMs[v.range]);
+      const std::vector<std::vector<row_key>> lists = selectable_lists(s, v.panel, h, now_ms, kSpansMs[v.range], width);
       const int focus = focused_list(pv.focus, lists);
       if (static_cast<size_t>(focus) >= lists.size() || lists[static_cast<size_t>(focus)].empty()) break;
       pv.focus = focus;
@@ -3328,7 +3341,7 @@ bool apply_key_to(view_state& v, key_event e, const snapshot& s, const history* 
 
 }  // namespace
 
-bool apply_key(view_state& v, key_event e, const snapshot& s, const history& h, int64_t now_ms) { return apply_key_to(v, e, s, &h, now_ms); }
+bool apply_key(view_state& v, key_event e, const snapshot& s, const history& h, int64_t now_ms, int width) { return apply_key_to(v, e, s, &h, now_ms, width); }
 
 std::vector<line> render(const snapshot& s, int width, int height, int64_t now_ms, const history* hist, const view_state& v) {
   if (width <= 0 || height <= 0) return {};
