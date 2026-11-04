@@ -81,6 +81,10 @@ documents true.
   machine has one group. Not added.
 - Should `vm.vmmem_cores` read `null` instead of 0 when `vmmem_cores_known` is false? It would match
   "unknown is null", but it changes an existing key, so it would raise `schema`. Left at 0.
+- Q7 of `docs/design/panel-grammar-slice2.md`, section 11: may the screen compute `now N%`, a selected row's value over
+  its side's whole? `contracts/ui.md` forbids "deriving a number that is not in the snapshot" and has no rule that a ratio
+  of two snapshot values, or a statistic over the window, is display. Amend that contract, or leave `now` out. For the
+  user; step F1 leaves `now` out until then.
 
 ## Decision log
 
@@ -218,3 +222,8 @@ documents true.
   use anywhere in the range on screen and every GPU `local` holder: that is history data and no seam change, but
   `apply_key` then reads the history, so step G changes the call in `src/main.cpp`, core's line in ui's commit. Panel 2's
   WSL holder list is not selectable, against `docs/panels.md` section 2, which changes at step H.
+- 2026-11-04. Audit of the slice 2 design at f270ef8, core's part. `cores_total` and `rss_total` are read by a new
+  `total_or_null` in `wsl_view.cpp`: `identity_or_null` drops non-integers and `number` refuses the line, so a value that
+  is not a number now leaves the field empty and the line read. `check_json.py` accepts `null` and allows N × 0.0005
+  below the sum of N rows sent, for per-row rounding. `apply_key` takes the history and `now_ms`, and places the range's
+  end as the frame does, so `main.cpp` passes both at step G. `process_totals`' checks live in `lost_check` (E1).

@@ -82,12 +82,15 @@ with its own probe, not the collector:
 | claim to record | how |
 |---|---|
 | The collector's walk of `/proc` reaches every guest process | Count the numeric entries of `/proc` beside the walk in the same second, over the run; note any entry the walk could not read and why. This also decides the `guest count?` mark |
-| The sum over every process of `/proc/pid/stat` utime + stime, over the probe's own interval, is a whole that every per-process figure is part of | Sum the per-process deltas, as the collector computes each one, and check each process's figure is at or below the sum. Beside it, `/proc/stat` busy times vCPUs over the same interval, expected higher (a process that exits between readings, and time not charged to any process, are missing from the sum), as "Process cores account for Windows busy" found on Windows. Record the gap, not a verdict on it |
-| The sum of `/proc/pid/stat` field 24 times the page size over every process is a whole every per-process figure is part of | The same, beside `/proc/meminfo` used; expected to differ, since shared pages count once per process. Record the gap |
+| The gap between the sum over every process of `/proc/pid/stat` utime + stime, over the probe's own interval, and `/proc/stat` busy times vCPUs over the same interval | Expected below busy (a process that exits between readings, and time not charged to any process, are missing from the sum), as "Process cores account for Windows busy" found on Windows. Record the gap, not a verdict on it |
+| The gap between the sum of `/proc/pid/stat` field 24 times the page size over every process and `/proc/meminfo` used | Expected to differ, since shared pages count once per process. Record the gap |
+| What "every guest process" covers | The walk sees this distro's PID namespace only, not the whole VM's (audit finding 3). The experiment says what is outside it and proposes the label the heading uses for the WSL whole |
 | Cost | The walk is already made each second; the probe times the sum alone |
 
-Each row carries its raw file under `experiments/07-*/results/`. The design builds on the first three; a
-`No` on the first stops item 2 and the guest stays one series.
+Each row carries its raw file under `experiments/07-*/results/`. A `No` on the first stops item 2 and the guest
+stays one series. The audit of f270ef8 dropped two earlier rows, that each process's figure is at or below the
+sum: that holds by arithmetic and proves nothing, so the gaps against `/proc/stat` and `/proc/meminfo` replace
+them (finding 11). That a part never exceeds its whole is asserted by `check_json.py` and `render_check` instead.
 
 ### The protocol change
 
@@ -114,8 +117,8 @@ old `winwsltop.exe` is read as before: a reader takes a key it does not know as 
 | `wsl-collector/collector.py` `main()` | sum over `rows` before `keep` is cut, and emit the two keys | collect |
 | `src/wsl/collector_embed.cpp` | `python3 wsl-collector/embed.py`, same commit | collect |
 | `wsl-collector/PROTOCOL.md` | two rows in the field table, beside `process_count` | core |
-| `src/core/wsl_view.h`, `wsl_view.cpp` `read_wsl` | `std::optional<double> cores_total`, `std::optional<uint64_t> rss_total`, empty when absent, `null` or not a number in range, read as `start` is (`identity_or_null`'s pattern) | core |
-| `scripts/check_json.py` | `WSL_DATA` gains both keys (it is an exact set, so it must change in the same commit); each is a number at or above every row's `cores` and `rss`, and at or above their sum over the rows sent | core |
+| `src/core/wsl_view.h`, `wsl_view.cpp` `read_wsl` | `std::optional<double> cores_total`, `std::optional<uint64_t> rss_total`, read by a new `total_or_null`, not `identity_or_null` (which drops a non-integer, and `cores_total` is one) and not `number` (which refuses the whole line on a value that is not a number). `total_or_null`: `null` leaves it empty; a finite number at or above 0 is kept (for `rss_total`, only a whole number up to 2^63); a negative number leaves it empty; any other JSON value, a string, a boolean, an array or an object, is consumed by `skip()` and leaves it empty. The line is read either way (audit finding 6) | core |
+| `scripts/check_json.py` | `WSL_DATA` gains both keys (it is an exact set, so it must change in the same commit). Each is `null` or a number; when a number, `cores_total` is at or above every row's `cores` (rounding is monotonic, so exactly) and at or above the sum of the rows sent less N × 0.0005, N the rows sent, since each row is rounded to 3 decimals on its own; `rss_total` is at or above every row's `rss` and their sum, exactly, being whole bytes (audit finding 7) | core |
 | `docs/json-output.md` | `wsl.data` names both | core |
 | `docs/contracts/collect.md`, `core.md` | decision entries | core |
 
@@ -124,8 +127,9 @@ The record carries them with no change to `src/record/jsonl.cpp`: `wsl.data` is 
 **Cost.** Two keys, about 40 bytes, against the 8 KiB line budget (`contracts/collect.md`, 2026-11-02). One
 addition per process the walk already reads.
 
-**render_check.** `read_wsl` on a line with both keys, with neither, with `null`, with a negative or
-non-numeric value (empty, and the line still reads). The draw cases are in section 3.
+**render_check.** `read_wsl` on a line with both keys, with neither, with `null`, with a negative number, with
+`cores_total` 1.5 (kept), `rss_total` 1.5 (empty), and with a string, `true`, `[]` and `{}` for each (empty, and
+the rest of the line still reads). The draw cases are in section 3.
 
 ## 3. Part-of-whole on the panel 3 and 4 histories
 
@@ -208,7 +212,10 @@ machtop's form, from `panels.md` "Part of the whole" exactly, with winwsltop's n
   ```
 
   `now N%` is the part over the whole at the latest sample where both are known, by machtop's `share_text`
-  (`<1%` under half a percent), and blank when the whole is 0 or unknown. On panel 4 the whole is named for
+  (`<1%` under half a percent), and blank when the whole is 0 or unknown. It is computed in `render.cpp` from two
+  values the snapshot holds; whether the screen may do that is Q7, and step F1 draws `now` only once Q7 is
+  answered yes. **The WSL whole's label is pending on step D**: the walk covers this distro's PID namespace only
+  (audit finding 3), so `all WSL processes` below stands for the label experiment 07 proposes. On panel 4 the whole is named for
   its sum: `Σ working sets, all Windows processes avg … max …`, and `Σ stat rss, all WSL processes`; never
   `used`. Units as the measure prints them: cores with 2 decimals, memory in GiB or MiB by the scale.
 - **The legend**, one dim row under the heading, its swatches in the two tones:
@@ -274,7 +281,7 @@ one-row rule.
 - Heading at widths 40 to 300: never wider than the screen; parts go from the left; `last` always present while
   the left side fits.
 - `process_totals_of` on a fixture: pid 0 and rows with `cores_known` false are left out of `cores`; `known`
-  false for an empty list. In `lost_check` or a new block of `render_check`: core says which in the commit.
+  false for an empty list. In `scripts/lost_check.cpp`, as E1 built it (audit finding 2).
 - Frame bytes at 131 by 40 under budget with two-tone histories.
 
 ## 4. Two time columns per braille cell
@@ -299,6 +306,11 @@ column count halved and rounded down, as machtop draws `·` only where both colu
 At 1 minute a cell is about a second and a column half of one, so the joined-gap rule ("a joined empty cell
 takes the later sample", `panel-grammar.md` part 5) fills the empty half: nothing changes there. At 5 and 10
 minutes the resolution doubles.
+
+**As sent to ui for step B (audit finding 1).** Every axis's bucket is rounded up to an even number of
+milliseconds, the one-column axis too, so the two never round differently; and the two-column axis is anchored on
+the cell axis, not worked out from `end_ms` again: its last column is `2 × last_cell + 1`, so column `2c` and
+`2c + 1` are cell `c` at every range and end time.
 
 **Files and functions.** `src/ui/render.cpp`: `make_axis`, `plot_block`, `zoom_plot`, `cpu_frame`'s busy
 plots, `process_history`, `memory_history`; `unwatched_cells(const history&, const time_axis&)`.
@@ -333,8 +345,12 @@ heading lit, scrolling and `N of M` as on panel 3. Which rows it holds (Q4, deci
 - ordered by GPU % now, then by most recent use (the latest sample inside the range with an engine above 0),
   then by pid. A holder that never used an engine in the range sorts last, by `local` memory.
 
-Its rows' keys are pid, the `process_row` name and create time joined by pid (a row whose pid is not in
-`processes` keys by pid and `-`, start 0). The heading drops `top N of M`, which scrolling makes untrue.
+Its rows' keys are pid, the `process_row` name and create time joined by pid. A row that comes from the ring and
+is no longer in `processes` (it used an engine inside the range and has since exited) takes its name and start from
+its slot's `proc_id`, never `-` and 0: `history::slot_of` and `kept_id` match on start and name, so a made-up key
+would never find its slot or keep it at the cap (audit finding 4). The history exposes the slots that have a `gpu`
+series, with their `proc_id` and `gpu_seen_ms`, for this. A GPU engine row whose pid is in neither `processes` nor
+a slot is not listed. The heading drops `top N of M`, which scrolling makes untrue.
 
 **The WSL list** (`dxg_holder_list`) stays a reference list, not selectable (Q5, decided by machtop, which
 overrules the line in its own `panels.md` and the one in winwsltop's `docs/panels.md` section 2): no `▶`, no
@@ -362,17 +378,21 @@ order read the ring, not only the newest snapshot:
   with no `gpu` series. `write_processes` writes it from `busiest_engine(s)`, Windows side only.
 - The slot also keeps `gpu_seen_ms`, the newest sample with an engine above 0, so the list need not scan 601
   positions per row each frame; a row is in the list while `gpu_seen_ms` lies inside the range on screen.
+- `take_slot` clears the `gpu` series (empties it, so it is allocated again on first use) and `gpu_seen_ms` when
+  it reuses a slot, as it clears `cores` and `memory`; `push`'s clock-step shift moves `gpu_seen_ms` with
+  `seen_ms` (audit finding 5).
 - Because the list now depends on the history, `selectable_lists` and `apply_key` take `const history&` beside
-  the snapshot (and the range, from `view_state`). `apply_key` is declared in `src/ui/render.h` and called from
-  `src/main.cpp`, so the call site's change is core's: one line, in the same commit as ui's, requested from
-  core.
+  the snapshot, the range from `view_state`, and `now_ms`. They place the range's end with
+  `axis_end(h, now_ms)`, as the frame does, so the list a key moves through is the list drawn (audit finding 8).
+  `apply_key` is declared in `src/ui/render.h` and called from `src/main.cpp`, so the call site's change, passing
+  the history and the same `now_ms` the next `render` gets, is core's: in the same commit as ui's.
 
 **Files and functions.** `src/ui/render.cpp`: `gpu_frame`, `gpu_lists`, `gpu_users_list` (membership, order,
 selection), `dxg_holder_list` (unchanged but for the footer's `tab`), `selectable_lists` (panel 2's one list),
 `selected_processes` (panel 2's Windows selection added to 3 and 4), `apply_key`, the footer's `↑↓` for panel 2,
 a new `gpu_history`; `history::push`, `write_processes`. `src/ui/render.h`: `apply_key`'s signature.
 `src/ui/history.h`: the slot's `gpu` and `gpu_seen_ms`, `gpu_at`, `history_sample::gpu_engines_known`.
-`src/main.cpp` (core): the `apply_key` call.
+`src/main.cpp` (core): the `apply_key` call, with the history and `now_ms`.
 
 **Protocol.** None. **Ledger.** Cites Experiment 01 result (per-process `3D` engine time, the load process
 71-97%, `vmwp.exe` for WSL's work), "The memory collector reads what `Get-Counter` reads" and the core decision
@@ -395,6 +415,12 @@ rule 2).
 - A `gpu` series allocated late is 0 where the process was present before, NaN where it was not.
 - A pid reused under the same name (section 1) does not keep the selection.
 - `selected_processes` names panel 2's selection, and its slot survives the cap.
+- A process that used an engine 30 s ago and has exited is listed under its own name and pid, its key carries its
+  slot's start, and selecting it keeps its slot at the cap.
+- A slot reused by another process has no `gpu` series and no `gpu_seen_ms` from the last occupant; after a clock
+  step back, a process's `gpu_seen_ms` still lies in the range it did before.
+- `apply_key` with `now_ms` moves through exactly the rows `render` draws for the same `now_ms`, including at the
+  moment a row's last use leaves the range.
 - Sizes 1 to 300 by 1 to 66 on panel 2 for `busy`, `bare` and hostile names; frame bytes under budget.
 
 ## 6. The range in the heading; gutter and axis
@@ -449,14 +475,14 @@ tracks below run in parallel because they share no file.
 |---|---|---|---|---|
 | A | ui | 1, selection identity | `render.cpp` `selected_row`, `render.h` | nothing |
 | B | ui | 4, two columns per cell | `render.cpp` axis and plot functions | A (same file) |
-| C | ui | 6, Q2 and Q3: range, avg, max and scale in the history heading; histories lose gutter and axis; memory's history from 0 as one series | `render.cpp` `process_history`, `memory_history`, `plot_block` | B |
+| C | ui | 6, Q2 and Q3: range, avg, max and scale in the history heading; histories lose gutter and axis; memory's history from 0 as one series; `contracts/ui.md` rule 8 for these, in the same commit, so the rule is never stale (audit finding 9) | `render.cpp` `process_history`, `memory_history`, `plot_block`; `contracts/ui.md` rule 8 | B |
 | D | evidence | 2, experiment 07 and its ledger rows; the two pid-reuse rows if they can be had read only (section 9) | `experiments/07-*`, `docs/measurable.md` | nothing |
 | E1 | core | 3, the Windows whole | `snapshot.h`, `src/analysis/process_totals.h`, `main.cpp`, `jsonl.cpp`, `json-output.md`, `check_json.py`, `contracts/core.md` | nothing |
 | E2 | collect, core, one commit | 2, `cores_total` and `rss_total` | `collector.py`, `collector_embed.cpp`, `PROTOCOL.md`, `wsl_view.h`, `wsl_view.cpp`, `check_json.py`, `json-output.md`, `contracts/collect.md`, `contracts/core.md` | D's rows; after E1 (both touch `check_json.py` and `json-output.md`) |
-| F1 | ui | 3, part-of-whole, Windows side; the guest one series | `history.h`, `render.cpp` push, histories, new plot functions | C, E1 |
+| F1 | ui | 3, part-of-whole, Windows side; the guest one series; `now N%` only if Q7 is answered yes | `history.h`, `render.cpp` push, histories, new plot functions | C, E1 |
 | G | ui, and core for one line, one commit | 5, Q4, Q5: panel 2's Windows list selectable, its rows from the range on screen and the `local` holders, ordered by GPU % then most recent use; the WSL list a reference list, no `tab`; the GPU history. History data, no seam change: the slot's `gpu` series and `gpu_seen_ms`; `apply_key` and `selectable_lists` take the history | `history.h`, `render.h` (`apply_key`), `render.cpp` panel 2 and the ring; `src/main.cpp`'s `apply_key` call (core) | F1 (same files) |
 | F2 | ui | 3, the guest side lit from `cores_total` and `rss_total` | `render.cpp` push and histories | G, E2 |
-| H | core | `contracts/ui.md` rule 8 and decisions, `panels.md` (panel 2's holder list not selectable, against its section 2 line), `panel-grammar.md` notes, `ROADMAP.md` 1 and 2, `README.md` keys for panel 2 | docs | F2 |
+| H | core | `contracts/ui.md` decisions and rule 8's part-of-whole and panel 2 text (step C's part already done), `panels.md` (panel 2's holder list not selectable, against its section 2 line), `panel-grammar.md` notes, `ROADMAP.md` 1 and 2, `README.md` keys for panel 2 | docs | F2 |
 | I | auditor | a fresh auditor reads A to H against the code and the ledger | none | H |
 
 In parallel: the ui chain A, B, C; D; E1. Then E2 after D and E1, while F1 and G run. F2 joins the two.
@@ -471,9 +497,9 @@ Written as requests; this design changes no other file.
 |---|---|---|
 | `experiments/07-*`, `docs/measurable.md` | evidence | Experiment 07 (section 2). Beside it, if it can be done read only with idle processes as experiment 06 did: the two pid-reuse rows, by starting short idle processes until a pid recurs (Windows reuses pids quickly; in the guest `pid_max` makes it slow, so the guest row may stay `Not checked`) |
 | `docs/contracts/evidence.md` | core, for evidence | experiment 07 as a request |
-| `docs/contracts/ui.md` | core, at H | rule 8: two-layer histories, memory's history from 0 in both forms, histories with no gutter or axis and their labels and `last` in the heading; decisions; panel 2's Windows list selectable, its membership and order |
+| `docs/contracts/ui.md` | at C, then core at H | at step C: rule 8's histories with no gutter or axis, their labels and `last` in the heading, memory's history from 0 (the coordinator asked ui to make this change in step C; `docs/contracts/` is core's row in `ARCHITECTURE.md`). At H: two-layer histories in rule 8; decisions; panel 2's Windows list selectable, its membership and order; Q7's answer |
 | `docs/panels.md` | core, at H | the selection by pid and start with the name backstop, the name to go once pid reuse is in the ledger; panel 2 as built, the WSL holder list a reference list, replacing "A holder can be selected"; part-of-whole's wholes per side |
-| `src/main.cpp` | core, in step G's commit | the `apply_key` call passes the history |
+| `src/main.cpp` | core, in step G's commit | the `apply_key` call passes the history and `now_ms` |
 | `docs/ROADMAP.md` | core, at H | section 1: Windows holders listed on panel 2 |
 | `docs/design/panel-grammar.md` | core, at H | notes at part 3 "Identity" and part 4 "One history" that this file supersedes them |
 | `docs/ROADMAP.md` | core, at H | section 2: per-process GPU history built |
@@ -501,4 +527,20 @@ machtop leads on panel design (the user's standing decision, `docs/panels.md`, D
 - **Q6. Giving way:** the blank row goes first; the legend is kept with at least 2 plot rows; the legend goes only
   if that still does not fit, and the heading's `all Windows processes` then names the whole (section 3).
 
-No question of this design is open.
+## 11. Open after the audit of f270ef8
+
+A fresh auditor read this design at f270ef8. Findings 1 (even buckets, the two-column axis anchored on the cell
+axis), 2 (E1's checks in `lost_check`), 3 (the WSL whole is this distro's namespace; label pending on D) and 11
+(experiment 07's rows) were handled elsewhere and are recorded in sections 2, 3 and 4. Findings 4, 5 and 8 changed
+step G (section 5), 6 and 7 step E2 (section 2), 9 steps C and H (section 8). Finding 10 is Q7.
+
+
+- **Q7. May the screen compute `now N%`?** Section 3 moved the Windows whole into the snapshot because
+  `contracts/ui.md` keeps the screen from "deriving a number that is not in the snapshot". The share is such a
+  number: the selected row's value over the whole, computed in `render.cpp`. It cannot move into the snapshot,
+  because it depends on the selection. `contracts/ui.md` has no rule that a ratio of two snapshot values, or a
+  statistic over the window, is display rather than derivation, though the screen already prints `avg` and `max`
+  over the window and keeps Windows used as total less available (`history_sample.windows_used`). Options: amend
+  `contracts/ui.md` to say that one snapshot value over another of the same side and the same reading, and
+  statistics over the window, are display, not derivation; or leave `now N%` out of winwsltop's heading. For the
+  user. Step F1 leaves `now` out until it is answered.
