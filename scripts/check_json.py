@@ -119,7 +119,11 @@ if vm["vmmem_cores_known"] != (derived["vm_cpu_pct"] is not None):
 totals, rows = snapshot["process_totals"], [row for row in snapshot["processes"] if row["pid"] != 0]
 if totals["source"] != "derived":
     fail(f"process_totals.source is {totals['source']}")
-if not count(totals["working_set"]) or totals["working_set"] != sum(row["working_set"] for row in rows):
+# An empty list is a failed read: the whole is unknown, so both figures are null, and only then.
+if not snapshot["processes"]:
+    if totals["working_set"] is not None or totals["cores"] is not None:
+        fail(f"process_totals is {totals['cores']}, {totals['working_set']} with no processes: both null")
+elif not count(totals["working_set"]) or totals["working_set"] != sum(row["working_set"] for row in rows):
     fail(f"process_totals.working_set {totals['working_set']} is not the sum of the rows other than pid 0")
 known_cores = [row["cores"] for row in rows if row["cores_known"]]
 if not known_cores and totals["cores"] is not None:
