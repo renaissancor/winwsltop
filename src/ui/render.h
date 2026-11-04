@@ -60,9 +60,9 @@ struct view_state {
 // and the history for panel 2's list, only for the lists a key moves through, in the order the panel draws them
 // for the same now_ms. Panel 1 and those not built have no list; panel 2 has one, so tab does nothing there; tab
 // needs two lists to move between, which a missing WSL line leaves one of.
-// width is the screen's, as render gets it: panel 2's list counts a use from the first column its history draws.
-// 0 counts from the start of the range, which can list a row for up to a cell whose history draws nothing.
-bool apply_key(view_state& v, key_event e, const snapshot& s, const history& h, int64_t now_ms, int width = 0);
+// width is the screen's, as render gets it: panel 2's list counts a use from the first column its history draws,
+// so the keys move through the rows drawn.
+bool apply_key(view_state& v, key_event e, const snapshot& s, const history& h, int64_t now_ms, int width);
 
 // The rows panels 2, 3 and 4 have selected, every list, as the per-process ring knows them, from the keys
 // remembered, so a selected process that has left the list is still named: history::push keeps their slots,

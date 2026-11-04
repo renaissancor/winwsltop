@@ -2687,7 +2687,7 @@ void check_span_key() {
   view_state v = state_for(3);
   std::string seen;
   for (const key_event k : {key_event{key::left}, key_event{key::left}, key_event{key::left}, key_event{key::right}}) {
-    apply_key(v, k, s, kNoHistory, kNow);
+    apply_key(v, k, s, kNoHistory, kNow, 131);
     seen += as_text({large(s, h, 131, 40, v).back()});
   }
   check(has(seen, "←→ 5 min") && has(seen, "←→ 10 min") && v.range == 1, "← steps 1, 5, 10 minutes and stops; → comes back, and the footer says each");
@@ -2705,7 +2705,7 @@ void check_span_key() {
     check(has(as_text(large(s, h, 100, 34, o)), busy + " ─") && !has(as_text(large(s, h, 100, 34, o)), "each cell"), "where both do not fit, the cell's length goes first");
   }
   view_state one = state_for(1);
-  apply_key(one, key_event{key::left}, s, kNoHistory, kNow);
+  apply_key(one, key_event{key::left}, s, kNoHistory, kNow, 131);
   check(one.range == 0 && !has(as_text(render(s, 131, 40, kNow, &h, one)), "←→"), "← is absent from panel 1, which has no graph, and does nothing there");
   check(as_text(render(s, 131, 40, kNow, &h, state_for(1, 600))) == as_text(render(s, 131, 40, kNow, &h, state_for(1))), "and panel 1 ignores the range");
   // Panel 2 and the small layout of panel 3 draw over the range too.
@@ -2719,7 +2719,7 @@ void check_span_key() {
   }
   for (const auto& [w, rows] : {std::pair{99, 40}, std::pair{100, 26}, std::pair{100, 27}, std::pair{100, 34}}) {
     view_state x = state_for(3);
-    apply_key(x, key_event{key::left}, s, kNoHistory, kNow);
+    apply_key(x, key_event{key::left}, s, kNoHistory, kNow, w);
     check(x.range == 1 && has(as_text({render(s, w, rows, kNow, &h, x).back()}), "←→ 5 min"), "← acts on panel 3 in either layout, at " + std::to_string(w) + "x" + std::to_string(rows));
   }
 
@@ -3165,7 +3165,7 @@ void check_view_keys() {
   const history demo = demo_minute(s);
   const auto press = [&](view_state& v, std::initializer_list<key_event> keys) {
     bool going = true;
-    for (const key_event& k : keys) going = apply_key(v, k, s, kNoHistory, kNow) && going;
+    for (const key_event& k : keys) going = apply_key(v, k, s, kNoHistory, kNow, 131) && going;
     return going;
   };
   const key_event down{key::down}, up{key::up}, tab{key::tab}, esc{key::esc}, left{key::left}, right{key::right};
@@ -3200,8 +3200,8 @@ void check_view_keys() {
   press(v, {digit(3), down, down, down, down, down});
   check(v.panels[3].rows[0].pid == leaving, "the sixth row is selected");
   gone.processes.erase(std::find_if(gone.processes.begin(), gone.processes.end(), [&](const process_row& p) { return p.pid == leaving; }));
-  check(apply_key(v, key_event{key::sort}, gone, kNoHistory, kNow) && v.panels[3].rows[0].pid == leaving, "a key that moves nothing keeps the key of a row that left");
-  apply_key(v, down, gone, kNoHistory, kNow);
+  check(apply_key(v, key_event{key::sort}, gone, kNoHistory, kNow, 131) && v.panels[3].rows[0].pid == leaving, "a key that moves nothing keeps the key of a row that left");
+  apply_key(v, down, gone, kNoHistory, kNow, 131);
   check(v.panels[3].rows[0].pid == windows_cpu_order(gone)[1]->pid, "from a row that left, ↓ moves on from the first row");
   // A reused pid under another name is another row.
   snapshot renamed = s;
@@ -3210,7 +3210,7 @@ void check_view_keys() {
   }
   v = {};
   press(v, {digit(3), down, down, down});
-  apply_key(v, down, renamed, kNoHistory, kNow);
+  apply_key(v, down, renamed, kNoHistory, kNow, 131);
   check(v.panels[3].rows[0].pid == windows_cpu_order(renamed)[1]->pid, "a pid under another name is not the row selected");
 
   // The range: one for the screen, clamped, only where there is a graph to change.
@@ -3238,60 +3238,60 @@ void check_view_keys() {
   check(v.panels[2].focus == 0, "tab on panel 2 changes nothing");
   for (const snapshot& one_side : {no_wsl(), [] { snapshot t = busy(); t.wsl_json = "{\"schema\":2}"; return t; }()}) {
     view_state w;
-    apply_key(w, digit(3), one_side, kNoHistory, kNow);
-    apply_key(w, tab, one_side, kNoHistory, kNow);
+    apply_key(w, digit(3), one_side, kNoHistory, kNow, 131);
+    apply_key(w, tab, one_side, kNoHistory, kNow, 131);
     check(w.panels[3].focus == 0, "tab on panel 3 with WSL unavailable changes nothing");
   }
   snapshot windows_unread = s;
   windows_unread.processes.clear();
   v = {};
-  apply_key(v, digit(3), windows_unread, kNoHistory, kNow);
-  apply_key(v, tab, windows_unread, kNoHistory, kNow);
+  apply_key(v, digit(3), windows_unread, kNoHistory, kNow, 131);
+  apply_key(v, tab, windows_unread, kNoHistory, kNow, 131);
   check(v.panels[3].focus == 1, "with the Windows list empty, tab moves focus to the list that has rows");
-  apply_key(v, tab, windows_unread, kNoHistory, kNow);
+  apply_key(v, tab, windows_unread, kNoHistory, kNow, 131);
   check(v.panels[3].focus == 1, "and keeps it there");
   // Focus never sticks on a list with nothing to select: WSL gone, unreadable or stale, from focus on it.
   for (const snapshot& gone_wsl : {no_wsl(), [] { snapshot t = busy(); t.wsl_json = "{\"schema\":2}"; return t; }(), [] { snapshot t = busy(); t.wsl_age_s = 3600; return t; }()}) {
     view_state w;
     press(w, {digit(3), tab});
     check(w.panels[3].focus == 1, "WSL focused while it has rows");
-    apply_key(w, tab, gone_wsl, kNoHistory, kNow);
+    apply_key(w, tab, gone_wsl, kNoHistory, kNow, 131);
     check(w.panels[3].focus == 0, "tab from a WSL list that is gone, unreadable or stale moves focus to Windows");
     w = {};
     press(w, {digit(3), tab});
-    apply_key(w, down, gone_wsl, kNoHistory, kNow);
+    apply_key(w, down, gone_wsl, kNoHistory, kNow, 131);
     check(w.panels[3].focus == 0 && w.panels[3].rows[0].pid == windows_cpu_order(gone_wsl)[1]->pid, "↓ there does too, and moves in Windows");
     w = {};
     press(w, {digit(3), tab});
-    apply_key(w, up, gone_wsl, kNoHistory, kNow);
+    apply_key(w, up, gone_wsl, kNoHistory, kNow, 131);
     check(w.panels[3].focus == 0 && w.panels[3].rows[0].pid == windows_cpu_order(gone_wsl)[0]->pid, "and ↑");
   }
   view_state stale_view;
-  apply_key(stale_view, digit(3), stale_now(), kNoHistory, kNow);
-  apply_key(stale_view, tab, stale_now(), kNoHistory, kNow);
+  apply_key(stale_view, digit(3), stale_now(), kNoHistory, kNow, 131);
+  apply_key(stale_view, tab, stale_now(), kNoHistory, kNow, 131);
   check(stale_view.panels[3].focus == 0, "tab on panel 3 with a stale WSL line changes nothing (stale_now)");
 
   // Panels, quitting, and Alt.
   v = {};
   for (int p = 1; p <= 8; ++p) {
-    apply_key(v, digit(p), s, kNoHistory, kNow);
+    apply_key(v, digit(p), s, kNoHistory, kNow, 131);
     check(v.panel == p, "digit " + std::to_string(p) + " opens its panel");
   }
-  check(!apply_key(v, key_event{key::quit}, s, kNoHistory, kNow), "q quits");
-  check(apply_key(v, key_event{key::sort}, s, kNoHistory, kNow) && apply_key(v, key_event{}, s, kNoHistory, kNow) && v.panel == 8, "s and nothing change nothing");
+  check(!apply_key(v, key_event{key::quit}, s, kNoHistory, kNow, 131), "q quits");
+  check(apply_key(v, key_event{key::sort}, s, kNoHistory, kNow, 131) && apply_key(v, key_event{}, s, kNoHistory, kNow, 131) && v.panel == 8, "s and nothing change nothing");
   v = {};
-  apply_key(v, digit(2), s, kNoHistory, kNow);
-  apply_key(v, key_for('3', U'3', kLeftAlt), s, kNoHistory, kNow);
+  apply_key(v, digit(2), s, kNoHistory, kNow, 131);
+  apply_key(v, key_for('3', U'3', kLeftAlt), s, kNoHistory, kNow, 131);
   check(v.panel == 3, "Alt+3 is esc, then 3");
   v = {};
   press(v, {digit(3), tab});
-  apply_key(v, key_for(vk::escape, 0x1B, kLeftAlt), s, kNoHistory, kNow);
+  apply_key(v, key_for(vk::escape, 0x1B, kLeftAlt), s, kNoHistory, kNow, 131);
   check(v.panel == 1 && v.panels[3].focus == 1, "Alt+esc is esc twice, and focus stays");
-  check(!apply_key(v, key_for('Q', U'q', kLeftAlt), s, kNoHistory, kNow), "Alt+Q quits");
+  check(!apply_key(v, key_for('Q', U'q', kLeftAlt), s, kNoHistory, kNow, 131), "Alt+Q quits");
   view_state odd;
   odd.panel = 42;
   odd.range = -3;
-  check(apply_key(odd, right, s, kNoHistory, kNow) && odd.panel >= 1 && odd.panel <= 8 && odd.range == 0, "a view out of range is brought back into it");
+  check(apply_key(odd, right, s, kNoHistory, kNow, 131) && odd.panel >= 1 && odd.panel <= 8 && odd.range == 0, "a view out of range is brought back into it");
 
   // The footer: never wider than the screen, the current panel named and lit, built dim, not built faint,
   // only the keys that act there, no [t] and no s.
@@ -3394,7 +3394,7 @@ void check_audit_fixes() {
   es = series_stats(edge, &history_sample::gpu_util, kNow - 1, 60000);
   check(es.max == 99, "a millisecond earlier it is inside");
   view_state short_view = state_for(2);
-  apply_key(short_view, key_event{key::left}, s, kNoHistory, kNow);
+  apply_key(short_view, key_event{key::left}, s, kNoHistory, kNow, 131);
   check(short_view.range == 1, "the range still changes on a panel too short to draw it");
   check(has(as_text(render(s, 131, 40, kNow, &demo, state_for(2))), "shares*"), "with room, the caption has its *");
 
@@ -3545,21 +3545,21 @@ void check_selection() {
   check(count_of(as_text(f), "▶") == 1 && has(line_with(f, "▶"), "cpu_burn.exe"), "the first row is selected before any key");
   check(has(as_text(f), "Windows · cpu_burn.exe 31000 · cores"), "and the history is its own, titled with its list and pid");
   // 46 rows in 5: machtop's scroll.
-  for (int i = 0; i < 4; ++i) apply_key(v, down, s, kNoHistory, kNow);
+  for (int i = 0; i < 4; ++i) apply_key(v, down, s, kNoHistory, kNow, 100);
   f = large(s, h, 100, 34, v);
   std::vector<std::string> shown = rows_of(f, " of 46");
   check(shown.size() == 5 && has(nth(shown, 0), "31000") && has(nth(shown, 4), "▶"), "↓ 4 times: row 1 still drawn first, the selection on row 5");
-  apply_key(v, down, s, kNoHistory, kNow);
+  apply_key(v, down, s, kNoHistory, kNow, 100);
   f = large(s, h, 100, 34, v);
   shown = rows_of(f, " of 46");
   check(shown.size() == 5 && !has(as_text(f), "31000 cpu_burn.exe   ") && has(nth(shown, 4), "▶") && has(as_text(f), "5 of 46"), "the fifth draws rows 2 to 6, the selection last: " + nth(shown, 0));
-  for (int i = 0; i < 60; ++i) apply_key(v, down, s, kNoHistory, kNow);
+  for (int i = 0; i < 60; ++i) apply_key(v, down, s, kNoHistory, kNow, 100);
   f = large(s, h, 100, 34, v);
   shown = rows_of(f, " of 46");
   const std::string last_pid = std::to_string(windows_cpu_order(s).back()->pid);
   check(has(nth(shown, 4), "▶") && has(nth(shown, 4), last_pid) && has(as_text(f), "5 of 46"), "↓ at 46 stays on the last row");
   for (int i = 0; i < 41; ++i) {
-    apply_key(v, up, s, kNoHistory, kNow);
+    apply_key(v, up, s, kNoHistory, kNow, 100);
     shown = rows_of(large(s, h, 100, 34, v), " of 46");
     if (i < 40) check(has(nth(shown, 4), "▶"), "↑ from 46 keeps the selection on the bottom row until row 5");
   }
@@ -3570,13 +3570,13 @@ void check_selection() {
 
   // Tab: the WSL list is focused, its heading lit, its row marked, the history its own, as the guest counted.
   v = state_for(3);
-  apply_key(v, tab, s, kNoHistory, kNow);
+  apply_key(v, tab, s, kNoHistory, kNow, 131);
   f = large(s, h, 131, 40, v);
   check(count_of(as_text(f), "▶") == 1 && line_with(f, "▶").find("▶") > line_with(f, "▶").find("│"), "exactly one ▶, in the focused list");
   check(has(as_text(f), "WSL · cpu_burn 4121 · cores, guest's count"), "a WSL history says it is the guest's count");
   check(has(line_with(f, "WSL · cpu_burn"), "scale 20"), "scale 20 for the burner: 19.72 cores");
   // An idle process: the floor of 0.05 cores.
-  for (int i = 0; i < 5; ++i) apply_key(v, down, s, kNoHistory, kNow);
+  for (int i = 0; i < 5; ++i) apply_key(v, down, s, kNoHistory, kNow, 131);
   f = large(s, h, 131, 40, v);
   check(has(line_with(f, "WSL · dbus-daemon"), "scale 0.05") && has(line_with(f, "WSL · dbus-daemon"), "max 0.01"), "scale 0.05 for an idle process: " + line_with(f, "WSL · "));
   // A row that leaves falls to the first row, and comes back when it returns.
@@ -3625,12 +3625,12 @@ void check_selection() {
   }
   // The selected rows are what push keeps.
   view_state sel = state_for(3);
-  apply_key(sel, down, s, kNoHistory, kNow);
+  apply_key(sel, down, s, kNoHistory, kNow, 131);
   const std::vector<proc_id> keep = selected_processes(s, sel);
   const std::vector<const process_row*> cpu_order = windows_cpu_order(s);
   check(keep.size() == 1 && keep[0].side == 0 && keep[0].pid == cpu_order[1]->pid && keep[0].start == cpu_order[1]->create_time, "selected_processes names the row moved to, with its start");
-  apply_key(sel, tab, s, kNoHistory, kNow);
-  apply_key(sel, down, s, kNoHistory, kNow);
+  apply_key(sel, tab, s, kNoHistory, kNow, 131);
+  apply_key(sel, down, s, kNoHistory, kNow, 131);
   check(selected_processes(s, sel).size() == 2 && selected_processes(s, sel)[1].side == 1, "and the guest's once it is moved in");
   check(selected_processes(s, state_for(3)).empty(), "a list never moved in names nothing: its first row is in the sample");
 }
@@ -3691,7 +3691,7 @@ void check_memory_panel() {
   check(line_with(f, "WSL  by stat rss").find("WSL") != std::string::npos && has(text, "stat rss GiB") && line_with(f, "4121 python3").find("6.00") != std::string::npos, "the guest by stat rss");
   // After 16 presses of ↓ at 100 by 34: rows 7 to 17, the 17th last and marked, 11 of 46, its own history.
   view_state v = state_for(4);
-  for (int i = 0; i < 16; ++i) apply_key(v, key_event{key::down}, s, kNoHistory, kNow);
+  for (int i = 0; i < 16; ++i) apply_key(v, key_event{key::down}, s, kNoHistory, kNow, 100);
   f = mem(100, 34, v);
   text = as_text(f);
   const std::vector<const process_row*> order = windows_mem_order(s);
@@ -3702,7 +3702,7 @@ void check_memory_panel() {
             has(line_with(f, "10048 · working set", 1), "all other Windows processes' working sets"),
         "the history names pid 10048, on the scale of all working sets, in GiB, the legend naming the grey");
   // tab: the guest's list, its history.
-  apply_key(v, key_event{key::tab}, s, kNoHistory, kNow);
+  apply_key(v, key_event{key::tab}, s, kNoHistory, kNow, 100);
   text = as_text(mem(100, 34, v));
   check(has(text, "WSL · python3 4121 · stat rss"), "tab: the guest's history, named stat rss");
   // Zoom, machtop's rule: the spread or the floor, a tenth under the minimum, a fifth over the maximum.
@@ -3742,7 +3742,7 @@ void check_memory_panel() {
   // WSL stopped: the right side says why, and nothing there to select.
   const snapshot gone = no_wsl();
   view_state g = state_for(4);
-  apply_key(g, key_event{key::tab}, gone, kNoHistory, kNow);
+  apply_key(g, key_event{key::tab}, gone, kNoHistory, kNow, 131);
   const std::vector<line> gf = mem(131, 40, g, &gone);
   check(has(as_text(gf), "WSL data unavailable") && !has(as_text({gf.back()}), "tab list") && has(as_text({gf.back()}), "↑↓ select") && g.panels[4].focus == 0, "WSL stopped: it says why, and tab is not offered");
   // Every size, three fixtures.
@@ -3914,7 +3914,7 @@ void check_selection_identity() {
   const history h = demo_minute(s);
   const std::vector<const process_row*> order = windows_cpu_order(s);
   view_state v = state_for(3);
-  for (size_t i = 0; i < order.size() && !(v.panels[3].rows[0].set && v.panels[3].rows[0].pid == 10000); ++i) apply_key(v, key_event{key::down}, s, kNoHistory, kNow);
+  for (size_t i = 0; i < order.size() && !(v.panels[3].rows[0].set && v.panels[3].rows[0].pid == 10000); ++i) apply_key(v, key_event{key::down}, s, kNoHistory, kNow, 131);
   const row_key k = v.panels[3].rows[0];
   check(k.set && k.pid == 10000 && k.name == "svchost.exe" && k.start == kA, "after ↓ the key holds the row's start");
   const std::vector<proc_id> keep = selected_processes(s, v);
@@ -3934,7 +3934,7 @@ void check_selection_identity() {
   check(has(line_with(f, "▶"), "10000"), "the same pid, name and start: the selection stays");
   // ↓ from a reused pid moves on from the first row, as from a row that left.
   view_state moved = v;
-  apply_key(moved, key_event{key::down}, reused, kNoHistory, kNow);
+  apply_key(moved, key_event{key::down}, reused, kNoHistory, kNow, 131);
   check(moved.panels[3].rows[0].pid == windows_cpu_order(reused)[1]->pid, "↓ from a reused pid moves on from the first row");
 
   // A start of 0 on either side: pid and name decide.
@@ -3951,8 +3951,8 @@ void check_selection_identity() {
   check(has(line_with(large(zero, h, 131, 40, v), "▶"), "10000"), "a Windows row with create time 0: pid and name keep the selection");
   // The guest: busy_json's rows carry no start, so the key holds 0; a later line with a start keeps it.
   view_state g = state_for(3);
-  apply_key(g, key_event{key::tab}, s, kNoHistory, kNow);
-  apply_key(g, key_event{key::down}, s, kNoHistory, kNow);
+  apply_key(g, key_event{key::tab}, s, kNoHistory, kNow, 131);
+  apply_key(g, key_event{key::down}, s, kNoHistory, kNow, 131);
   const row_key gk = g.panels[3].rows[1];
   check(gk.set && gk.start == 0, "a guest row with no start: the key's start is 0");
   snapshot started = s;
@@ -3961,8 +3961,8 @@ void check_selection_identity() {
   started.wsl_json.replace(started.wsl_json.find(at), at.size(), at + "\"start\":4242,");
   f = large(started, h, 131, 40, g);
   check(has(line_with(f, "▶"), " " + std::to_string(gk.pid) + " "), "a guest row that gains a start keeps the selection made without one");
-  apply_key(g, key_event{key::up}, started, kNoHistory, kNow);
-  apply_key(g, key_event{key::down}, started, kNoHistory, kNow);
+  apply_key(g, key_event{key::up}, started, kNoHistory, kNow, 131);
+  apply_key(g, key_event{key::down}, started, kNoHistory, kNow, 131);
   check(g.panels[3].rows[1].pid == gk.pid && g.panels[3].rows[1].start == 4242, "moved to again, the key holds the guest's start");
   snapshot restarted = started;
   restarted.wsl_json.replace(restarted.wsl_json.find("\"start\":4242"), 13, "\"start\":4243");
@@ -4091,7 +4091,7 @@ void check_history_heading() {
   // ← and → change the heading's range.
   view_state v = state_for(3);
   for (const auto& [key, want] : {std::pair{key::left, "last 5 min"}, std::pair{key::left, "last 10 min"}, std::pair{key::right, "last 5 min"}}) {
-    apply_key(v, key_event{key}, s, kNoHistory, kNow);
+    apply_key(v, key_event{key}, s, kNoHistory, kNow, 131);
     check(ends(rtrim(line_with(render(s, 131, 40, kNow, &demo, v), "Windows · ")), want), std::string("after ←/→ the heading reads ") + want);
   }
   // The figures go from the left, the range stays.
@@ -4257,7 +4257,7 @@ void check_part_of_whole() {
   // WSL, panels 3 and 4: one series always.
   for (const int panel : {3, 4}) {
     view_state v = state_for(panel);
-    apply_key(v, key_event{key::tab}, cs, kNoHistory, kNow);
+    apply_key(v, key_event{key::tab}, cs, kNoHistory, kNow, 160);
     const std::string t = as_text(render(cs, 160, 40, kNow, &ch, v));
     const std::string w = line_with(render(cs, 160, 40, kNow, &ch, v), "WSL · ");
     check(!w.empty() && !has(t, "all other") && !has(w, "now ") && !has(t, "all WSL processes") && (panel == 4 || has(w, "guest's count")), "the guest's history is one series on panel " + std::to_string(panel) + ": " + w);
@@ -4383,7 +4383,7 @@ void check_gpu_panel() {
       check(!wsl_bg, "the WSL holders have no selection background" + n);
     }
     view_state v = state_for(2);
-    check(apply_key(v, tab, g.s, g.h, g.s.unix_ms) && v.panels[2].focus == 0, "tab changes nothing on panel 2");
+    check(apply_key(v, tab, g.s, g.h, g.s.unix_ms, 131) && v.panels[2].focus == 0, "tab changes nothing on panel 2");
     const std::string hist = line_with(render(g.s, 131, 40, g.s.unix_ms, &g.h, state_for(2)), "Windows · vmwp.exe 11736 · GPU %, busiest engine");
     check(!hist.empty() && has(hist, "last 1 min") && !has(hist, "scale") && !has(hist, "all Windows processes") && !has(hist, "*"), "the history: GPU %, busiest engine, last 1 min, no scale, no whole: " + hist);
     check(!has(as_text(render(g.s, 131, 40, g.s.unix_ms, &g.h, state_for(2))), "all other"), "and no legend");
@@ -4398,8 +4398,8 @@ void check_gpu_panel() {
     std::vector<gpu_row> rows = gpu_rows(g.s, &g.h, axis_end(g.h, g.s.unix_ms), 60000);
     check(rows.size() == 3 && rows[0].key.pid == 11736 && rows[1].key.pid == 9002 && rows[2].key.pid == 9001, "by GPU % now, then the one used 30 s ago");
     view_state v = state_for(2);
-    apply_key(v, down, g.s, g.h, g.s.unix_ms);
-    apply_key(v, down, g.s, g.h, g.s.unix_ms);
+    apply_key(v, down, g.s, g.h, g.s.unix_ms, 131);
+    apply_key(v, down, g.s, g.h, g.s.unix_ms, 131);
     check(v.panels[2].rows[0].pid == 9001 && v.panels[2].rows[0].start == 1000 + 9001, "↓↓ selects it, with its start");
     check(has(marked_row(render(g.s, 131, 40, g.s.unix_ms, &g.h, v)), "9001"), "it is drawn selected");
     // Seconds later: listed while its last use is inside the minute, gone the sample it leaves, the selection to the first row.
@@ -4418,7 +4418,7 @@ void check_gpu_panel() {
       if (k == 30) {
         check(rows.size() == 2 && has(marked_row(f), "11736"), "30 s on, its use out of the range: gone, the selection on the first row");
         view_state moved = v;
-        apply_key(moved, down, s, g.h, s.unix_ms);
+        apply_key(moved, down, s, g.h, s.unix_ms, 131);
         check(moved.panels[2].rows[0].pid == rows[1].key.pid && has(marked_row(render(s, 131, 40, s.unix_ms, &g.h, moved)), std::to_string(rows[1].key.pid)), "↓ then moves to the second row drawn");
       }
     }
@@ -4489,7 +4489,7 @@ void check_gpu_panel() {
     const int top_lit = count_braille(as_text({f[static_cast<size_t>(at) + 1]}));
     check(top_lit >= 1 && top_lit <= 4, "drawn at the ceiling: only the 112's cells reach the top row, " + std::to_string(top_lit));
     view_state v = state_for(2);
-    for (int i = 0; i < 2; ++i) apply_key(v, down, g.s, g.h, g.s.unix_ms);
+    for (int i = 0; i < 2; ++i) apply_key(v, down, g.s, g.h, g.s.unix_ms, 200);
     const std::vector<line> hf = render(g.s, 200, 40, g.s.unix_ms, &g.h, v);
     const int ha = row_at(hf, 0, "Windows · svchost.exe 10000");
     check(ha > 0, "the holder's history is shown");
@@ -4516,7 +4516,7 @@ void check_gpu_panel() {
   {
     gpu_fixture g = gpu_minute(10, [](snapshot&, int) {});
     view_state v = state_for(2);
-    apply_key(v, down, g.s, g.h, g.s.unix_ms);
+    apply_key(v, down, g.s, g.h, g.s.unix_ms, 131);
     check(v.panels[2].rows[0].pid == 9002, "9002 selected");
     snapshot reused = g.s;
     for (process_row& p : reused.processes) {
@@ -4529,7 +4529,7 @@ void check_gpu_panel() {
     // A holder that never used an engine is not kept by the ring: its pid reused, the selection falls to the first row.
     gpu_fixture hold = gpu_minute(10, [](snapshot& t, int) { t.gpu_memory.push_back({10000, 0, 0, 1ull << 30}); });
     view_state hv = state_for(2);
-    for (int i = 0; i < 2; ++i) apply_key(hv, down, hold.s, hold.h, hold.s.unix_ms);
+    for (int i = 0; i < 2; ++i) apply_key(hv, down, hold.s, hold.h, hold.s.unix_ms, 131);
     check(hv.panels[2].rows[0].pid == 10000, "the holder 10000 selected");
     snapshot hreused = hold.s;
     for (process_row& p : hreused.processes) {
@@ -4561,7 +4561,7 @@ void check_gpu_panel() {
       s.processes.push_back(win(5000, "x.exe", 42));
       s.gpu_engines_known = true;
       s.gpu_engines = {{5000, "3D", 70}};
-      if (i == 4) apply_key(v, up, s, h, t);  // Moved to: the key is set
+      if (i == 4) apply_key(v, up, s, h, t, 131);  // Moved to: the key is set
       h.push(s, selected_processes(s, v));
     }
     uint32_t next = 100000;
@@ -5012,7 +5012,7 @@ int main(int argc, char** argv) {
     console c;
     view_state v = state_for(fixture ? 3 : 1);
     int w = 131, h = 40;
-    for (key_event k; !console::stop_requested() && apply_key(v, k, s, demo, kNow); k = c.poll()) {
+    for (key_event k; !console::stop_requested() && apply_key(v, k, s, demo, kNow, w); k = c.poll()) {
       c.size(w, h);
       c.draw(render(s, w, h, kNow, &demo, v));
       if (!c.is_terminal()) break;
