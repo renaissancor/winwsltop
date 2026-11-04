@@ -66,7 +66,13 @@ of the collector's line.
    line carries the previous value for one sample, and two in a row are a gap (`design/cpu-panel.md` section
    5). On the large CPU panel the `·` is placed by bucket, on the bottom row of the busy plots; the heat block
    and the lanes have no bottom dot row, so they stay blank before watching began.
-   (Slice 2 step C, `design/panel-grammar-slice2.md` sections 4 and 6; decision of 2026-11-04.)
+   A Windows process's history on panels 3 and 4 is two layers on one scale from 0: all Windows processes'
+   sum (`process_totals`, the track tone) and the selected process's part of it (the bar tone), a braille cell
+   one colour, with a dim legend naming both. It draws as one series, no grey, no legend, no `now`, when the
+   whole is unknown, the list has one row or the part equals the whole at every sample on screen. A guest
+   process's history is always one series: the guest has no whole (ledger, "Guest process walk checked"). Panel 2's
+   GPU history, busiest engine, is always one series, 0 to 100: it does not add across processes.
+   (Slice 2 steps C, F1 and G, `design/panel-grammar-slice2.md` sections 3 to 6; decisions of 2026-11-04.)
 9. A ratio of two values already in the snapshot or the history, for the selected row, is display, not
    derivation: the selected process's value over its side's whole at the latest sample where both are known,
    `now N% of all`, on the part-of-whole history. Both values come from one side and one reading; nothing else
@@ -85,18 +91,18 @@ of the collector's line.
   `render_check vt <fixture> W H FILE [span_s]` writes one frame's VT bytes to a file, `render_check measure`
   prints frame bytes and build time, and `render_check quick` skips the size sweeps, for mutating the renderer.
 
-## Current state (2026-11-02, slice 1 built)
+## Current state (2026-11-04, slice 2 built)
 
 | item | value |
 |---|---|
-| source | `src/ui` 7635 lines, of which `render.cpp` 3038, `render_check.cpp` 4134, `history.h` 135, `keys.h` 89 |
-| checks | `render_check` 168810, 0 failed, and `lost_check` 143, 0 failed, under `scripts/check.sh --windows` after 679fc5f. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
+| source | `src/ui` 8965 lines, of which `render.cpp` 3417, `render_check.cpp` 5033, `history.h` 175, `keys.h` 89 |
+| checks | `render_check` 186293, 0 failed, and `lost_check` 154, 0 failed, under `scripts/check.sh --windows` after d9a699f. `apply_key` and `key_for` are checked there; `main.cpp`'s polling and redraw are not |
 | sizes checked | widths 1 to 300, heights 1 to 66, every panel, hostile numbers at every size and the other cases at every third. Large layout: widths 100 to 300 every 7, heights 17 to 66, four fixtures, ranges 1 and 10 minutes; 4, 8, 14, 20, 21, 40, 64 and 65 threads |
-| frame bytes, 131 by 40 | noisy 33249, noisy at 64 threads 41170, panel 2 13492, panel 4 10508 (7749 at 100 by 34). Budget 48 KiB |
-| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.31 to 0.69 ms. Budget 5 ms |
+| frame bytes, 131 by 40 | noisy 32842 after slice 2. Slice 1's other figures, not remeasured: noisy at 64 threads 41170, panel 2 13492, panel 4 10508 (7749 at 100 by 34). Budget 48 KiB |
+| frame build, `render()` and `vt_frame()`, MSVC `/O2` | 0.31 to 0.69 ms at slice 1, not remeasured after slice 2. Budget 5 ms |
 | history push, MSVC | 0.032 ms with 390 processes, the per-process ring included. 2000 processes with 50 new a second: 0.161 ms mean, 0.297 ms worst, `selected_processes` included; the first push at 2000 takes 2.72 ms, once. `render_check measure`, one run each |
 | per-process slots | never shrink: a spike to 2000 processes leaves about 4100 slots, about 20 MB, until exit |
-| history | 10 minutes in 601 samples, five memory floats a sample for panel 4; the per-process ring keyed by side, pid, start and name, a first reading stored as a gap, every slot written every push, and past max(1024, twice the rows of the newest sample) the slot least recently seen reused, never a selected one; nothing is refused |
+| history | 10 minutes in 601 samples, five memory floats a sample for panel 4, the Windows whole and whether GPU engines were known; the per-process ring keyed by side, pid, start and name, a GPU series and last GPU use only for processes that used an engine, a first reading stored as a gap, every slot written every push, and past max(1024, twice the rows of the newest sample) the slot least recently seen reused, never a selected one; nothing is refused |
 | builds from recorded JSONL | no. TARGET in `ARCHITECTURE.md`; snapshots are hand-built |
 | console | Windows Terminal checked by eye once for the older panels; conhost not checked. The live key checks of `design/panel-grammar.md` section 8 (Korean IME, ConPTY and OpenSSH, numpad with NumLock off) are not run |
 
@@ -104,7 +110,8 @@ of the collector's line.
 
 - A step back of `kStepMs` (1 s) or less during a stall, with the new sample still after the newest one, is
   not corrected: those samples sit up to a second too close to now. Below that it cannot be told from jitter.
-- PROPOSED (`ROADMAP.md`): GPU holders first in the Windows list, an `unattributed` line between the
+- PROPOSED (`ROADMAP.md`): Windows GPU holders are listed on panel 2 since slice 2, after the processes with
+  engine use; still proposed: an `unattributed` line between the
   device total and the split, about 10 Windows rows, idle virtual NICs hidden.
 - PROPOSED: `--replay FILE` through the same `render()`, which would also give the recorded fixtures
   the target asks for.
@@ -241,6 +248,20 @@ of the collector's line.
   is display, not derivation, so the part-of-whole history shows `now N% of all` (slice 2 step F1). It answers Q7 of
   `design/panel-grammar-slice2.md`, raised by the audit: the Windows whole had moved into the snapshot because the screen
   may not derive, and the share, which depends on the selection, cannot.
+- 2026-11-04. Slice 2 as built, steps F1 (a4ae1e5) and G (4f9e546), where the design left the detail to ui.
+  - The heading's figures drop from the left when narrow; then `now` goes before the whole's name, because with no
+    legend the name is the only thing naming the grey. The range stays last.
+  - On the large CPU layout the history gets its legend row once the lists reach 6 rows, so at 131 by 40 the busy
+    plot has 7 rows, not 8.
+  - Panel 2's row budget: the history takes rows only while the Windows list keeps 3; it gets
+    clamp((room - 2) / 2, 2, 6) plot rows, and the lists' rule line comes after it.
+  - Panel 2's rows: an engine row whose pid is in neither `processes` nor the ring is not listed. A process that has
+    exited reads `n/a` for GPU %. A reused pid's old process stays listed, and keeps the selection, while it used an
+    engine inside the range; otherwise the selection falls to the first row.
+  - A WSL history, and a Windows history drawn as one series, do not show `Σ working sets`: there is no whole drawn
+    to name.
+  - Panel 2's WSL `/dev/dxg` holder list is a reference list, not selectable (machtop, 2026-11-04), so panel 2 has
+    one selectable list and no `tab`.
 
 - 2026-10-31. `render()` does no I/O and takes the snapshot only, so it can be checked anywhere and a
   GUI can later draw from the same data.
