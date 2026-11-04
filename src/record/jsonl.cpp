@@ -142,6 +142,14 @@ std::string to_json_line(const snapshot& s) {
   key(o, "source", std::string("derived"));
   close(o, '}'); o += ',';
 
+  // The Windows whole the process rows are part of. Unknown is null: a 0 would read as an idle machine.
+  o += "\"process_totals\":{";
+  key(o, "cores", s.process_totals.cores);
+  if (s.process_totals.known) key(o, "working_set", s.process_totals.working_set);
+  else o += "\"working_set\":null,";
+  key(o, "source", std::string("derived"));
+  close(o, '}'); o += ',';
+
   o += "\"wsl\":{";
   key(o, "age_s", s.wsl_age_s); key(o, "restarts", s.wsl_restarts);
   key(o, "clock_known", s.wsl_clock_known); key(o, "clock_offset_s", s.wsl_clock_offset_s);

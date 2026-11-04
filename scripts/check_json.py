@@ -13,13 +13,14 @@ import sys
 OBJECTS = {
     "": {"schema", "unix_ms", "interval_s", "cpu", "cpu_layout_known", "cpu_layout", "memory", "vm", "processes",
          "ready_threads", "vm_ready_threads", "disks", "nets", "gpu_engines_known", "gpu_engines", "gpu_device",
-         "gpu_memory", "gpu_split", "lost_cpu_inferred", "cpu_derived", "wsl", "cost_ms"},
+         "gpu_memory", "gpu_split", "lost_cpu_inferred", "cpu_derived", "process_totals", "wsl", "cost_ms"},
     "cpu": {"busy_pct", "user_pct", "kernel_pct", "core_pct"},
     "memory": {"total", "available", "cache", "commit_used", "commit_limit"},
     "vm": {"vmmem_pid", "vmwp_pid", "vmmem_working_set", "vmmem_cores", "vmmem_cores_known"},
     "gpu_split": {"valid", "vm_pct", "windows_pct", "vm_local", "windows_local", "source"},
     "lost_cpu_inferred": {"state", "vcpus", "source"},
     "cpu_derived": {"vm_cpu_pct", "own_kernel_pct", "ready_threads_mean", "vm_ready_threads_mean", "source"},
+    "process_totals": {"cores", "working_set", "source"},
     "wsl": {"age_s", "restarts", "clock_known", "clock_offset_s", "data"},
     "cost_ms": {"cpu", "memory", "processes", "disk", "net", "gpu", "gpu_device", "gpu_memory"},
 }
@@ -113,6 +114,20 @@ for name in OBJECTS["cpu_derived"] - {"source"}:
         fail(f"cpu_derived.{name} is {derived[name]}: a figure or null")
 if vm["vmmem_cores_known"] != (derived["vm_cpu_pct"] is not None):
     fail(f"vmmem_cores_known is {vm['vmmem_cores_known']} with cpu_derived.vm_cpu_pct {derived['vm_cpu_pct']}")
+# The Windows whole is summed over the rows it is the whole of, pid 0 left out, in the same reading: so it
+# equals their sum, and no row is above it. cores is printed to 3 places, so its sum is checked to that.
+totals, rows = snapshot["process_totals"], [row for row in snapshot["processes"] if row["pid"] != 0]
+if totals["source"] != "derived":
+    fail(f"process_totals.source is {totals['source']}")
+if not count(totals["working_set"]) or totals["working_set"] != sum(row["working_set"] for row in rows):
+    fail(f"process_totals.working_set {totals['working_set']} is not the sum of the rows other than pid 0")
+known_cores = [row["cores"] for row in rows if row["cores_known"]]
+if not known_cores and totals["cores"] is not None:
+    fail(f"process_totals.cores is {totals['cores']} with no row whose cores_known is true: not null")
+if known_cores and (not number(totals["cores"]) or abs(totals["cores"] - sum(known_cores)) > 0.0005 * len(known_cores) + 0.001
+                    or any(totals["cores"] < v for v in known_cores)):
+    fail(f"process_totals.cores {totals['cores']} is not the sum of the known rows other than pid 0, or is below one")
+device = snapshot["gpu_device"]
 device = snapshot["gpu_device"]
 if not DEVICE_ALWAYS <= set(device) <= DEVICE_ALWAYS | DEVICE_OPTIONAL:
     fail(f"gpu_device keys: {sorted(device)}")

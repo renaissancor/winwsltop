@@ -1,4 +1,4 @@
-// Checks lost_tracker through the real code: hand-built samples for each clause of the gate, then a replay
+// Checks lost_tracker, and process_totals_of beside it, through the real code: hand-built samples for each clause of the gate, then a replay
 // of experiment 05's record through read_wsl and update(). No load, no live machine, same result each run.
 // Usage: lost_check <experiments/05-cpu-contention/results>   (scripts/check.sh --windows runs it)
 // Build: scripts/build.sh scripts/lost_check.cpp   (it includes the sources it tests)
@@ -8,6 +8,7 @@
 //   schema, memory     absent from the slim guest line and required by read_wsl, so an empty pair is put back
 //   kernel_pct, ready_threads, vm_ready_threads   not in the record: only the hand-built cases check cpu_derived
 #include "analysis/lost.cpp"
+#include "analysis/process_totals.h"
 #include "core/wsl_view.cpp"
 #include "record/jsonl.cpp"
 #include <cstdio>
@@ -272,6 +273,41 @@ void record_cases() {
   check(few.s.lost.state == lost_state::vcpus_differ && named(few, "vcpus_differ"), "vcpus_differ by name");
 }
 
+// The Windows whole: pid 0 and unmeasured cores left out, an empty list unknown, and the record's nulls.
+void totals_cases() {
+  const auto row = [](uint32_t pid, double cores, bool known, uint64_t ws) {
+    process_row r;
+    r.pid = pid; r.cores = cores; r.cores_known = known; r.working_set = ws;
+    return r;
+  };
+  const auto in_record = [](const snapshot& s, const std::string& body) {
+    return to_json_line(s).find("\"process_totals\":{" + body + ",\"source\":\"derived\"}") != std::string::npos;
+  };
+  snapshot s;
+  s.process_totals = process_totals_of(s);
+  check(!s.process_totals.known && std::isnan(s.process_totals.cores) && s.process_totals.working_set == 0,
+        "an empty list, a failed read, is unknown");
+  check(in_record(s, "\"cores\":null,\"working_set\":null"), "unknown is null in the record, both keys");
+
+  s.processes = {row(0, 18, true, 8192), row(4, 0.25, true, 100), row(8, 1.25, true, 200), row(12, 0, false, 50)};
+  s.process_totals = process_totals_of(s);
+  check(s.process_totals.known, "a list read is known");
+  check(near(s.process_totals.cores, 1.5, 1e-12), "cores: pid 0 and a row without cores_known left out");
+  check(s.process_totals.working_set == 350, "working_set: pid 0 left out, an unrated row kept");
+  check(in_record(s, "\"cores\":1.500,\"working_set\":350"), "known in the record");
+  for (const process_row& r : s.processes) {
+    if (r.pid == 0) continue;
+    check(r.working_set <= s.process_totals.working_set && (!r.cores_known || r.cores <= s.process_totals.cores),
+          "no row is above its whole");
+  }
+
+  s.processes = {row(0, 18, true, 8192), row(4, 0, false, 100)};
+  s.process_totals = process_totals_of(s);
+  check(s.process_totals.known && std::isnan(s.process_totals.cores) && s.process_totals.working_set == 100,
+        "no row with cores_known: cores unknown, working_set known");
+  check(in_record(s, "\"cores\":null,\"working_set\":100"), "cores alone null in the record");
+}
+
 // The window and a reset, with values that change, so a stale value in a mean shows.
 void window_cases() {
   {
@@ -501,6 +537,7 @@ int main(int argc, char** argv) {
   gate_cases();
   derived_cases();
   record_cases();
+  totals_cases();
   window_cases();
   replay_cases(argv[1]);
   printf("lost_check: %d checks, %d failed\n", g_checks, g_failed);

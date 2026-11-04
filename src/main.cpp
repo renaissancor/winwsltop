@@ -3,6 +3,7 @@
 #include "core/collectors.h"
 #include "analysis/attribution.h"
 #include "analysis/lost.h"
+#include "analysis/process_totals.h"
 #include "record/jsonl.h"
 #include "ui/console.h"
 #include "ui/history.h"
@@ -178,6 +179,7 @@ int main(int argc, char** argv) {
     s.cost.gpu_device_ms = timed([&] { gpu_device.sample(s.gpu_device); });
     s.cost.gpu_memory_ms = timed([&] { gpu_memory.sample(s.gpu_memory); });
     s.gpu_split = wwt::split_gpu(s);
+    s.process_totals = wwt::process_totals_of(s);  // The rows' own reading, so a part never outgrows its whole
     s.wsl_json = wsl.latest(s.wsl_age_s, s.wsl_restarts);
     s.wsl_clock_known = wsl.clock_offset(s.wsl_clock_offset_s);
     lost.update(s);  // On the priming pass too, so it has seen the line the first real sample may repeat

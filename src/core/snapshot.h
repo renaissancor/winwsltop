@@ -1,6 +1,6 @@
 // The shared model. Collectors write it; the recorder and any screen only read it.
-// Measured, except the three fields src/analysis writes: gpu_split and cpu_derived are derived, and
-// lost is inferred. docs/contracts/core.md rule 2 says what the two words mean.
+// Measured, except the four fields src/analysis writes: gpu_split, cpu_derived and process_totals are
+// derived, and lost is inferred. docs/contracts/core.md rule 2 says what the two words mean.
 #pragma once
 #include <cstdint>
 #include <limits>
@@ -139,6 +139,16 @@ struct cpu_derived_view {
   double vm_ready_threads_mean = std::numeric_limits<double>::quiet_NaN();
 };
 
+// DERIVED by src/analysis/process_totals.h from processes, the same reading, never by a collector: the
+// Windows whole each process row is part of. Never added to a guest figure.
+struct process_totals_view {
+  bool known = false;  // False when processes is empty, a failed read
+  // Cores, the sum over rows other than pid 0 whose cores_known is true. NaN when not known, or when no
+  // such row exists, as on a first reading.
+  double cores = std::numeric_limits<double>::quiet_NaN();
+  uint64_t working_set = 0;  // Bytes, the sum over rows other than pid 0. 0 when not known
+};
+
 struct collect_cost {
   double cpu_ms = 0, memory_ms = 0, processes_ms = 0, disk_ms = 0, net_ms = 0, gpu_ms = 0, gpu_device_ms = 0, gpu_memory_ms = 0;
 };
@@ -164,6 +174,7 @@ struct snapshot {
   gpu_split_view gpu_split;
   lost_view lost;
   cpu_derived_view cpu_derived;
+  process_totals_view process_totals;
   collect_cost cost;
   std::string wsl_json;  // the collector's line as received, or empty
   double wsl_age_s = -1;
