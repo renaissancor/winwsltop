@@ -57,11 +57,11 @@ documents true.
   `experiments/05-cpu-contention/results/run1-record-2026-11-01.txt`, with
   `experiments/05-cpu-contention/results/run1-marks-2026-11-01.txt` to place each case. It starts no load.
 
-## Current state (2026-11-01)
+## Current state (2026-11-04)
 
 | item | value |
 |---|---|
-| source under core | `src/core` 620 lines, `src/main.cpp` 212, `src/record` 165, `src/analysis` 175, `scripts/lost_check.cpp` 508 |
+| source under core | `src/core` 659 lines, `src/main.cpp` 208, `src/record` 175, `src/analysis` 207, `scripts/lost_check.cpp` 545 |
 | JSON schema | 1 |
 | collection cost per sample | about 9 ms on this machine, ledger "Windows collector checked" |
 | checks that exist | the two `check.sh` modes above, `scripts/lost_check.cpp` under the second, and `scripts/release.sh` |
@@ -245,3 +245,7 @@ documents true.
   the list drawn. `--help` names panel 2 for `up/down`. Step H brought `contracts/ui.md`, `panels.md`, `ROADMAP.md`,
   `README.md` and slice 1's design notes to slice 2 as built. The three-argument `apply_key` overload is left for ui to
   remove.
+- 2026-11-04. Ownership note on d40206a, so a later audit need not flag it again: that commit added
+  `experiments/07-guest-walk/README.md`, which is evidence's path. The file is the evidence agent's, committed verbatim;
+  core made only the commit, because the coordinator asked core to bring it in with its index row. Its content was not
+  changed by core and the history is not rewritten.

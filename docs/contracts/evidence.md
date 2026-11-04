@@ -43,12 +43,12 @@ about this machine lives.
 - For every ledger row, open the cited file and find the number. This is the auditor's job after a
   stage; the author does not do it alone.
 
-## Current state (2026-11-01)
+## Current state (2026-11-04)
 
 | item | value |
 |---|---|
-| experiments | 6: 06 run 2026-11-02, no load, read only, one idle state, two runs (row updated 2026-11-02; the rows below it were not recounted); 05 run 2026-11-01, one CPU-only load, no GPU load, same machine line; 04 run 2026-11-01, no load started, i5-13600K; 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
-| raw result files | 20, 10512 lines in total |
+| experiments | 7: 07 run 2026-11-04, one run, one 20 s CPU load, no GPU load, read as uid 1000; 06 run 2026-11-02, no load, read only, one idle state, two runs (row updated 2026-11-02; the rows below it were not recounted); 05 run 2026-11-01, one CPU-only load, no GPU load, same machine line; 04 run 2026-11-01, no load started, i5-13600K; 01 and 02 run 2026-10-31 on an RTX 4070, driver 610.88, Windows 26200, WSL kernel 6.6.114.1; 03 run 2026-11-01, Windows 26200, same kernel, GPU and driver not rechecked |
+| raw result files | 56 tracked files under `experiments/*/results/`, 151786 lines in total, counted 2026-11-04 |
 | run with no file | experiment 01 run 1, idle baseline (3 s probe, noted in the ledger only) |
 | trials per case | 1; experiment 03 is one session of 3 windows and 10 network brackets |
 | ledger rows | 161 table rows in 20 tables |
