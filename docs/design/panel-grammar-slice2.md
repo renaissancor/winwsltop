@@ -230,10 +230,10 @@ machtop's form, from `panels.md` "Part of the whole" exactly, with winwsltop's n
   `now N%` is the part over the whole at the latest sample where both are known, by machtop's `share_text`
   (`<1%` under half a percent), and blank when the whole is 0 or unknown. It is computed in `render.cpp` from two
   values the snapshot holds, which Q7 allows: a ratio of two values already in the snapshot or history, for the
-  selected row, is display, not derivation. **The WSL whole's label is pending on step D**: the walk covers this distro's PID namespace only
-  (audit finding 3), and the guest has no whole after experiment 07 (section 2), so the `all WSL processes` forms
-below are not drawn; were a guest whole to return, its label is `processes in Ubuntu (this distro's namespace)`. On panel 4 the whole is named for
-  its sum: `Σ working sets, all Windows processes avg … max …`, and `Σ stat rss, all WSL processes`; never
+  selected row, is display, not derivation. **The guest has no whole**: step D found the walk covers this
+  distro's PID namespace only (audit finding 3; section 2), so no `all WSL processes` form is drawn; were a guest
+  whole to return, its label is `processes in Ubuntu (this distro's namespace)`. On panel 4 the Windows whole is
+  named for its sum: `Σ working sets, all Windows processes avg … max …`; never
   `used`. Units as the measure prints them: cores with 2 decimals, memory in GiB or MiB by the scale.
 - **The legend**, one dim row under the heading, its swatches in the two tones:
   `█ cpu_burn.exe  █ all other Windows processes` (`… all other WSL processes`). On panel 4 the second reads
@@ -262,11 +262,11 @@ cores keep `guest's count` in the title in both forms.
 
 ### The history ring
 
-`history_sample` (`src/ui/history.h`) gains four floats, each NaN where the sample did not measure it:
-`windows_cores_all`, `windows_ws_all` (GiB), `wsl_cores_all`, `wsl_rss_all` (GiB). `history::push` copies them
-from `process_totals` and `wsl_view`; the guest's two follow the repeat rule the per-process slots follow (a
-repeated line carries once, a second repeat is a gap; `contracts/ui.md` rule 8) and `kStaleS`. 16 bytes a
-sample, 9.6 KB over 601.
+As built (`src/ui/history.h`), `history_sample` gains two floats, `windows_cores_all` and `windows_ws_all`
+(GiB), NaN where `process_totals` was not known, which `history::push` copies from the snapshot, and the bool
+`gpu_engines_known` of section 5. About 9 bytes a sample before padding, about 5.4 KB over 601. The two guest
+floats this section first planned, `wsl_cores_all` and `wsl_rss_all`, were not added: the guest has no whole
+(section 2).
 
 ### Files and functions (ui)
 
@@ -401,7 +401,9 @@ order read the ring, not only the newest snapshot:
   the snapshot, the range from `view_state`, and `now_ms`. They place the range's end with
   `axis_end(h, now_ms)`, as the frame does, so the list a key moves through is the list drawn (audit finding 8).
   `apply_key` is declared in `src/ui/render.h` and called from `src/main.cpp`, so the call site's change, passing
-  the history and the same `now_ms` the next `render` gets, is core's: in the same commit as ui's.
+  the history and the same `now_ms` the next `render` gets, is core's. As built it landed separately: ui's
+  4f9e546 kept the three-argument overload, and core's d9a699f moved `main.cpp` to the new one, so between the
+  two the keys moved through this sample's list alone.
 
 **Files and functions.** `src/ui/render.cpp`: `gpu_frame`, `gpu_lists`, `gpu_users_list` (membership, order,
 selection), `dxg_holder_list` (unchanged but for the footer's `tab`), `selectable_lists` (panel 2's one list),
@@ -476,9 +478,9 @@ form; `memory_history` stops calling `zoom_plot`, which keeps serving panel 4's 
 |---|---|
 | Frame bytes, 131 by 40, under 48 KiB | about the same: a two-tone history adds a colour change per run of cells. Asserted |
 | Frame build under 5 ms | one more series per history, a few hundred columns. Measured |
-| History | four floats a sample (9.6 KB), one bool, and 2.4 KB per process that used the GPU |
-| Push | the four totals copied, and `busiest_engine` once a sample, already computed for the list. Measured by `render_check measure` |
-| Collector line, under 8 KiB | two keys, about 40 bytes |
+| History | two floats and a bool a sample (about 5.4 KB), and 2.4 KB per process that used the GPU |
+| Push | the two Windows totals copied, and `busiest_engine` once a sample, already computed for the list. Measured by `render_check measure` |
+| Collector line, under 8 KiB | unchanged: the guest totals were dropped with step E2 |
 | New PDH counters | none |
 
 ## 8. Build order
@@ -496,7 +498,7 @@ tracks below run in parallel because they share no file.
 | E1 | core | 3, the Windows whole | `snapshot.h`, `src/analysis/process_totals.h`, `main.cpp`, `jsonl.cpp`, `json-output.md`, `check_json.py`, `contracts/core.md` | nothing |
 | E2 | dropped | ~~2, `cores_total` and `rss_total`~~ D's verdict is No (section 2) | `collector.py`, `collector_embed.cpp`, `PROTOCOL.md`, `wsl_view.h`, `wsl_view.cpp`, `check_json.py`, `json-output.md`, `contracts/collect.md`, `contracts/core.md` | D's rows; after E1 (both touch `check_json.py` and `json-output.md`) |
 | F1 | ui | 3, part-of-whole, Windows side, with `now N% of all` (Q7 decided); the guest one series | `history.h`, `render.cpp` push, histories, new plot functions | C, E1 |
-| G | ui, and core for one line, one commit | 5, Q4, Q5: panel 2's Windows list selectable, its rows from the range on screen and the `local` holders, ordered by GPU % then most recent use; the WSL list a reference list, no `tab`; the GPU history. History data, no seam change: the slot's `gpu` series and `gpu_seen_ms`; `apply_key` and `selectable_lists` take the history | `history.h`, `render.h` (`apply_key`), `render.cpp` panel 2 and the ring; `src/main.cpp`'s `apply_key` call (core) | F1 (same files) |
+| G | ui (4f9e546), then core for one line (d9a699f) | 5, Q4, Q5: panel 2's Windows list selectable, its rows from the range on screen and the `local` holders, ordered by GPU % then most recent use; the WSL list a reference list, no `tab`; the GPU history. History data, no seam change: the slot's `gpu` series and `gpu_seen_ms`; `apply_key` and `selectable_lists` take the history | `history.h`, `render.h` (`apply_key`), `render.cpp` panel 2 and the ring; `src/main.cpp`'s `apply_key` call (core) | F1 (same files) |
 | F2 | dropped | ~~3, the guest side lit from `cores_total` and `rss_total`~~ D's verdict is No | | |
 | H | core | `contracts/ui.md` decisions and rule 8's part-of-whole and panel 2 text (step C's part already done), `panels.md` (panel 2's holder list not selectable, against its section 2 line), `panel-grammar.md` notes, `ROADMAP.md` 1 and 2, `README.md` keys for panel 2 | docs | G |
 | I | auditor | a fresh auditor reads A to H against the code and the ledger | none | H |
@@ -545,7 +547,7 @@ machtop leads on panel design (the user's standing decision, `docs/panels.md`, D
 ## 11. After the audit of f270ef8
 
 A fresh auditor read this design at f270ef8. Findings 1 (even buckets, the two-column axis anchored on the cell
-axis), 2 (E1's checks in `lost_check`), 3 (the WSL whole is this distro's namespace; label pending on D) and 11
+axis), 2 (E1's checks in `lost_check`), 3 (the WSL whole is this distro's namespace; D then dropped it) and 11
 (experiment 07's rows) were handled elsewhere and are recorded in sections 2, 3 and 4. Findings 4, 5 and 8 changed
 step G (section 5), 6 and 7 step E2 (section 2, since dropped), 9 steps C and H (section 8). Finding 10 is Q7.
 
