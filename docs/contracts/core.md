@@ -81,10 +81,6 @@ documents true.
   machine has one group. Not added.
 - Should `vm.vmmem_cores` read `null` instead of 0 when `vmmem_cores_known` is false? It would match
   "unknown is null", but it changes an existing key, so it would raise `schema`. Left at 0.
-- Slice 2 (`docs/design/panel-grammar-slice2.md`, section 10) leaves six questions to the user: Q1 dropping the
-  name from process identity once the pid-reuse rows land; Q2 no gutter on histories only; Q3 whether memory's
-  one-series history zooms or starts at 0; Q4 which rows panel 2's Windows list holds; Q5 whether panel 2's WSL
-  holder list is selectable; Q6 the legend at the smallest history. Q4 and Q5 block step G.
 
 ## Decision log
 
@@ -215,3 +211,10 @@ documents true.
   the snapshot lacks. The guest's `cores_total` and `rss_total` are additive collector keys, `schema` stays 1, and the
   seam waits for experiment 07's ledger rows. Selection keeps the name beside pid and start until the pid-reuse rows
   are observed.
+- 2026-11-04, machtop, which leads on panel design. Slice 2's questions decided (`docs/design/panel-grammar-slice2.md`,
+  section 10), closing the open question entered the same day. Core's part: `process_totals` is agreed as a snapshot
+  field, each whole summed over the same process set, in the same reading, as its rows; identity keeps the name beside
+  pid and start until the ledger has rows on pid reuse, then drops it. Panel 2's Windows list holds processes with engine
+  use anywhere in the range on screen and every GPU `local` holder: that is history data and no seam change, but
+  `apply_key` then reads the history, so step G changes the call in `src/main.cpp`, core's line in ui's commit. Panel 2's
+  WSL holder list is not selectable, against `docs/panels.md` section 2, which changes at step H.
