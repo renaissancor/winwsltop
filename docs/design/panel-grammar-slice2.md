@@ -1,0 +1,453 @@
+# Panel grammar, slice 2
+
+Status: PROPOSED, 2026-11-04, design only; nothing here is built. The user approved the scope in section 0.
+Slice 1 is [`panel-grammar.md`](panel-grammar.md), built; where this file changes something there, this file
+says so. The spec is machtop's `docs/panels.md`, section "Shared grammar" (machtop dc3a241, outside this
+repository), which leads on panel design; machtop's gap list for winwsltop, `docs/winwsltop-gaps.md` there,
+read `cpu-panel` at 8cbf51e and is cited below as "gap N". The drawing machtop already has is in its
+`src/render.cpp` at dc3a241: `sample_part`, `part_equals_whole`, `draw_part_of_whole`, `share_text`, and
+the history heading in its app panels. Ledger rows are cited by claim from [`../measurable.md`](../measurable.md).
+
+## 0. The slice
+
+| # | item, as approved | gap |
+|---|---|---|
+| 1 | Selection identity is pid plus start time, falling back to pid plus name when start is 0 | 1 |
+| 2 | A whole for WSL: `cores_total` and `rss_total` over every guest process, in the protocol, after a ledger row. Until it lands, WSL histories draw as one series | 3 |
+| 3 | Part-of-whole on the panel 3 and panel 4 process histories, one whole per side, never one across sides | 2, 4 |
+| 4 | `plot_block`: two time columns per braille cell | 5 |
+| 5 | Panel 2's list selectable, with a history below; GPU % is busiest-engine and always one series | 6 |
+| 6 | The range in the history heading; the graph gutter and axis | 8, 10 |
+| 7 | A fresh auditor checks the result | |
+
+Out of scope: panels 5 to 8 (gap 7), the overview's history and top consumer (gap 9), app grouping (gap 11),
+`s` sorting, and ROADMAP 1's `unattributed` line and Windows holders first, except where open question Q4 asks
+whether the panel 2 list should take holders.
+
+## 1. Selection identity
+
+**Owner:** ui, the `ui` agent.
+
+**Today.** `selected_row` in `src/ui/render.cpp` matches `r.pid == k.pid && r.name == k.name`. `row_key.start`
+(`src/ui/render.h`) is stored "not what selects it". The per-process ring keys by side, pid and start and checks
+the name (`history::slot_of`, `take_slot`, `kept_id`), so a reused pid under the same name, which `svchost.exe`
+makes likely on Windows, keeps the old selection but gets a new history slot: selection and history disagree.
+
+**Change.** A row matches its key when the pids are equal, the names are equal, and, where both starts are
+non-zero, the starts are equal. Where either start is 0 (a Windows row with no create time, a guest row from a
+collector without `start`, PROTOCOL.md `processes`), pid and name decide, as today.
+
+**Why the name stays.** The approved rule is pid plus start. The name is kept beside it as a backstop, because
+the ledger has not seen a pid reused on either side: "Windows create time differs after a pid is reused" and
+"Guest `starttime` differs after a pid is reused" both read `Not checked` (section "Memory and process
+collectors checked"). Slice 1 kept the name for the same reason (`panel-grammar.md` part 3, "Identity"). The
+rule is strictly tighter than today's, so it can be built now. Dropping the name, so that a guest process that
+`exec`s and changes its `comm` stays selected, waits for those two rows and is Q1.
+
+**Files and functions.** `src/ui/render.cpp` `selected_row`; the comment on `row_key::start` in
+`src/ui/render.h`. `history::slot_of`, `take_slot` and `kept_id` already compare start and name, so they do
+not change.
+
+**Protocol.** None. **Ledger.** Cites "Windows create time is constant while a process lives" and "Guest
+`starttime` is constant while a process lives" (Observed). Requests to evidence the two reuse rows (section 9).
+
+**render_check.**
+- Panel 3, Windows list: select `svchost.exe` pid 10000 with create time A; the next snapshot has pid 10000,
+  `svchost.exe`, create time B. The selection falls to the first row, and the history title does not name 10000.
+- The same with B equal to A: the selection stays.
+- Start 0 on either side (a guest row with no `start`, a Windows row with create time 0): pid and name decide.
+- After `↓` moves to a row, `row_key.start` is that row's start, and `selected_processes` passes it on.
+
+## 2. A whole for WSL
+
+**Owner:** evidence first (the `evidence` agent), then collect and core in one commit (the `collect` agent for
+`collector.py`, the `core` agent for the seam).
+
+**Why.** The collector sends the top 30 rows by cores then RSS, plus every `/dev/dxg` holder (`collector.py`
+`TOP = 30`; PROTOCOL.md `processes`). A sum of the rows received is not every process, so the guest's
+selected row would be drawn against a whole that leaves processes out, and its share would be too high.
+
+### The ledger row, first
+
+The seam changes only with a ledger row (`contracts/core.md` rule 1). No row today says that the collector
+reads every guest process: the `guest count?` mark on panel 3 exists for that reason (`panel-grammar.md`
+part 1, "Guest process count", no row). Experiment 07, read only, no load and no GPU, run by evidence
+with its own probe, not the collector:
+
+| claim to record | how |
+|---|---|
+| The collector's walk of `/proc` reaches every guest process | Count the numeric entries of `/proc` beside the walk in the same second, over the run; note any entry the walk could not read and why. This also decides the `guest count?` mark |
+| The sum over every process of `/proc/pid/stat` utime + stime, over the probe's own interval, is a whole that every per-process figure is part of | Sum the per-process deltas, as the collector computes each one, and check each process's figure is at or below the sum. Beside it, `/proc/stat` busy times vCPUs over the same interval, expected higher (a process that exits between readings, and time not charged to any process, are missing from the sum), as "Process cores account for Windows busy" found on Windows. Record the gap, not a verdict on it |
+| The sum of `/proc/pid/stat` field 24 times the page size over every process is a whole every per-process figure is part of | The same, beside `/proc/meminfo` used; expected to differ, since shared pages count once per process. Record the gap |
+| Cost | The walk is already made each second; the probe times the sum alone |
+
+Each row carries its raw file under `experiments/07-*/results/`. The design builds on the first three; a
+`No` on the first stops item 2 and the guest stays one series.
+
+### The protocol change
+
+After the row lands. Both keys are additive, so `schema` stays 1 (PROTOCOL.md: "a change of meaning raises
+it, a new key does not"), as `rated` and `start` were in slice 1.
+
+| key | unit | source |
+|---|---|---|
+| `cores_total` | cores: CPU-seconds per second, 3 decimals | the sum of utime + stime deltas over every process the collector read in this sample and the one before, over the collector's own interval, rounded once after summing (rounding is monotonic, so a row's rounded `cores` never exceeds it); a process on its first reading adds nothing, as its `cores` is an unmeasured 0 |
+| `rss_total` | bytes | the sum of `/proc/pid/stat` field 24 times the page size over every process read in this sample |
+
+Both sit at the top level beside `process_count`, which counts the same processes. `null` when the walk read
+no process.
+
+**An old collector.** A normal build can read a `collector.py` from disk beside the executable; a release
+build never does (PROTOCOL.md). A collector without the keys leaves them absent, which `wsl_view` reads as
+unknown, and the guest's history draws as one series, as it does until this lands. A new collector with an
+old `winwsltop.exe` is read as before: a reader takes a key it does not know as nothing.
+
+**Files and functions.**
+
+| file | change | owner |
+|---|---|---|
+| `wsl-collector/collector.py` `main()` | sum over `rows` before `keep` is cut, and emit the two keys | collect |
+| `src/wsl/collector_embed.cpp` | `python3 wsl-collector/embed.py`, same commit | collect |
+| `wsl-collector/PROTOCOL.md` | two rows in the field table, beside `process_count` | core |
+| `src/core/wsl_view.h`, `wsl_view.cpp` `read_wsl` | `std::optional<double> cores_total`, `std::optional<uint64_t> rss_total`, empty when absent, `null` or not a number in range, read as `start` is (`identity_or_null`'s pattern) | core |
+| `scripts/check_json.py` | `WSL_DATA` gains both keys (it is an exact set, so it must change in the same commit); each is a number at or above every row's `cores` and `rss`, and at or above their sum over the rows sent | core |
+| `docs/json-output.md` | `wsl.data` names both | core |
+| `docs/contracts/collect.md`, `core.md` | decision entries | core |
+
+The record carries them with no change to `src/record/jsonl.cpp`: `wsl.data` is the collector's line as sent.
+
+**Cost.** Two keys, about 40 bytes, against the 8 KiB line budget (`contracts/collect.md`, 2026-11-02). One
+addition per process the walk already reads.
+
+**render_check.** `read_wsl` on a line with both keys, with neither, with `null`, with a negative or
+non-numeric value (empty, and the line still reads). The draw cases are in section 3.
+
+## 3. Part-of-whole on the panel 3 and 4 histories
+
+**Owner:** core for the Windows whole (the `core` agent), ui for the drawing (the `ui` agent).
+
+### The two wholes
+
+One whole per side, never one across them (`CLAUDE.md` rule 3; gap list section 3):
+
+| side | measure | whole | source |
+|---|---|---|---|
+| Windows | cores | Σ `cores` over every row of `snapshot.processes` but pid 0 whose `cores_known` is true | `SystemProcessInformation`, the same reading as each row. Not PDH busy: "Process cores account for Windows busy" is **No**, so the part could exceed busy and the share would be meaningless |
+| Windows | working set | Σ `working_set` over every row but pid 0 | same |
+| WSL | cores | `cores_total` (section 2) | the collector's walk |
+| WSL | stat rss | `rss_total` (section 2) | same |
+
+The Windows list holds every process: "Windows collector checked against Windows", processes 360 against 360.
+Each term rests on "Windows per-process working set ... are `Get-Process` ..." (bindings only) and, for cores,
+"CPU contention checked", "Windows loses work to the VM". `vmmemWSL` and `vmwp.exe` are rows of the Windows
+whole, so `now N% of all Windows processes` on `vmmemWSL` is the VM's share as Windows counts it, which rule 3
+allows: it is one side's figure over the same side's.
+
+Σ working sets and Σ stat rss count a shared page once per process, so the whole is never called `used`; it is
+named for what it sums. The part never exceeds it, which is what the graph needs.
+
+### The Windows whole is a snapshot field, not the screen's sum
+
+`contracts/ui.md`, "What does not belong here": "Deriving a number that is not in the snapshot" is not the
+screen's. So the Windows whole is computed in `src/analysis`, as `cpu_derived` is, and the screen reads it.
+This departs from gap 3's "summed in `history::push`". It is arithmetic on one side's own figures, so its
+word is `derived` (`contracts/core.md` rule 2). Additive; `schema` stays 1.
+
+| where | field | unit | source |
+|---|---|---|---|
+| `snapshot.h`, new `process_totals_view process_totals` | `known` | bool | false when `processes` is empty (a failed read) |
+| same | `cores` | cores, NaN when not known | Σ over rows with `cores_known`, pid 0 left out |
+| same | `working_set` | bytes, 0 when not known | Σ over rows, pid 0 left out |
+| record, `src/record/jsonl.cpp` | `process_totals`: `cores`, `working_set`, `source: "derived"` | as above, `null` when not known | |
+
+Written by a header-only `inline process_totals_view process_totals_of(const snapshot&)` in a new
+`src/analysis/process_totals.h`, called by `src/main.cpp` once a sample after the processes are read, where
+the loop hands the snapshot to `lost_tracker`. Header-only so that `render_check.cpp`, built alone by
+`msvc.cmd`, can fill its hand-built fixtures with it. `docs/json-output.md` and `scripts/check_json.py` (the
+key, its `source`, `cores` at or above every known row's, `working_set` at or above every row's) change in the
+same commit. A decision entry in `contracts/core.md`.
+
+### What is drawn
+
+machtop's form, from `panels.md` "Part of the whole" exactly, with winwsltop's names:
+
+- **Two layers on one scale from 0.** The whole in the track tone (`tone::track`, 58;58;58, in `kToneColor`
+  already); the selected row's part in the bar tone (`tone::bar`). The scale is the whole's window maximum
+  rounded up by `scale_top`, never below the measure's floor: 0.05 cores (`kCoresFloor`), 4 MiB
+  (`kProcessFloorGiB`).
+- **Memory draws from 0 under part-of-whole**, on that scale: it does not zoom. Panel 4's used and cache plots
+  keep their zoom; only the history changes. This replaces `panel-grammar.md` part 4's zoomed history for the
+  part-of-whole case; for the one-series case see Q3.
+- **A braille cell takes one colour**: a cell holding the part's top level, or below it, is the part's; above
+  it, up to the whole's top, the rest's. The boundary is exact to the cell row. A time column, two to a braille
+  cell (section 4), is the rule's "cell".
+- **The part's level** in a column is the mean of the part's samples in it, over the samples where both part and
+  whole are known, held at or under the whole's level there (machtop `sample_part`).
+- **A measured 0** of the whole is `⣀` in the bar tone, winwsltop's steel for a measured 0 (`contracts/ui.md`
+  rule 8); a part that measured 0 holds no cell. Gaps and the unwatched `·` are as rule 8.
+- **The max dot** goes on each layer by its own samples: the whole's in the track tone, the part's in the bar
+  tone, compared with the part's own mean before it is held inside the whole. A braille cell holding the part's
+  dot is the part's.
+- **The heading** keeps winwsltop's left side, which names the list, the process and the measure; the right
+  side is machtop's, its parts dropped from the left when narrow, the tail kept. At about 160 columns, the
+  figures illustrative, not from a fixture:
+
+  ```
+  Windows · cpu_burn.exe 31000 · cores        process avg 7.73  max 13.25 · all Windows processes avg 9.10  max 15.40 · now 86% of all   scale 20   last 1 min
+  ```
+
+  `now N%` is the part over the whole at the latest sample where both are known, by machtop's `share_text`
+  (`<1%` under half a percent), and blank when the whole is 0 or unknown. On panel 4 the whole is named for
+  its sum: `Σ working sets, all Windows processes avg … max …`, and `Σ stat rss, all WSL processes`; never
+  `used`. Units as the measure prints them: cores with 2 decimals, memory in GiB or MiB by the scale.
+- **The legend**, one dim row under the heading, its swatches in the two tones:
+  `█ cpu_burn.exe  █ all other Windows processes` (`… all other WSL processes`). On panel 4 the second reads
+  `all other Windows processes' working sets` / `all other WSL processes' stat rss`, cut from the right if it
+  does not fit. The legend takes one of the history's rows; drawn as one series, that row goes back to the
+  plot, as machtop's panels do, so the history's height does not change between the two forms.
+
+### When it draws as one series
+
+The one-row rule applies per side, over the samples in the window on screen:
+
+- the side has no whole: the guest before section 2 lands, or with a collector that does not send the totals,
+  or any sample where `process_totals.known` is false;
+- the side's list has one row;
+- the part equals the whole at every sample where both are known, within 1e-6 relative (machtop
+  `part_equals_whole`); a second row appearing inside the window turns it back into part-of-whole;
+- the measure does not add across rows: panel 2's busiest-engine GPU % (section 5), always.
+
+One series is slice 1's history plus section 6's heading: no share, no grey, no legend. A guest process's
+cores keep `guest's count` in the title in both forms.
+
+### The history ring
+
+`history_sample` (`src/ui/history.h`) gains four floats, each NaN where the sample did not measure it:
+`windows_cores_all`, `windows_ws_all` (GiB), `wsl_cores_all`, `wsl_rss_all` (GiB). `history::push` copies them
+from `process_totals` and `wsl_view`; the guest's two follow the repeat rule the per-process slots follow (a
+repeated line carries once, a second repeat is a gap; `contracts/ui.md` rule 8) and `kStaleS`. 16 bytes a
+sample, 9.6 KB over 601.
+
+### Files and functions (ui)
+
+`src/ui/history.h` `history_sample`; `src/ui/render.cpp` `history::push`, `process_history`,
+`memory_history`, and two new functions beside `plot_block`: `part_columns` (machtop's `sample_part` on a
+`time_axis`: the whole's columns and stats, the part's levels, its own stats and share) and `plot_part_block`
+(machtop's `draw_part_of_whole`, emitting `tone::bar` and `tone::track` spans), plus `part_is_whole` for the
+one-row rule.
+
+### render_check
+
+- Windows, panel 3, `contended`: the burner's history is two layers; every lit cell is `bar` or `track`;
+  no `track` cell lies at or below the part's top in its column; the heading holds `all Windows processes`
+  and `now`, the legend `all other Windows processes`; the scale is the whole's.
+- The part never draws above the whole in any column, with a fixture where the selected row is the largest.
+- A fixture with one Windows process (pid 0 and one row): one series, no legend, no `now`, and the plot has the
+  legend's row.
+- A part equal to the whole for the first half of the window and below it after: part-of-whole.
+- WSL, panel 3, line with no `cores_total`: one series, `guest's count` in the title, no `all WSL processes`.
+  With `cores_total`: part-of-whole, `all WSL processes`.
+- Panel 4: the history's plot starts at 0 (the bottom row is never blank where a sample exists), no `range` in
+  its heading, `Σ working sets` in it and no `used`; panel 4's used and cache plots still print `range`.
+- `now` blank when the whole's latest sample is 0 or NaN; `<1%` for a share under 0.5%.
+- The max dot: the whole's in `track`, the part's in `bar`; a part's dot at or under its own mean's level is not
+  drawn.
+- Heading at widths 40 to 300: never wider than the screen; parts go from the left; `last` always present while
+  the left side fits.
+- `process_totals_of` on a fixture: pid 0 and rows with `cores_known` false are left out of `cores`; `known`
+  false for an empty list. In `lost_check` or a new block of `render_check`: core says which in the commit.
+- Frame bytes at 131 by 40 under budget with two-tone histories.
+
+## 4. Two time columns per braille cell
+
+**Owner:** ui, the `ui` agent.
+
+**Today.** `plot_block` doubles each bucket into both dot columns ("both dots of a braille cell show the same
+value"), and puts the maximum's dot in the right half. Its callers: the large layout's busy plots
+(`cpu_frame`), `process_history`, and `zoom_plot` (panel 4's used and cache plots and `memory_history`). The
+60 s graphs of panel 2 and the small panel 3 already sample two columns per cell (`panel_graph`,
+`plot_series(..., 2 * cells, ...)`), so they do not change.
+
+**Change.** An axis can be built with two columns per cell: `make_axis(h, end_ms, span_ms, cells, per_cell)`.
+With `per_cell` 2 the cell's bucket is rounded up to an even number of milliseconds and each column is half of
+it, so column `2c` and `2c + 1` lie exactly inside cell `c`. That keeps the large layout's rule that every row of
+a column shares one axis (`cpu-panel.md` section 5): its heat block and lanes stay on the one-column axis, its
+busy plots move to the two-column axis over the same cells. `bucket_cells` and `bucket_stats` work unchanged on
+either axis, so `max_at` becomes a column. `plot_block` takes columns, stops doubling, and passes `max_mark`
+straight through. `unwatched_cells(h, axis)` counts columns; `plot_line` takes the cells wholly unwatched, the
+column count halved and rounded down, as machtop draws `·` only where both columns are unwatched.
+
+At 1 minute a cell is about a second and a column half of one, so the joined-gap rule ("a joined empty cell
+takes the later sample", `panel-grammar.md` part 5) fills the empty half: nothing changes there. At 5 and 10
+minutes the resolution doubles.
+
+**Files and functions.** `src/ui/render.cpp`: `make_axis`, `plot_block`, `zoom_plot`, `cpu_frame`'s busy
+plots, `process_history`, `memory_history`; `unwatched_cells(const history&, const time_axis&)`.
+
+**Protocol, ledger.** None.
+
+**render_check.**
+- At 10 minutes on a 43-cell plot, two samples one bucket apart with different values give a braille cell
+  whose two columns differ.
+- On the large layout at 1, 5 and 10 minutes, every busy-plot cell covers the same milliseconds as the heat cell
+  under it.
+- The max dot lands in the column of the latest maximum, left or right.
+- `·` only in cells with both columns unwatched.
+- Every existing expected plot string that relied on doubling is recomputed, not loosened.
+
+## 5. Panel 2: selectable lists and a history
+
+**Owner:** ui, the `ui` agent.
+
+**Layout.** Panel 2 keeps the device and split graphs on top, then its two lists, then one history below them,
+full width, titled with the list holding the selection, as panels 3 and 4. When rows run short, the device
+graphs give way to `kMinGraph`, then the history, before a list falls under `kLeastListRows`; the ui agent sets
+the numbers and states them in `contracts/ui.md`.
+
+**The Windows list** (`gpu_users_list`) becomes selectable: the selection, `▶`, the selection background, its
+heading lit or dim, scrolling and `N of M` as on panel 3. Its rows' keys are pid, the `process_row` name and
+create time joined by pid (a GPU row whose pid is not in `processes` keys by pid and `-`, start 0). The list
+heading drops `top N of M`, which scrolling makes untrue, as panel 3's did.
+
+**The WSL list** (`dxg_holder_list`) becomes selectable too, as `docs/panels.md` section 2 has it: "A holder can
+be selected, and its history then says `no usage measured` instead of drawing a graph." Its keys are pid, name
+and `start` from the guest's row for that pid. Whether it should instead not be selectable is Q5. With both lists
+selectable, `tab` moves between them and the footer offers it.
+
+**The history.** Windows: the selected process's GPU %, busiest engine, the figure the list shows
+(`busiest_engine`), titled `Windows · <name> <pid> · GPU %, busiest engine`. One series always: the busiest
+engine of each process does not add across processes, so there is no whole. Drawn 0 to 100; above 100 it is
+drawn at the ceiling and its `max` prints the number as measured in `watch` (`contracts/ui.md` rule 5; engine
+time can pass 100, Experiment 01 result, `vmwp.exe` "peak 104.52%"). No `*`: winwsltop's `*` points at the
+split's caption, which is about shares, not one process. A sample where `gpu_engines_known` is false is a gap;
+a process present with no engine row reads 0, measured, while engines are known. WSL: the title
+`WSL · <name> <pid> · /dev/dxg holder`, then one dim line, `no usage measured`, and no plot: never a 0
+(`contracts/ui.md` rule 2; collect rule 7).
+
+**The ring.** The per-process slot gains a third series, `gpu`, allocated only when the process first has a
+non-zero engine reading, so the 2.4 KB a slot costs is paid by the few processes that use the GPU, not the 360.
+When it is allocated, its earlier positions are filled from what is already known: 0 where the slot's memory
+value shows the process was present and that sample's engines were known, NaN elsewhere. `history_sample`
+gains `bool gpu_engines_known` for that. `history::gpu_at(slot, position)` reads 0 or NaN by the same rule for a
+slot with no `gpu` series. `write_processes` writes it from `busiest_engine(s)`, Windows side only.
+
+**Files and functions.** `src/ui/render.cpp`: `gpu_frame`, `gpu_lists`, `gpu_users_list`, `dxg_holder_list`,
+`selectable_lists` (panel 2's two lists), `selected_processes` (panel 2 added to 3 and 4),
+`apply_key` through them, the footer's `↑↓` and `tab` for panel 2, a new `gpu_history`; `history::push`,
+`write_processes`. `src/ui/history.h`: the slot's `gpu`, `gpu_at`, `history_sample::gpu_engines_known`.
+
+**Protocol.** None. **Ledger.** Cites Experiment 01 result (per-process `3D` engine time, the load process
+71-97%, `vmwp.exe` for WSL's work) and "`/dev/dxg` holders identify the Linux process" (identity only, no
+usage). Per-Linux-process GPU use stays unmeasured and is never drawn (`CLAUDE.md` rule 2).
+
+**render_check.**
+- Panel 2 `busy` at 80 by 24, 100 by 34, 131 by 40: one `▶` on the panel, in the list holding the selection;
+  `↑↓` and `tab` in the footer; `top N of M` gone; `N of M` under each list.
+- The Windows history: `GPU %, busiest engine` in the title, `last 1 min` in the heading, no `scale` (a real
+  ceiling), no legend and no `all Windows processes`, ever.
+- `demo_minute`'s 112: drawn at the ceiling, `max 112%` in `watch`, no `*` on the history.
+- `gpu_engines_known` false for a stretch: a gap, not a 0; a known sample with no row for the pid: `⣀`.
+- WSL selected: `no usage measured`, no braille in the history rows.
+- A selected Windows process that stops using the GPU follows Q4's answer; a pid reused under the same name
+  (section 1) does not keep the selection.
+- `selected_processes` names panel 2's selections, and their slots survive the cap.
+- Sizes 1 to 300 by 1 to 66 on panel 2 for `busy`, `bare` and hostile names; frame bytes under budget.
+
+## 6. The range in the heading; gutter and axis
+
+**Owner:** ui, the `ui` agent.
+
+**Range.** Every history heading ends with `last 1 min`, `last 5 min` or `last 10 min` (gap 8; machtop's
+`"last " + range_text`), after `scale` where there is one, and it is the last part dropped for width. Applies to
+`process_history`, `memory_history` and the new `gpu_history`.
+
+**Gutter and axis (gap 10).** machtop draws a history with no gutter and no time axis: its labels are in the
+heading. winwsltop's histories have a gutter (`100 │`, `  0 │`, or a zoomed range's ends) and no axis row. With
+the scale and range now in the heading, the history follows machtop: **no gutter, the plot full width**, no axis
+row. The device graphs of panel 2, the large layout's busy plots, the heat block and lanes, and panel 4's used
+and cache plots keep winwsltop's gutter and axis, where several plots sit side by side and the axis carries
+`avg` and `max` (`panel-grammar.md` part 5, "Where the label sits"). The scope line reads "graph gutter and
+axis" without saying which way; this is gap 10's recommendation, and Q2 asks the user to confirm it.
+
+**Files and functions.** `src/ui/render.cpp`: `process_history`, `memory_history`, `gpu_history` build their
+axis over `width`, not `width - kCpuGutter`, and their plot without `gutter`; `zoom_plot` and `plot_block` gain a
+no-gutter form.
+
+**render_check.**
+- Each history's heading ends with `last` and the range after `←` and `→`; at every width the heading is never
+  cut inside `last N min`.
+- A history's plot rows start with braille, `·` or a blank at column 0: no `│`.
+- Panel 2's device graphs and panel 3's busy plots still print `-60s` and `now` and their gutter.
+
+## 7. Costs against the budgets
+
+| budget (`contracts/ui.md`) | after this slice |
+|---|---|
+| Frame bytes, 131 by 40, under 48 KiB | about the same: a two-tone history adds a colour change per run of cells. Asserted |
+| Frame build under 5 ms | one more series per history, a few hundred columns. Measured |
+| History | four floats a sample (9.6 KB), one bool, and 2.4 KB per process that used the GPU |
+| Push | the four totals copied, and `busiest_engine` once a sample, already computed for the list. Measured by `render_check measure` |
+| Collector line, under 8 KiB | two keys, about 40 bytes |
+| New PDH counters | none |
+
+## 8. Build order
+
+Small commits, each with `scripts/check.sh` and `--windows` where it touches `src/`. All ui work is in
+`src/ui/render.cpp` and `render_check.cpp`, so the ui items run one after another, by one ui agent; the
+tracks below run in parallel because they share no file.
+
+| step | owner | items | files | needs |
+|---|---|---|---|---|
+| A | ui | 1, selection identity | `render.cpp` `selected_row`, `render.h` | nothing |
+| B | ui | 4, two columns per cell | `render.cpp` axis and plot functions | A (same file) |
+| C | ui | 6, range in heading, no gutter on histories | `render.cpp` the three histories | B |
+| D | evidence | 2, experiment 07 and its ledger rows; the two pid-reuse rows if they can be had read only (section 9) | `experiments/07-*`, `docs/measurable.md` | nothing |
+| E1 | core | 3, the Windows whole | `snapshot.h`, `src/analysis/process_totals.h`, `main.cpp`, `jsonl.cpp`, `json-output.md`, `check_json.py`, `contracts/core.md` | nothing |
+| E2 | collect, core, one commit | 2, `cores_total` and `rss_total` | `collector.py`, `collector_embed.cpp`, `PROTOCOL.md`, `wsl_view.h`, `wsl_view.cpp`, `check_json.py`, `json-output.md`, `contracts/collect.md`, `contracts/core.md` | D's rows; after E1 (both touch `check_json.py` and `json-output.md`) |
+| F1 | ui | 3, part-of-whole, Windows side; the guest one series | `history.h`, `render.cpp` push, histories, new plot functions | C, E1 |
+| G | ui | 5, panel 2 | `history.h`, `render.cpp` panel 2 and the ring | F1 (same files); Q4 and Q5 answered |
+| F2 | ui | 3, the guest side lit from `cores_total` and `rss_total` | `render.cpp` push and histories | G, E2 |
+| H | core | `contracts/ui.md` rule 8 and decisions, `panels.md`, `panel-grammar.md` notes, `ROADMAP.md` 2, `README.md` keys for panel 2 | docs | F2 |
+| I | auditor | a fresh auditor reads A to H against the code and the ledger | none | H |
+
+In parallel: the ui chain A, B, C; D; E1. Then E2 after D and E1, while F1 and G run. F2 joins the two.
+If D returns `No` on the walk's completeness, E2 and F2 are dropped and the guest's histories stay one series,
+which F1 already draws.
+
+## 9. Requests to other files
+
+Written as requests; this design changes no other file.
+
+| file | owner | change |
+|---|---|---|
+| `experiments/07-*`, `docs/measurable.md` | evidence | Experiment 07 (section 2). Beside it, if it can be done read only with idle processes as experiment 06 did: the two pid-reuse rows, by starting short idle processes until a pid recurs (Windows reuses pids quickly; in the guest `pid_max` makes it slow, so the guest row may stay `Not checked`) |
+| `docs/contracts/evidence.md` | core, for evidence | experiment 07 as a request |
+| `docs/contracts/ui.md` | core, at H | rule 8: two-layer histories, memory history from 0 under part-of-whole, no gutter on histories, `last` in the heading; decisions; panel 2 selectable |
+| `docs/panels.md` | core, at H | the selection by pid and start with the name backstop; panel 2 as built; part-of-whole's wholes per side |
+| `docs/design/panel-grammar.md` | core, at H | notes at part 3 "Identity" and part 4 "One history" that this file supersedes them |
+| `docs/ROADMAP.md` | core, at H | section 2: per-process GPU history built |
+| machtop `docs/panels.md` | machtop's owner | the three amendments marked "winwsltop not yet asked" can read "agreed by winwsltop" once this is built |
+
+## 10. Open questions
+
+Not decided here; each needs the user or machtop.
+
+- **Q1. Drop the name from identity?** Section 1 keeps pid and start and the name. Once the two pid-reuse rows
+  read Observed, should the name go, so a guest process that `exec`s keeps its selection and its history slot
+  (both would change together)?
+- **Q2. Gutter and axis.** Section 6 removes the gutter from the histories only and keeps it on every other plot,
+  reading the scope's "graph gutter and axis" as gap 10's recommendation. Confirm, or keep the gutter on
+  histories too.
+- **Q3. Memory history as one series: zoom or from 0?** The scope says memory draws from 0 under part-of-whole.
+  As one series (the guest until section 2 lands, a one-row list) section 3 keeps slice 1's zoom. machtop draws
+  memory's history from 0 in both forms ("memory's history does not zoom"). Follow machtop?
+- **Q4. Which rows are in panel 2's Windows list?** Today a process is listed only while its busiest engine
+  reads above 0 this second, so a selected process that idles for one second leaves the list and the selection
+  falls to the first row. Options: keep today's rule; list a process while it has any engine reading in the
+  range on screen (as machtop's network panel lists interfaces that moved in the window); or add every process
+  holding GPU `local` memory, which is ROADMAP 1's "Windows holders first". Needed before step G.
+- **Q5. Is panel 2's WSL holder list selectable?** `docs/panels.md` says yes, its history reading `no usage
+  measured`; gap 6 offers either. Selectable adds `tab` to panel 2 for a history that never draws. Needed before
+  step G.
+- **Q6. The legend at the smallest history.** At 2 plot rows the legend leaves one. Drop the legend there and
+  keep the heading's `all Windows processes`, or keep it and draw one row?
