@@ -3183,6 +3183,12 @@ void history::push(const snapshot& s, const std::vector<proc_id>& keep) {
   if (count_ > 0 && s.interval_s >= static_cast<double>(kKeepMs) / 1000.0) {
     count_ = 0;
     watched_from_ms_ = std::min(watched_from_ms_, t - kKeepMs);
+    // Whichever way the clock moved, every process was last seen, and last used the GPU, before what is kept: never
+    // after t, or a slot's times would lie ahead and its process come back into a range later (audit finding 6).
+    for (slot& sl : slots_) {
+      sl.seen_ms = std::min(sl.seen_ms, t - kKeepMs);
+      sl.gpu_seen_ms = 0;
+    }
   } else if (count_ > 0) {
     const int64_t last = at(count_ - 1).unix_ms;
     const double gap_s = s.interval_s > 0 ? s.interval_s : 1.0;

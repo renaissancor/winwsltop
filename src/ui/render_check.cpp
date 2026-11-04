@@ -4610,6 +4610,33 @@ void check_gpu_panel() {
     const int64_t end = step.samples().back().unix_ms;
     check(sl >= 0 && step.gpu_seen_ms(sl) == end - 1000 && end - step.gpu_seen_ms(sl) < 60000, "after a clock step back gpu_seen_ms lies in the range it did before");
   }
+  // A stall of what is kept with the clock stepped back: no slot keeps a time ahead of the new sample, so a process
+  // gone before the stall does not come back into the range when the clock reaches its old time (audit finding 6).
+  {
+    constexpr int64_t T0 = 1793000000000LL;
+    const auto one = [](int64_t t, double interval, bool with_7) {
+      snapshot s;
+      s.unix_ms = t;
+      s.interval_s = interval;
+      s.gpu_engines_known = true;
+      process_row p;
+      p.pid = 8; p.name = "other.exe"; p.create_time = 2; p.working_set = 1 << 20;
+      s.processes = {p};
+      if (with_7) {
+        p.pid = 7; p.name = "g.exe"; p.create_time = 1;
+        s.processes.push_back(p);
+        s.gpu_engines = {{7, "3D", 80}};
+      }
+      return s;
+    };
+    history h;
+    h.push(one(T0 - 1000, 1, true));
+    h.push(one(T0, 1, true));
+    h.push(one(T0 - 3600000, 700, false));  // A 700 s stall during which the wall clock went back an hour
+    check(h.slot_of({0, 7, 1, "g.exe"}) < 0, "after the stall the gone process's slot is let go, not kept as seen ahead");
+    for (int64_t t = T0 - 1000; t <= T0 + 1000; t += 1000) h.push(one(t, 1, false));  // Forward to its old time
+    check(gpu_rows(one(T0 + 1000, 1, false), &h, axis_end(h, T0 + 1000), 60000).empty(), "and it is not listed again when the clock reaches its old time");
+  }
   // Every size, three fixtures, and the frame budget.
   {
     const gpu_fixture g = gpu_minute(60, [](snapshot&, int) {});
